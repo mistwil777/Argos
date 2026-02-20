@@ -1,0 +1,77 @@
+# ============================================
+# AcademiaOps - .dockerignore
+# Optimize Docker build context
+# ============================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Tests
+tests/
+*.pytest_cache/
+.coverage
+htmlcov/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+
+# Database dumps
+*.sql
+!database/init.sql
+!database/seed.sql
+
+# MacOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
+
+# n8n workflows (not needed in MCP container)
+n8n/
+
+# Dashboard (not needed in MCP container)
+dashboard/

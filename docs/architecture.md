@@ -85,7 +85,7 @@ academiaops/
 │
 ├── mcp_server/                    # 🧠 Serveur MCP + Agents Agno (cœur du système)
 │   ├── README.md                  # Documentation du serveur MCP
-│   ├── Dockerfile                 # Image Docker pour le serveur
+│   ├── Dockerfile                 # Image Docker multi-stage (Google Distroless)
 │   ├── requirements.txt           # Dépendances Python
 │   ├── pyproject.toml             # Configuration Python (Black, Flake8, etc.)
 │   ├── server.py                  # 🚀 Point d'entrée principal (FastAPI + MCP)
@@ -158,7 +158,7 @@ academiaops/
 │
 ├── dashboard/                     # 🎨 Frontend Next.js (interface utilisateur)
 │   ├── README.md                  # Documentation du dashboard
-│   ├── Dockerfile                 # Image Docker (si hébergé sur VPS)
+│   ├── Dockerfile                 # Image Docker multi-stage (Google Distroless si déployé)
 │   ├── package.json
 │   ├── package-lock.json
 │   ├── next.config.js             # Configuration Next.js

@@ -1408,36 +1408,36 @@ networks:
 
 ### 8.2 Dockerfile MCP Server
 
+**Architecture multi-stage avec Google Distroless** pour sécurité maximale et taille minimale :
+
 ```dockerfile
 # mcp_server/Dockerfile
-FROM python:3.11-slim
+# Multi-stage build: Builder + Distroless runtime
 
+# Stage 1: Builder
+FROM python:3.10-slim AS builder
 WORKDIR /app
-
-# Installer les dépendances système
-RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copier requirements
+RUN apt-get update && apt-get install -y gcc && rm -rf /var/lib/apt/lists/*
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir --prefix=/install -r requirements.txt
 
-# Copier le code
-COPY . .
-
-# Health check script
-RUN echo '#!/bin/bash\ncurl -f http://localhost:8000/health || exit 1' > /healthcheck.sh && \
-    chmod +x /healthcheck.sh
-
-# Exposer le port
+# Stage 2: Runtime (Google Distroless)
+FROM gcr.io/distroless/python3-debian12:latest
+WORKDIR /app
+COPY --from=builder /install /usr/local
+COPY mcp_server/ ./mcp_server/
+USER 65532:65532  # Non-root user
 EXPOSE 8000
-
-# Commande de démarrage
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+ENV PYTHONUNBUFFERED=1 PYTHONPATH=/usr/local/lib/python3.10/site-packages:/app
+CMD ["/usr/local/bin/uvicorn", "mcp_server.server:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
+
+**Avantages de Distroless** :
+- 🔒 **Sécurité** : Pas de shell, package manager, ou outils système (surface d'attaque réduite)
+- 📦 **Taille** : ~50-60% plus petit qu'une image slim classique
+- ⚡ **Performance** : Moins de couches, démarrage plus rapide
+- 🛡️ **Conformité** : Recommandé par Google pour la production
 
 ### 8.3 Procédure de déploiement (Mac local)
 
