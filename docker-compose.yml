@@ -1,0 +1,123 @@
+version: '3.8'
+
+# ============================================
+# AcademiaOps - Docker Compose
+# Local Development Environment (Mac)
+# ============================================
+
+services:
+  # ============================================
+  # PostgreSQL 16 - Main Database
+  # ============================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: academiaops-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: academiaops
+      POSTGRES_USER: academiaops_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev_password_change_me}
+      POSTGRES_INITDB_ARGS: "-E UTF8 --locale=en_US.UTF-8"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U academiaops_user -d academiaops"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - academiaops-network
+
+  # ============================================
+  # n8n - Workflow Orchestration
+  # ============================================
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: academiaops-n8n
+    restart: unless-stopped
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-admin_change_me}
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=Europe/Paris
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=academiaops
+      - DB_POSTGRESDB_USER=academiaops_user
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD:-dev_password_change_me}
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n/workflows:/home/node/.n8n/workflows:rw
+    ports:
+      - "5678:5678"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:5678/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - academiaops-network
+
+  # ============================================
+  # MCP Server - FastAPI + JSON-RPC
+  # ============================================
+  mcp-server:
+    build:
+      context: .
+      dockerfile: mcp_server/Dockerfile
+    container_name: academiaops-mcp-server
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql://academiaops_user:${POSTGRES_PASSWORD:-dev_password_change_me}@postgres:5432/academiaops
+      - LANCEDB_PATH=/data/lancedb
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./mcp_server:/app/mcp_server:ro
+      - lancedb_data:/data/lancedb
+      - ./logs:/app/logs
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - academiaops-network
+
+# ============================================
+# Networks
+# ============================================
+networks:
+  academiaops-network:
+    driver: bridge
+    name: academiaops-network
+
+# ============================================
+# Volumes
+# ============================================
+volumes:
+  postgres_data:
+    name: academiaops-postgres-data
+  n8n_data:
+    name: academiaops-n8n-data
+  lancedb_data:
+    name: academiaops-lancedb-data
