@@ -1,0 +1,33 @@
+# ========================================
+# AcademiaOps - Requirements
+# ========================================
+
+# Core Framework
+fastapi==0.109.2
+uvicorn[standard]==0.27.1
+pydantic==2.6.1
+pydantic-settings==2.1.0
+
+# Database
+psycopg2-binary==2.9.9
+sqlalchemy==2.0.25
+
+# Vector Database
+lancedb==0.5.3
+sentence-transformers==2.3.1
+
+# AI Agents & LLM
+agno==0.1.0  # Multi-agent framework
+openai==1.12.0
+anthropic==0.18.1
+
+# Utilities
+python-dotenv==1.0.1
+httpx==0.26.0
+python-multipart==0.0.9
+
+# Development
+pytest==8.0.0
+pytest-asyncio==0.23.4
+black==24.1.1
+ruff==0.2.1

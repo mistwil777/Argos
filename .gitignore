@@ -1,0 +1,206 @@
+# ============================================
+# ACADEMIAOPS - .gitignore
+# ============================================
+
+# ============================================
+# SECRETS & CONFIGURATION
+# ============================================
+.env
+.env.local
+.env.production
+.env.development
+*.pem
+*.key
+secrets/
+
+# ============================================
+# PYTHON
+# ============================================
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# Environments
+venv/
+ENV/
+env/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ============================================
+# NODE / NEXT.JS (Dashboard)
+# ============================================
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# npm / yarn
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Next.js
+.next/
+out/
+next-env.d.ts
+
+# Vercel
+.vercel
+
+# turbo
+.turbo
+
+# ============================================
+# DATABASES
+# ============================================
+*.db
+*.sqlite
+*.sqlite3
+
+# PostgreSQL
+postgres_data/
+pgdata/
+
+# LanceDB
+lancedb_data/
+*.lance
+
+# ============================================
+# DOCKER
+# ============================================
+docker-compose.override.yml
+
+# ============================================
+# BACKUPS
+# ============================================
+backups/
+*.sql.gz
+*.tar.gz
+*.dump
+
+# ============================================
+# LOGS
+# ============================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ============================================
+# TEMPORARY FILES
+# ============================================
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# ============================================
+# OS
+# ============================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# ============================================
+# DONNÉES SENSIBLES / TESTS
+# ============================================
+# Données de test réelles (avec vraies URLs, contenus)
+test_data/real_items.json
+scraped_data/
+
+# Exports
+exports/
+*.csv
+*.xlsx
+*.json
+
+# ============================================
+# DOCUMENTATION GÉNÉRÉE
+# ============================================
+# Garder la doc source, ignorer les builds
+docs/_build/
+docs/.doctrees/
+site/
+
+# ============================================
+# NOTES PERSONNELLES
+# ============================================
+NOTES.md
+TODO_PERSO.md
+SCRATCH.md
