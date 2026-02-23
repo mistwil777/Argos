@@ -212,23 +212,28 @@ Interface visuelle, facilite le debugging, connecteurs natifs (RSS, HTTP, Postgr
 
 Le projet est conçu pour être implémenté **progressivement**, étape par étape :
 
-### ✅ Phase 1 : Fondations (Semaine 1-2)
+### ✅ Phase 1 : Fondations (Semaine 1-2) ✅ COMPLETE
 - Serveur MCP minimal fonctionnel
 - Base PostgreSQL initialisée
 - n8n installé et accessible
 - **Objectif** : Hello World MCP qui répond
+- **Status**: ✅ Completed Feb 20, 2026
 
-### ⬜ Phase 2 : Veille et classification (Semaine 3-4)
-- Workflow n8n de collecte RSS
-- Agent Classifier opérationnel
-- Tool MCP `batch_classify_items`
+### ✅ Phase 2 : Veille et classification (Semaine 3-4) ✅ COMPLETE
+- Workflow n8n de collecte RSS (prêt à implémenter)
+- Agent Classifier opérationnel ✅
+- Tool MCP `classifier.classify_batch` ✅
+- Multi-provider LLM (AWS Bedrock Nova Pro) ✅
+- Cost tracking complet ✅
 - **Objectif** : 100 items réels classifiés automatiquement
+- **Status**: ✅ Completed Feb 23, 2026 - 5 items classifiés ($0.003)
 
-### ⬜ Phase 3 : Génération de cours (Semaine 5-6)
-- Agents Pédago, CourseBuilder, QA Reviewer
-- Tool MCP `generate_course`
+### ⏳ Phase 3 : Génération de cours (Semaine 5-6) - EN COURS
+- Agents CourseGenerator, QA Reviewer
+- Tool MCP `course.generate`
 - Indexation vectorielle (LanceDB)
 - **Objectif** : 1 cours complet (3 niveaux) généré
+- **Status**: 🔄 Next feature - Starting soon
 
 ### ⬜ Phase 4 : Dashboard (Semaine 7-8)
 - Interface Next.js déployée
@@ -238,12 +243,14 @@ Le projet est conçu pour être implémenté **progressivement**, étape par ét
 - **Objectif** : Dashboard fonctionnel et responsive
 
 ### ⬜ Phase 5 : Optimisations (Semaine 9-10)
-- Batching des appels LLM
+- Batching des appels LLM ✅ (déjà implémenté)
 - Caching des embeddings
 - Monitoring et alertes
 - **Objectif** : Coûts LLM < 5€/mois
 
-**Statut actuel** : 🟢 Phase 1 en cours (documentation complète créée ✅)
+**Statut actuel** : 🟢 Phase 1 & 2 complètes ✅ | Phase 3 prête à démarrer 🚀  
+**Documentation**: Feature 2 documentée dans [`docs/feature-2-classifier-COMPLETE.md`](docs/feature-2-classifier-COMPLETE.md)  
+**Roadmap détaillée**: Voir [`docs/ROADMAP.md`](docs/ROADMAP.md)
 
 ---
 

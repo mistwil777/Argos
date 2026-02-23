@@ -1,45 +1,36 @@
 # ============================================
 # AcademiaOps MCP Server - Dockerfile
-# Multi-stage build with Google Distroless
-# Ultra-lightweight, secure, production-ready
+# Lightweight production build
 # ============================================
 
-# ============================================
-# Stage 1: Builder - Install dependencies
-# ============================================
-FROM python:3.11-slim AS builder
+# Use Python 3.11 slim as base (has CA certificates pre-configured)
+FROM python:3.11-slim
 
 # Set working directory
 WORKDIR /app
 
-# Install build dependencies
+# Install runtime dependencies (minimal)
 RUN apt-get update && apt-get install -y \
+    --no-install-recommends \
     gcc \
+    ca-certificates \
+    && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
+# Copy requirements and install
 COPY requirements.txt .
-
-# Install Python dependencies to /install directory
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir --prefix=/install -r requirements.txt
-
-# ============================================
-# Stage 2: Runtime - Google Distroless
-# ============================================
-FROM gcr.io/distroless/python3-debian12:latest
-
-# Set working directory
-WORKDIR /app
-
-# Copy installed packages from builder
-COPY --from=builder /install /usr/local
+    pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY mcp_server/ ./mcp_server/
 
-# Create logs directory (non-root user in distroless is "nonroot" uid 65532)
-USER 65532:65532
+# Create non-root user for security
+RUN useradd -m -u 1000 appuser && \
+    chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
 
 # Expose port
 EXPOSE 8000
@@ -47,8 +38,11 @@ EXPOSE 8000
 # Environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONPATH=/usr/local/lib/python3.11/site-packages:/app
+    PYTHONPATH=/app
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
 
 # Run FastAPI with uvicorn
-# Note: --reload removed for production (not compatible with distroless)
-CMD ["/usr/local/bin/uvicorn", "mcp_server.server:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "mcp_server.server:app", "--host", "0.0.0.0", "--port", "8000"]
