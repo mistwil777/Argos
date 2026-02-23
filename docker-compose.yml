@@ -84,6 +84,14 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - LOG_LEVEL=INFO
+      # LLM Provider Configuration
+      - LLM_PROVIDER=${LLM_PROVIDER:-aws}
+      - DEFAULT_CLASSIFICATION_MODEL=${DEFAULT_CLASSIFICATION_MODEL:-us.amazon.nova-pro-v1:0}
+      # AWS Bedrock Configuration
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_BEDROCK_MODEL=${AWS_BEDROCK_MODEL:-us.amazon.nova-pro-v1:0}
     volumes:
       - ./mcp_server:/app/mcp_server:ro
       - lancedb_data:/data/lancedb

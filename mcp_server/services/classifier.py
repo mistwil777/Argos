@@ -1,7 +1,7 @@
 """
 Classification Service for AcademiaOps
 
-Uses OpenAI GPT-3.5-turbo to analyze and classify tech watch items.
+Uses LLM (OpenAI, AWS Bedrock, etc.) to analyze and classify tech watch items.
 """
 
 import logging
@@ -9,9 +9,9 @@ import json
 import re
 from typing import Dict, List, Optional
 from datetime import datetime
-from openai import AsyncOpenAI
 
 from mcp_server.database import DatabaseManager
+from mcp_server.services.llm_provider import LLMProvider
 
 logger = logging.getLogger(__name__)
 
@@ -58,30 +58,13 @@ Extract structured information in JSON format with these fields:
 }}"""
 
 
-# ============================================
-# Pricing Configuration (as of 2024)
-# ============================================
-
-PRICING = {
-    "gpt-3.5-turbo": {
-        "input": 0.0005 / 1000,   # $0.50 per 1M input tokens
-        "output": 0.0015 / 1000,  # $1.50 per 1M output tokens
-    },
-    "gpt-4-turbo": {
-        "input": 0.01 / 1000,     # $10 per 1M input tokens
-        "output": 0.03 / 1000,    # $30 per 1M output tokens
-    }
-}
-
-
 class ClassifierService:
     """Service for classifying tech watch items using LLM."""
     
     def __init__(
         self,
-        openai_api_key: str,
+        llm_provider: LLMProvider,
         db_manager: DatabaseManager,
-        model: str = "gpt-3.5-turbo",
         temperature: float = 0.3,
         max_tokens: int = 500
     ):
@@ -89,21 +72,19 @@ class ClassifierService:
         Initialize ClassifierService.
         
         Args:
-            openai_api_key: OpenAI API key
+            llm_provider: LLM provider instance (OpenAI, AWS Bedrock, etc.)
             db_manager: Database manager instance
-            model: Model name (default: gpt-3.5-turbo)
             temperature: Sampling temperature (0-2, lower = more deterministic)
             max_tokens: Maximum tokens in response
         """
-        self.client = AsyncOpenAI(api_key=openai_api_key)
+        self.llm_provider = llm_provider
         self.db = db_manager
-        self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
         
         logger.info(
-            f"ClassifierService initialized",
-            extra={"model": model, "temperature": temperature}
+            f"ClassifierService initialized with {type(llm_provider).__name__}",
+            extra={"temperature": temperature}
         )
     
     # ============================================
@@ -140,29 +121,30 @@ class ClassifierService:
         
         # 3. Call LLM API
         start_time = datetime.now()
-        response = await self._call_llm(prompt)
+        content, usage = await self._call_llm(prompt)
         latency_ms = int((datetime.now() - start_time).total_seconds() * 1000)
         
         # 4. Parse and validate response
-        classification = self._parse_response(response)
+        classification = self._parse_response(content)
         
         # 5. Calculate cost
-        tokens_input = response.get("usage", {}).get("prompt_tokens", 0)
-        tokens_output = response.get("usage", {}).get("completion_tokens", 0)
-        tokens_total = tokens_input + tokens_output
-        cost_usd = self._calculate_cost(tokens_input, tokens_output)
+        tokens_input = usage.get("prompt_tokens", 0)
+        tokens_output = usage.get("completion_tokens", 0)
+        tokens_total = usage.get("total_tokens", 0)
+        cost_usd = self.llm_provider.calculate_cost(tokens_input, tokens_output)
         
         # 6. Save to database
         self._save_classification(item_id, classification, tokens_total, cost_usd)
         
         # 7. Build result
+        model_name = getattr(self.llm_provider, 'model', None) or getattr(self.llm_provider, 'model_id', 'unknown')
         result = {
             "item_id": item_id,
             "topics": classification["topics"],
             "importance": classification["importance"],
             "item_type": classification["item_type"],
             "reasoning": classification["reasoning"],
-            "model": self.model,
+            "model": model_name,
             "tokens_used": tokens_total,
             "cost_usd": round(cost_usd, 6),
             "latency_ms": latency_ms
@@ -289,61 +271,42 @@ class ClassifierService:
             url=item.get("url", "")
         )
     
-    async def _call_llm(self, prompt: str) -> Dict:
+    async def _call_llm(self, prompt: str) -> tuple[str, Dict]:
         """
-        Call OpenAI API with error handling.
+        Call LLM API with error handling.
         
         Args:
             prompt: Classification prompt
         
         Returns:
-            API response dict
+            Tuple of (content_string, usage_dict)
         
         Raises:
             Exception: If API call fails
         """
+        system_prompt = "You are a precise AI assistant specialized in classifying technical content. Always respond with valid JSON only, no markdown formatting."
+        
         try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a precise AI assistant specialized in classifying technical content. Always respond with valid JSON only, no markdown formatting."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
+            content, usage = await self.llm_provider.generate(
+                prompt=prompt,
+                system_prompt=system_prompt,
                 temperature=self.temperature,
-                max_tokens=self.max_tokens,
-                response_format={"type": "json_object"}  # Force JSON output
+                max_tokens=self.max_tokens
             )
             
-            # Convert to dict
-            response_dict = {
-                "content": response.choices[0].message.content,
-                "usage": {
-                    "prompt_tokens": response.usage.prompt_tokens,
-                    "completion_tokens": response.usage.completion_tokens,
-                    "total_tokens": response.usage.total_tokens
-                },
-                "model": response.model
-            }
-            
-            logger.debug(f"LLM response received: {response.usage.total_tokens} tokens")
-            return response_dict
+            logger.debug(f"LLM response received: {usage.get('total_tokens', 0)} tokens")
+            return content, usage
             
         except Exception as e:
             logger.error(f"LLM API call failed: {e}", exc_info=True)
             raise Exception(f"Failed to call LLM API: {str(e)}")
     
-    def _parse_response(self, response: Dict) -> Dict:
+    def _parse_response(self, content: str) -> Dict:
         """
         Parse and validate LLM JSON response.
         
         Args:
-            response: API response dict
+            content: LLM response content string
         
         Returns:
             Validated classification dict
@@ -351,8 +314,6 @@ class ClassifierService:
         Raises:
             ValueError: If response is invalid or malformed
         """
-        content = response.get("content", "")
-        
         # Try to parse JSON
         try:
             # Remove markdown code blocks if present
@@ -394,21 +355,6 @@ class ClassifierService:
         logger.debug(f"Classification parsed and validated: {classification}")
         return classification
     
-    def _calculate_cost(self, tokens_input: int, tokens_output: int) -> float:
-        """
-        Calculate API call cost based on token usage.
-        
-        Args:
-            tokens_input: Number of input tokens
-            tokens_output: Number of output tokens
-        
-        Returns:
-            Cost in USD
-        """
-        pricing = PRICING.get(self.model, PRICING["gpt-3.5-turbo"])
-        cost = (tokens_input * pricing["input"]) + (tokens_output * pricing["output"])
-        return cost
-    
     def _save_classification(
         self,
         item_id: int,
@@ -425,6 +371,9 @@ class ClassifierService:
             tokens_used: Total tokens consumed
             cost_usd: API call cost
         """
+        # Get model name from provider
+        model_name = getattr(self.llm_provider, 'model', None) or getattr(self.llm_provider, 'model_id', 'unknown')
+        
         # Update item classification
         self.db.update_classification(
             item_id=item_id,
@@ -449,8 +398,8 @@ class ClassifierService:
             item_id=item_id,
             decision_type="classification",
             decision_value=decision_value,
-            reasoning=classification["reasoning"],
-            model_used=self.model,
+            reason=classification["reasoning"],
+            model_used=model_name,
             tokens_used=tokens_used,
             cost_usd=cost_usd
         )

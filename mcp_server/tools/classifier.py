@@ -10,6 +10,7 @@ from typing import Dict, Optional, List
 from mcp_server.config import settings
 from mcp_server.database import DatabaseManager
 from mcp_server.services.classifier import ClassifierService
+from mcp_server.services.llm_provider import create_llm_provider
 
 logger = logging.getLogger(__name__)
 
@@ -34,10 +35,20 @@ def _get_classifier_service() -> ClassifierService:
     global _classifier_service
     if _classifier_service is None:
         db = _get_db_manager()
-        _classifier_service = ClassifierService(
+        
+        # Create LLM provider based on configuration
+        llm_provider = create_llm_provider(
+            provider_type=settings.llm_provider,
             openai_api_key=settings.openai_api_key,
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            aws_region=settings.aws_region,
+            model=settings.default_classification_model
+        )
+        
+        _classifier_service = ClassifierService(
+            llm_provider=llm_provider,
             db_manager=db,
-            model="gpt-3.5-turbo",  # Default model for classification
             temperature=0.3,  # Low temperature for consistent classification
             max_tokens=500
         )

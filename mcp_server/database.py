@@ -262,7 +262,7 @@ class DatabaseManager:
         item_id: int,
         decision_type: str,
         decision_value: Dict,
-        reasoning: str,
+        reason: str,
         model_used: str,
         tokens_used: int,
         cost_usd: float
@@ -274,7 +274,7 @@ class DatabaseManager:
             item_id: Item identifier
             decision_type: Type of decision (e.g., "classification")
             decision_value: Structured decision data (stored as JSON)
-            reasoning: Explanation for the decision
+            reason: Explanation for the decision
             model_used: LLM model name (e.g., "gpt-3.5-turbo")
             tokens_used: Total tokens consumed
             cost_usd: Estimated cost in USD
@@ -284,7 +284,7 @@ class DatabaseManager:
         """
         query = """
             INSERT INTO decisions (
-                item_id, decision_type, decision_value, reasoning,
+                item_id, decision_type, decision_value, reason,
                 model_used, tokens_used, cost_usd
             )
             VALUES (%s, %s, %s::jsonb, %s, %s, %s, %s)
@@ -298,7 +298,7 @@ class DatabaseManager:
             with conn.cursor() as cur:
                 cur.execute(
                     query,
-                    (item_id, decision_type, decision_json, reasoning,
+                    (item_id, decision_type, decision_json, reason,
                      model_used, tokens_used, cost_usd)
                 )
                 decision_id = cur.fetchone()[0]

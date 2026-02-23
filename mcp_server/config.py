@@ -56,6 +56,11 @@ class Settings(BaseSettings):
     # ============================================
     # LLM API Keys
     # ============================================
+    llm_provider: Literal["aws", "openai", "anthropic"] = Field(
+        default="openai",
+        description="LLM provider to use (aws, openai, anthropic)"
+    )
+    
     openai_api_key: str | None = Field(
         default=None,
         description="OpenAI API key"
@@ -64,6 +69,32 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = Field(
         default=None,
         description="Anthropic API key"
+    )
+    
+    # AWS Bedrock
+    aws_access_key_id: str | None = Field(
+        default=None,
+        description="AWS Access Key ID for Bedrock"
+    )
+    
+    aws_secret_access_key: str | None = Field(
+        default=None,
+        description="AWS Secret Access Key for Bedrock"
+    )
+    
+    aws_region: str = Field(
+        default="us-east-1",
+        description="AWS region for Bedrock"
+    )
+    
+    aws_bedrock_model: str = Field(
+        default="us.amazon.nova-pro-v1:0",
+        description="AWS Bedrock model ID"
+    )
+    
+    default_classification_model: str = Field(
+        default="gpt-3.5-turbo",
+        description="Default model for classification"
     )
     
     # ============================================

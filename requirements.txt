@@ -20,6 +20,7 @@ sentence-transformers==2.3.1
 # agno==0.1.0  # Multi-agent framework - TODO: To be implemented manually
 openai==1.12.0
 anthropic==0.18.1
+boto3==1.34.34  # AWS SDK for Bedrock (Nova Pro)
 
 # Utilities
 python-dotenv==1.0.1
