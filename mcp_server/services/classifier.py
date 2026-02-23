@@ -272,15 +272,20 @@ class ClassifierService:
         Build classification prompt from item data.
         
         Args:
-            item: Item dict with title, summary, source, url
+            item: Item dict with title, summary, source_type, source_url, url
         
         Returns:
             Formatted prompt string
         """
+        # Build source string from source_type and source_url
+        source = item.get("source_type", "Unknown")
+        if source_url := item.get("source_url"):
+            source = f"{source} ({source_url})"
+        
         return CLASSIFICATION_PROMPT_TEMPLATE.format(
             title=item.get("title", "N/A"),
             summary=item.get("summary", "N/A"),
-            source=item.get("source", "Unknown"),
+            source=source,
             url=item.get("url", "")
         )
     

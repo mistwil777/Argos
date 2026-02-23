@@ -66,11 +66,11 @@ class DatabaseManager:
         """
         query = """
             SELECT 
-                id, title, summary, url, source, 
+                id, title, summary, url, source_type, source_url,
                 published_at, created_at
             FROM items
             WHERE classification_status = 'pending'
-            ORDER BY published_at DESC
+            ORDER BY published_at DESC NULLS LAST, created_at DESC
             LIMIT %s
         """
         
@@ -94,7 +94,7 @@ class DatabaseManager:
         """
         query = """
             SELECT 
-                id, title, summary, url, source,
+                id, title, summary, url, source_type, source_url,
                 importance, item_type, classification_status,
                 published_at, created_at, updated_at
             FROM items
