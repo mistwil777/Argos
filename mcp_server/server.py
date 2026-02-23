@@ -326,7 +326,9 @@ async def startup_event():
     logger.info(f"Environment: {settings.environment}")
     logger.info(f"Log level: {settings.log_level}")
     
-    # Import and register tools
+    # ============================================
+    # Test Tools
+    # ============================================
     from mcp_server.tools.hello import hello_world
     
     tool_registry.register(
@@ -344,6 +346,117 @@ async def startup_event():
             "properties": {
                 "message": {"type": "string"},
                 "timestamp": {"type": "string"}
+            }
+        }
+    )
+    
+    # ============================================
+    # Classifier Tools
+    # ============================================
+    from mcp_server.tools.classifier import (
+        classify_item,
+        classify_batch,
+        get_classification_stats,
+        get_unclassified_items
+    )
+    
+    tool_registry.register(
+        name="classifier.classify",
+        func=classify_item,
+        description="Classify a single tech watch item using LLM (extracts topics, importance, type)",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "item_id": {
+                    "type": "integer",
+                    "description": "ID of the item to classify"
+                }
+            },
+            "required": ["item_id"]
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "item_id": {"type": "integer"},
+                "topics": {"type": "array", "items": {"type": "string"}},
+                "importance": {"type": "string", "enum": ["critical", "high", "medium", "low"]},
+                "item_type": {"type": "string", "enum": ["innovation", "tutorial", "research", "news", "opinion"]},
+                "reasoning": {"type": "string"},
+                "model": {"type": "string"},
+                "tokens_used": {"type": "integer"},
+                "cost_usd": {"type": "number"},
+                "latency_ms": {"type": "integer"}
+            }
+        }
+    )
+    
+    tool_registry.register(
+        name="classifier.classify_batch",
+        func=classify_batch,
+        description="Classify multiple unclassified items in batch",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "item_ids": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                    "description": "Specific item IDs to classify (optional)"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "If item_ids not provided, process up to this many items (default: 10)",
+                    "default": 10
+                }
+            }
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "processed": {"type": "integer"},
+                "successful": {"type": "integer"},
+                "failed": {"type": "integer"},
+                "total_cost_usd": {"type": "number"},
+                "total_tokens": {"type": "integer"},
+                "results": {"type": "array"}
+            }
+        }
+    )
+    
+    tool_registry.register(
+        name="classifier.stats",
+        func=get_classification_stats,
+        description="Get classification statistics and progress",
+        input_schema={"type": "object", "properties": {}},
+        output_schema={
+            "type": "object",
+            "properties": {
+                "items_by_status": {"type": "object"},
+                "total_cost_usd": {"type": "number"},
+                "total_tokens": {"type": "integer"},
+                "top_topics": {"type": "array"}
+            }
+        }
+    )
+    
+    tool_registry.register(
+        name="classifier.get_unclassified",
+        func=get_unclassified_items,
+        description="Get list of items pending classification",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of items to return (default: 20)",
+                    "default": 20
+                }
+            }
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "count": {"type": "integer"},
+                "items": {"type": "array"}
             }
         }
     )
