@@ -98,6 +98,24 @@ class Settings(BaseSettings):
     )
     
     # ============================================
+    # Telegram Bot (HITL)
+    # ============================================
+    telegram_bot_token: str | None = Field(
+        default=None,
+        description="Telegram Bot API token from @BotFather"
+    )
+    
+    telegram_admin_chat_id: str | None = Field(
+        default=None,
+        description="Admin Telegram chat ID for notifications"
+    )
+    
+    telegram_webhook_url: str | None = Field(
+        default=None,
+        description="Public webhook URL for Telegram callbacks (optional, for production)"
+    )
+    
+    # ============================================
     # MCP Server
     # ============================================
     mcp_server_host: str = Field(

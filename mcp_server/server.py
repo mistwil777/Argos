@@ -775,6 +775,404 @@ async def startup_event():
         }
     )
     
+    # ============================================
+    # RAG Tools
+    # ============================================
+    from mcp_server.tools.rag_tools import (
+        ask_question,
+        search_content,
+        index_course as rag_index_course,
+        index_item as rag_index_item,
+        rebuild_index,
+        get_index_stats
+    )
+    
+    tool_registry.register(
+        name="rag.ask",
+        func=ask_question,
+        description="Ask a question and get an AI-generated answer based on indexed courses and items. Uses hybrid search (semantic + lexical) for better relevance.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "The question to ask (in French or English)"
+                },
+                "filter_source_type": {
+                    "type": "string",
+                    "enum": ["course", "item"],
+                    "description": "Optional: filter sources by type"
+                },
+                "user_identifier": {
+                    "type": "string",
+                    "description": "Optional: user identifier for logging (default: anonymous)"
+                },
+                "use_hybrid_search": {
+                    "type": "boolean",
+                    "description": "Use hybrid search (semantic+lexical, default: true)",
+                    "default": true
+                }
+            },
+            "required": ["query"]
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "success": {"type": "boolean"},
+                "query": {"type": "string"},
+                "answer": {"type": "string"},
+                "sources": {"type": "array"},
+                "confidence_score": {"type": "number"},
+                "model": {"type": "string"},
+                "tokens_used": {"type": "integer"},
+                "cost_usd": {"type": "number"},
+                "latency_ms": {"type": "integer"}
+            }
+        }
+    )
+    
+    tool_registry.register(
+        name="rag.search",
+        func=search_content,
+        description="Perform search across indexed content without generating an answer. Uses hybrid search (semantic + lexical) for better relevance.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of results (default: 10)",
+                    "minimum": 1,
+                    "maximum": 50
+                },
+                "filter_source_type": {
+                    "type": "string",
+                    "enum": ["course", "item"],
+                    "description": "Optional: filter by source type"
+                },
+                "use_hybrid_search": {
+                    "type": "boolean",
+                    "description": "Use hybrid search (semantic+lexical, default: true)",
+                    "default": true
+                }
+            },
+            "required": ["query"]
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "success": {"type": "boolean"},
+                "query": {"type": "string"},
+                "results": {"type": "array"},
+                "count": {"type": "integer"}
+            }
+        }
+    )
+    
+    tool_registry.register(
+        name="rag.index_course",
+        func=rag_index_course,
+        description="Index a specific course into the vector database for RAG",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "course_id": {
+                    "type": "integer",
+                    "description": "ID of the course to index"
+                }
+            },
+            "required": ["course_id"]
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "success": {"type": "boolean"},
+                "course_id": {"type": "integer"},
+                "title": {"type": "string"},
+                "chunks_indexed": {"type": "integer"}
+            }
+        }
+    )
+    
+    tool_registry.register(
+        name="rag.index_item",
+        func=rag_index_item,
+        description="Index a specific item into the vector database for RAG",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "item_id": {
+                    "type": "integer",
+                    "description": "ID of the item to index"
+                }
+            },
+            "required": ["item_id"]
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "success": {"type": "boolean"},
+                "item_id": {"type": "integer"},
+                "title": {"type": "string"},
+                "chunks_indexed": {"type": "integer"}
+            }
+        }
+    )
+    
+    tool_registry.register(
+        name="rag.rebuild_index",
+        func=rebuild_index,
+        description="Rebuild the entire RAG vector index from scratch",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "include_items": {
+                    "type": "boolean",
+                    "description": "Whether to include items (default: true)"
+                }
+            }
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "success": {"type": "boolean"},
+                "total_chunks": {"type": "integer"},
+                "courses_indexed": {"type": "integer"},
+                "items_indexed": {"type": "integer"},
+                "course_chunks": {"type": "integer"},
+                "item_chunks": {"type": "integer"}
+            }
+        }
+    )
+    
+    tool_registry.register(
+        name="rag.stats",
+        func=get_index_stats,
+        description="Get statistics about the RAG vector index",
+        input_schema={"type": "object", "properties": {}},
+        output_schema={
+            "type": "object",
+            "properties": {
+                "success": {"type": "boolean"},
+                "total_chunks": {"type": "integer"},
+                "course_chunks": {"type": "integer"},
+                "item_chunks": {"type": "integer"},
+                "last_updated": {"type": "string"}
+            }
+        }
+    )
+    
+    # ============================================
+    # HITL (Human-in-the-Loop) Tools
+    # ============================================
+    from mcp_server.tools.hitl_tools import (
+        notify_new_item,
+        notify_classification,
+        notify_course_generated,
+        notify_rag_query,
+        get_pending_decisions,
+        get_decisions_history,
+        start_telegram_bot,
+        stop_telegram_bot
+    )
+    
+    tool_registry.register(
+        name="hitl.notify_new_item",
+        func=notify_new_item,
+        description="Send Telegram notification for newly collected item",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "item_id": {
+                    "type": "integer",
+                    "description": "Item identifier"
+                }
+            },
+            "required": ["item_id"]
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "success": {"type": "boolean"},
+                "item_id": {"type": "integer"},
+                "message": {"type": "string"}
+            }
+        }
+    )
+    
+    tool_registry.register(
+        name="hitl.notify_classification",
+        func=notify_classification,
+        description="Send Telegram notification after classification with validation buttons",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "item_id": {
+                    "type": "integer",
+                    "description": "Item identifier"
+                },
+                "topics": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Classified topics"
+                },
+                "importance": {
+                    "type": "string",
+                    "description": "Importance level"
+                },
+                "item_type": {
+                    "type": "string",
+                    "description": "Content type"
+                }
+            },
+            "required": ["item_id", "topics", "importance", "item_type"]
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "success": {"type": "boolean"},
+                "item_id": {"type": "integer"},
+                "message": {"type": "string"}
+            }
+        }
+    )
+    
+    tool_registry.register(
+        name="hitl.notify_course_generated",
+        func=notify_course_generated,
+        description="Send Telegram notification after course generation with review buttons",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "course_id": {
+                    "type": "integer",
+                    "description": "Course identifier"
+                },
+                "qa_score": {
+                    "type": "number",
+                    "description": "Optional QA score"
+                }
+            },
+            "required": ["course_id"]
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "success": {"type": "boolean"},
+                "course_id": {"type": "integer"},
+                "message": {"type": "string"}
+            }
+        }
+    )
+    
+    tool_registry.register(
+        name="hitl.notify_rag_query",
+        func=notify_rag_query,
+        description="Send RAG query result to admin for feedback",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "User's question"
+                },
+                "answer": {
+                    "type": "string",
+                    "description": "Generated answer"
+                },
+                "confidence": {
+                    "type": "number",
+                    "description": "Confidence score"
+                },
+                "sources_count": {
+                    "type": "integer",
+                    "description": "Number of sources used"
+                }
+            },
+            "required": ["query", "answer", "confidence", "sources_count"]
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "success": {"type": "boolean"},
+                "message": {"type": "string"}
+            }
+        }
+    )
+    
+    tool_registry.register(
+        name="hitl.get_pending_decisions",
+        func=get_pending_decisions,
+        description="Get list of items/courses pending human decision",
+        input_schema={"type": "object", "properties": {}},
+        output_schema={
+            "type": "object",
+            "properties": {
+                "success": {"type": "boolean"},
+                "pending_items": {"type": "array"},
+                "pending_items_count": {"type": "integer"},
+                "pending_courses": {"type": "array"},
+                "pending_courses_count": {"type": "integer"}
+            }
+        }
+    )
+    
+    tool_registry.register(
+        name="hitl.get_decisions_history",
+        func=get_decisions_history,
+        description="Get history of human decisions",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of decisions to return (default: 20)",
+                    "default": 20
+                }
+            }
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "success": {"type": "boolean"},
+                "decisions": {"type": "array"},
+                "count": {"type": "integer"}
+            }
+        }
+    )
+    
+    tool_registry.register(
+        name="hitl.start_bot",
+        func=start_telegram_bot,
+        description="Start Telegram bot in polling mode (for development)",
+        input_schema={"type": "object", "properties": {}},
+        output_schema={
+            "type": "object",
+            "properties": {
+                "success": {"type": "boolean"},
+                "message": {"type": "string"},
+                "admin_chat_id": {"type": "string"}
+            }
+        }
+    )
+    
+    tool_registry.register(
+        name="hitl.stop_bot",
+        func=stop_telegram_bot,
+        description="Stop Telegram bot polling",
+        input_schema={"type": "object", "properties": {}},
+        output_schema={
+            "type": "object",
+            "properties": {
+                "success": {"type": "boolean"},
+                "message": {"type": "string"}
+            }
+        }
+    )
+    
     logger.info(f"Registered {len(tool_registry.tools)} tools")
     logger.info("MCP Server ready!")
 
