@@ -810,7 +810,7 @@ async def startup_event():
                 "use_hybrid_search": {
                     "type": "boolean",
                     "description": "Use hybrid search (semantic+lexical, default: true)",
-                    "default": true
+                    "default": True
                 }
             },
             "required": ["query"]
@@ -856,7 +856,7 @@ async def startup_event():
                 "use_hybrid_search": {
                     "type": "boolean",
                     "description": "Use hybrid search (semantic+lexical, default: true)",
-                    "default": true
+                    "default": True
                 }
             },
             "required": ["query"]

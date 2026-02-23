@@ -4,7 +4,7 @@ Uses pydantic-settings for environment variable validation
 """
 
 from pydantic_settings import BaseSettings
-from pydantic import Field, PostgresDsn
+from pydantic import Field, PostgresDsn, AliasChoices
 from typing import Literal
 
 
@@ -107,7 +107,8 @@ class Settings(BaseSettings):
     
     telegram_admin_chat_id: str | None = Field(
         default=None,
-        description="Admin Telegram chat ID for notifications"
+        description="Admin Telegram chat ID for notifications",
+        validation_alias=AliasChoices('telegram_admin_chat_id', 'telegram_chat_id')
     )
     
     telegram_webhook_url: str | None = Field(
