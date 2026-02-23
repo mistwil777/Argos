@@ -7,7 +7,7 @@
 # ============================================
 # Stage 1: Builder - Install dependencies
 # ============================================
-FROM python:3.10-slim AS builder
+FROM python:3.11-slim AS builder
 
 # Set working directory
 WORKDIR /app
@@ -47,7 +47,7 @@ EXPOSE 8000
 # Environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONPATH=/usr/local/lib/python3.10/site-packages:/app
+    PYTHONPATH=/usr/local/lib/python3.11/site-packages:/app
 
 # Run FastAPI with uvicorn
 # Note: --reload removed for production (not compatible with distroless)

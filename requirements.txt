@@ -17,7 +17,7 @@ lancedb==0.5.3
 sentence-transformers==2.3.1
 
 # AI Agents & LLM
-agno==0.1.0  # Multi-agent framework
+# agno==0.1.0  # Multi-agent framework - TODO: To be implemented manually
 openai==1.12.0
 anthropic==0.18.1
 
@@ -27,7 +27,7 @@ httpx==0.26.0
 python-multipart==0.0.9
 
 # Development
-pytest==8.0.0
+pytest==7.4.4
 pytest-asyncio==0.23.4
 black==24.1.1
 ruff==0.2.1
