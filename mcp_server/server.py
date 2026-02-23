@@ -571,6 +571,210 @@ async def startup_event():
         }
     )
     
+    # ============================================
+    # Course Generator Tools
+    # ============================================
+    from mcp_server.tools.course_generator import (
+        generate_course,
+        score_course_quality,
+        list_available_topics,
+        get_course,
+        update_course_status,
+        list_courses
+    )
+    
+    tool_registry.register(
+        name="course.generate",
+        func=generate_course,
+        description="Generate an educational course for a specific topic using LLM",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "topic": {
+                    "type": "string",
+                    "description": "Topic name (e.g., 'Agents', 'RAG', 'LLM')"
+                },
+                "level": {
+                    "type": "string",
+                    "description": "Course level",
+                    "enum": ["beginner", "intermediate", "advanced"],
+                    "default": "intermediate"
+                },
+                "max_items": {
+                    "type": "integer",
+                    "description": "Maximum number of source items to use",
+                    "default": 5
+                },
+                "min_importance": {
+                    "type": "string",
+                    "description": "Minimum importance level",
+                    "enum": ["low", "medium", "high", "critical"],
+                    "default": "medium"
+                }
+            },
+            "required": ["topic"]
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "course_id": {"type": "integer"},
+                "status": {"type": "string"},
+                "title": {"type": "string"},
+                "level": {"type": "string"},
+                "topic": {"type": "string"},
+                "source_items_count": {"type": "integer"},
+                "estimated_duration_minutes": {"type": "integer"},
+                "model": {"type": "string"},
+                "tokens_used": {"type": "integer"},
+                "cost_usd": {"type": "number"},
+                "latency_ms": {"type": "integer"}
+            }
+        }
+    )
+    
+    tool_registry.register(
+        name="course.score_quality",
+        func=score_course_quality,
+        description="Evaluate and score course quality using LLM",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "course_id": {
+                    "type": "integer",
+                    "description": "Course identifier"
+                }
+            },
+            "required": ["course_id"]
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "course_id": {"type": "integer"},
+                "qa_score": {"type": "number"},
+                "issues": {"type": "array"},
+                "strengths": {"type": "array"},
+                "recommendations": {"type": "array"},
+                "tokens_used": {"type": "integer"},
+                "cost_usd": {"type": "number"},
+                "latency_ms": {"type": "integer"}
+            }
+        }
+    )
+    
+    tool_registry.register(
+        name="course.list_topics",
+        func=list_available_topics,
+        description="List topics available for course generation",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "min_items": {
+                    "type": "integer",
+                    "description": "Minimum number of classified items required",
+                    "default": 3
+                }
+            }
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "topics": {"type": "array"},
+                "count": {"type": "integer"}
+            }
+        }
+    )
+    
+    tool_registry.register(
+        name="course.get",
+        func=get_course,
+        description="Retrieve a course by ID",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "course_id": {
+                    "type": "integer",
+                    "description": "Course identifier"
+                }
+            },
+            "required": ["course_id"]
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "id": {"type": "integer"},
+                "title": {"type": "string"},
+                "subject": {"type": "string"},
+                "level": {"type": "string"},
+                "content": {"type": "string"},
+                "learning_objectives": {"type": "array"},
+                "prerequisites": {"type": "array"},
+                "estimated_duration_minutes": {"type": "integer"},
+                "qa_score": {"type": "number"},
+                "status": {"type": "string"}
+            }
+        }
+    )
+    
+    tool_registry.register(
+        name="course.update_status",
+        func=update_course_status,
+        description="Update course publication status",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "course_id": {
+                    "type": "integer",
+                    "description": "Course identifier"
+                },
+                "status": {
+                    "type": "string",
+                    "description": "New status",
+                    "enum": ["draft", "review", "published", "archived"]
+                }
+            },
+            "required": ["course_id", "status"]
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "course_id": {"type": "integer"},
+                "status": {"type": "string"},
+                "updated_at": {"type": "string"}
+            }
+        }
+    )
+    
+    tool_registry.register(
+        name="course.list",
+        func=list_courses,
+        description="List courses with optional filtering",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "description": "Filter by status (optional)"
+                },
+                "level": {
+                    "type": "string",
+                    "description": "Filter by level (optional)"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of courses (default: 10)",
+                    "default": 10
+                }
+            }
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "courses": {"type": "array"},
+                "count": {"type": "integer"}
+            }
+        }
+    )
+    
     logger.info(f"Registered {len(tool_registry.tools)} tools")
     logger.info("MCP Server ready!")
 

@@ -145,6 +145,7 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        extra = "ignore"  # Ignore extra environment variables (e.g., POSTGRES_* used by Docker Compose)
 
 
 # Global settings instance

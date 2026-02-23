@@ -396,3 +396,357 @@ class DatabaseManager:
                 topics = cur.fetchall()
         
         return [dict(topic) for topic in topics]
+    
+    def get_topic_by_name(self, name: str) -> Optional[Dict]:
+        """
+        Get topic by name.
+        
+        Args:
+            name: Topic name
+        
+        Returns:
+            Topic dict or None if not found
+        """
+        query = "SELECT id, name, slug, description, item_count FROM topics WHERE name = %s"
+        
+        with self.get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(query, (name,))
+                topic = cur.fetchone()
+        
+        return dict(topic) if topic else None
+    
+    def get_topic_by_id(self, topic_id: int) -> Optional[Dict]:
+        """
+        Get topic by ID.
+        
+        Args:
+            topic_id: Topic identifier
+        
+        Returns:
+            Topic dict or None if not found
+        """
+        query = "SELECT id, name, slug, description, item_count FROM topics WHERE id = %s"
+        
+        with self.get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(query, (topic_id,))
+                topic = cur.fetchone()
+        
+        return dict(topic) if topic else None
+    
+    def get_topics_with_stats(self, min_items: int = 1) -> List[Dict]:
+        """
+        Get all topics with item statistics.
+        
+        Args:
+            min_items: Minimum number of items required
+        
+        Returns:
+            List of topics with stats
+        """
+        query = """
+            SELECT 
+                t.id, t.name, t.slug, t.item_count,
+                COUNT(DISTINCT it.item_id) as classified_count,
+                MAX(i.created_at) as latest_item_date
+            FROM topics t
+            LEFT JOIN items_topics it ON t.id = it.topic_id
+            LEFT JOIN items i ON it.item_id = i.id AND i.classification_status = 'classified'
+            GROUP BY t.id, t.name, t.slug, t.item_count
+            HAVING COUNT(DISTINCT it.item_id) >= %s
+            ORDER BY t.item_count DESC
+        """
+        
+        with self.get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(query, (min_items,))
+                topics = cur.fetchall()
+        
+        return [dict(topic) for topic in topics]
+    
+    def get_items_by_topic(
+        self,
+        topic_id: int,
+        limit: int = 10,
+        min_importance: str = "medium"
+    ) -> List[Dict]:
+        """
+        Get items for a specific topic.
+        
+        Args:
+            topic_id: Topic identifier
+            limit: Maximum number of items
+            min_importance: Minimum importance level
+        
+        Returns:
+            List of items
+        """
+        importance_order = {"critical": 4, "high": 3, "medium": 2, "low": 1}
+        
+        # Build WHERE clause for importance
+        if min_importance == "critical":
+            importance_clause = "importance = 'critical'"
+        elif min_importance == "high":
+            importance_clause = "importance IN ('critical', 'high')"
+        elif min_importance == "medium":
+            importance_clause = "importance IN ('critical', 'high', 'medium')"
+        else:
+            importance_clause = "importance IS NOT NULL"
+        
+        query = f"""
+            SELECT 
+                i.id, i.title, i.summary, i.url, i.source_type,
+                i.importance, i.item_type, i.published_at, i.created_at
+            FROM items i
+            JOIN items_topics it ON i.id = it.item_id
+            WHERE it.topic_id = %s
+                AND i.classification_status = 'classified'
+                AND {importance_clause}
+            ORDER BY 
+                CASE i.importance
+                    WHEN 'critical' THEN 4
+                    WHEN 'high' THEN 3
+                    WHEN 'medium' THEN 2
+                    WHEN 'low' THEN 1
+                    ELSE 0
+                END DESC,
+                i.published_at DESC NULLS LAST,
+                i.created_at DESC
+            LIMIT %s
+        """
+        
+        with self.get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(query, (topic_id, limit))
+                items = cur.fetchall()
+        
+        logger.info(f"Retrieved {len(items)} items for topic {topic_id}")
+        return [dict(item) for item in items]
+    
+    # ============================================
+    # Courses Operations
+    # ============================================
+    
+    def get_course_by_id(self, course_id: int) -> Optional[Dict]:
+        """
+        Get course by ID.
+        
+        Args:
+            course_id: Course identifier
+        
+        Returns:
+            Course dict or None if not found
+        """
+        query = """
+            SELECT 
+                id, item_id, title, subject, level, content,
+                learning_objectives, prerequisites, estimated_duration_minutes,
+                qa_score, qa_issues, qa_reviewed_at,
+                status, published_at, created_at, updated_at
+            FROM courses
+            WHERE id = %s
+        """
+        
+        with self.get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(query, (course_id,))
+                course = cur.fetchone()
+        
+        return dict(course) if course else None
+    
+    def get_course_by_item_level(self, item_id: int, level: str) -> Optional[Dict]:
+        """
+        Check if course exists for item+level combination.
+        
+        Args:
+            item_id: Item identifier
+            level: Course level
+        
+        Returns:
+            Course dict or None if not found
+        """
+        query = """
+            SELECT 
+                id, title, subject, level, status, created_at
+            FROM courses
+            WHERE item_id = %s AND level = %s
+        """
+        
+        with self.get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(query, (item_id, level))
+                course = cur.fetchone()
+        
+        return dict(course) if course else None
+    
+    def insert_course(
+        self,
+        item_id: int,
+        title: str,
+        subject: str,
+        level: str,
+        content: str,
+        learning_objectives: List[str],
+        prerequisites: List[str],
+        estimated_duration_minutes: int
+    ) -> int:
+        """
+        Insert new course.
+        
+        Args:
+            item_id: Source item ID
+            title: Course title
+            subject: Subject/topic
+            level: Course level
+            content: Full Markdown content
+            learning_objectives: List of objectives
+            prerequisites: List of prerequisites
+            estimated_duration_minutes: Estimated reading time
+        
+        Returns:
+            Course ID
+        """
+        import json
+        
+        query = """
+            INSERT INTO courses (
+                item_id, title, subject, level, content,
+                learning_objectives, prerequisites, estimated_duration_minutes,
+                status
+            )
+            VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, 'draft')
+            RETURNING id
+        """
+        
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    query,
+                    (
+                        item_id, title, subject, level, content,
+                        json.dumps(learning_objectives),
+                        json.dumps(prerequisites),
+                        estimated_duration_minutes
+                    )
+                )
+                course_id = cur.fetchone()[0]
+        
+        logger.info(
+            f"Created course {course_id}",
+            extra={"course_id": course_id, "title": title, "level": level}
+        )
+        return course_id
+    
+    def update_course_qa(self, course_id: int, score: float, issues: List[Dict]):
+        """
+        Update course QA score and issues.
+        
+        Args:
+            course_id: Course identifier
+            score: QA score (0-10)
+            issues: List of issue dicts
+        """
+        import json
+        
+        query = """
+            UPDATE courses
+            SET 
+                qa_score = %s,
+                qa_issues = %s::jsonb,
+                qa_reviewed_at = CURRENT_TIMESTAMP
+            WHERE id = %s
+        """
+        
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, (score, json.dumps(issues), course_id))
+        
+        logger.info(f"Updated QA score for course {course_id}: {score}")
+    
+    def update_course_status(self, course_id: int, status: str):
+        """
+        Update course publication status.
+        
+        Args:
+            course_id: Course identifier
+            status: New status
+        """
+        query = """
+            UPDATE courses
+            SET 
+                status = %s,
+                published_at = CASE 
+                    WHEN %s = 'published' AND published_at IS NULL 
+                    THEN CURRENT_TIMESTAMP 
+                    ELSE published_at 
+                END
+            WHERE id = %s
+        """
+        
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, (status, status, course_id))
+        
+        logger.info(f"Updated course {course_id} status to '{status}'")
+    
+    def insert_decision(
+        self,
+        decision_type: str,
+        entity_id: int,
+        entity_type: str,
+        input_data: Dict,
+        output_data: Dict,
+        model: str,
+        tokens_used: int,
+        cost_usd: float
+    ) -> int:
+        """
+        Insert a decision record for LLM operations.
+        
+        Args:
+            decision_type: Type of operation (e.g., "course_generation", "course_qa")
+            entity_id: ID of the entity (course_id, item_id, etc.)
+            entity_type: Type of entity ("course", "item", etc.)
+            input_data: Input parameters as dict
+            output_data: Output results as dict
+            model: LLM model name
+            tokens_used: Total tokens
+            cost_usd: Cost in USD
+        
+        Returns:
+            Decision ID
+        """
+        import json
+        
+        # For backwards compatibility, use item_id field for entity_id
+        # Store entity_type in decision_value
+        decision_value = {
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+            "input": input_data,
+            "output": output_data
+        }
+        
+        query = """
+            INSERT INTO decisions (
+                item_id, decision_type, decision_value,
+                model_used, tokens_used, cost_usd
+            )
+            VALUES (%s, %s, %s::jsonb, %s, %s, %s)
+            RETURNING id
+        """
+        
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    query,
+                    (entity_id, decision_type, json.dumps(decision_value), model, tokens_used, cost_usd)
+                )
+                decision_id = cur.fetchone()[0]
+        
+        logger.info(
+            f"Logged decision {decision_id} for {entity_type} {entity_id}",
+            extra={"decision_id": decision_id, "type": decision_type}
+        )
+        return decision_id

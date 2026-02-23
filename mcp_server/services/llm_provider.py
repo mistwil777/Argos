@@ -127,7 +127,8 @@ class AWSBedrockProvider(LLMProvider):
         self.pricing = {
             "us.amazon.nova-pro-v1:0": {"input": 0.0008, "output": 0.0032},
             "us.amazon.nova-lite-v1:0": {"input": 0.00006, "output": 0.00024},
-            "anthropic.claude-3-sonnet": {"input": 0.003, "output": 0.015}
+            "anthropic.claude-3-sonnet": {"input": 0.003, "output": 0.015},
+            "us.anthropic.claude-sonnet-4-20250514-v1:0": {"input": 0.003, "output": 0.015}  # Claude Sonnet 4 via Bedrock
         }
         
         logger.info(f"AWS Bedrock provider initialized with model {model_id} in {region}")
