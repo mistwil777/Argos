@@ -1,0 +1,218 @@
+# ============================================
+# AcademiaOps - Sources de Veille IA
+# ============================================
+# 
+# Configuration des sources de données pour la veille technologique IA
+# Format: YAML
+#
+
+# ============================================
+# RSS FEEDS
+# ============================================
+rss_feeds:
+  # ----- Company Blogs -----
+  - name: "OpenAI Blog"
+    url: "https://openai.com/blog/rss.xml"
+    category: "company_blog"
+    enabled: true
+    priority: "high"
+    description: "Official OpenAI announcements and research"
+    
+  - name: "Anthropic News"
+    url: "https://www.anthropic.com/news/rss"
+    category: "company_blog"
+    enabled: true
+    priority: "high"
+    description: "Claude and Constitutional AI updates"
+    
+  - name: "Google AI Blog"
+    url: "https://ai.googleblog.com/feeds/posts/default"
+    category: "company_blog"
+    enabled: true
+    priority: "high"
+    description: "Google Research and AI updates"
+    
+  - name: "Microsoft AI Blog"
+    url: "https://blogs.microsoft.com/ai/feed/"
+    category: "company_blog"
+    enabled: true
+    priority: "medium"
+    description: "Microsoft AI products and research"
+  
+  # ----- Community & Platforms -----
+  - name: "HuggingFace Blog"
+    url: "https://huggingface.co/blog/feed.xml"
+    category: "community"
+    enabled: true
+    priority: "high"
+    description: "Open-source NLP and AI models"
+    
+  - name: "LangChain Blog"
+    url: "https://blog.langchain.dev/rss/"
+    category: "community"
+    enabled: true
+    priority: "high"
+    description: "LLM application framework updates"
+    
+  - name: "Towards Data Science (AI)"
+    url: "https://towardsdatascience.com/feed/tagged/artificial-intelligence"
+    category: "community"
+    enabled: true
+    priority: "medium"
+    description: "Community AI tutorials and articles"
+  
+  # ----- Research & Academic -----
+  - name: "Papers with Code - Latest"
+    url: "https://paperswithcode.com/latest/rss"
+    category: "research"
+    enabled: true
+    priority: "medium"
+    description: "Latest ML papers with code implementations"
+    
+  - name: "Distill.pub"
+    url: "https://distill.pub/rss.xml"
+    category: "research"
+    enabled: true
+    priority: "high"
+    description: "Clear ML research explanations"
+  
+  # ----- Tools & Frameworks -----
+  - name: "n8n Blog"
+    url: "https://blog.n8n.io/rss/"
+    category: "tools"
+    enabled: true
+    priority: "medium"
+    description: "Workflow automation updates"
+    
+  - name: "LanceDB Blog"
+    url: "https://blog.lancedb.com/rss/"
+    category: "tools"
+    enabled: true
+    priority: "medium"
+    description: "Vector database for AI applications"
+
+# ============================================
+# API SOURCES
+# ============================================
+apis:
+  # ----- GitHub Trending -----
+  - name: "GitHub Trending AI Repos"
+    type: "github"
+    url: "https://api.github.com/search/repositories"
+    params:
+      q: "machine-learning OR artificial-intelligence OR large-language-model"
+      sort: "stars"
+      order: "desc"
+      per_page: 10
+    enabled: true
+    rate_limit: "60/hour"
+    description: "Trending AI repositories on GitHub"
+    
+  - name: "GitHub MCP Repos"
+    type: "github"
+    url: "https://api.github.com/search/repositories"
+    params:
+      q: "model-context-protocol OR mcp-server"
+      sort: "updated"
+      order: "desc"
+      per_page: 10
+    enabled: true
+    rate_limit: "60/hour"
+    description: "Model Context Protocol implementations"
+  
+  # ----- ArXiv (Academic Papers) -----
+  - name: "ArXiv AI Papers"
+    type: "arxiv"
+    url: "http://export.arxiv.org/api/query"
+    params:
+      search_query: "cat:cs.AI OR cat:cs.LG OR cat:cs.CL"
+      sortBy: "submittedDate"
+      sortOrder: "descending"
+      max_results: 10
+    enabled: true
+    rate_limit: "1/3s"  # ArXiv rate limit
+    description: "Latest AI research papers from ArXiv"
+    
+  - name: "ArXiv NLP Papers"
+    type: "arxiv"
+    url: "http://export.arxiv.org/api/query"
+    params:
+      search_query: "cat:cs.CL"
+      sortBy: "submittedDate"
+      sortOrder: "descending"
+      max_results: 10
+    enabled: true
+    rate_limit: "1/3s"
+    description: "Latest NLP research papers"
+
+# ============================================
+# LOCAL FILE SOURCES
+# ============================================
+local_files:
+  - name: "Local Articles Directory"
+    path: "/data/local_articles"
+    watch: true
+    formats: ["md", "txt", "html"]
+    recursive: true
+    enabled: true
+    description: "Local articles and documentation"
+    
+  - name: "PDF Research Papers"
+    path: "/data/papers"
+    watch: true
+    formats: ["pdf"]
+    recursive: false
+    enabled: true
+    description: "Downloaded research papers"
+    extract_text: true  # Use PyPDF2 or similar
+
+# ============================================
+# COLLECTION SETTINGS
+# ============================================
+settings:
+  # Deduplication
+  deduplication:
+    enabled: true
+    method: "url"  # url, title, content_hash
+    fuzzy_title_match: true  # Use similarity for title matching
+    
+  # Content filtering
+  filters:
+    min_content_length: 200  # characters
+    max_content_length: 50000
+    languages: ["en", "fr"]
+    exclude_keywords: ["advertisement", "sponsored"]
+    
+  # Automatic classification
+  auto_classify: true
+  auto_classify_threshold: 5  # Classify after 5 items collected
+  
+  # Rate limiting
+  rate_limits:
+    requests_per_hour: 100
+    concurrent_requests: 3
+    
+  # Scheduling
+  schedule:
+    rss_feeds: "0 8,12,18 * * *"  # 3x per day
+    apis: "0 9 * * *"  # Daily at 9am
+    local_files: "*/30 * * * *"  # Every 30 minutes
+    
+  # Storage
+  storage:
+    raw_content: true  # Store full HTML/text
+    extract_summary: true  # Use first 500 chars as summary
+    download_attachments: false
+
+# ============================================
+# NOTIFICATIONS
+# ============================================
+notifications:
+  telegram:
+    enabled: true
+    events:
+      - "collection_complete"
+      - "new_high_priority_item"
+      - "collection_error"
+    
+  log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR

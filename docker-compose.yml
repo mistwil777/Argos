@@ -94,6 +94,7 @@ services:
       - AWS_BEDROCK_MODEL=${AWS_BEDROCK_MODEL:-us.amazon.nova-pro-v1:0}
     volumes:
       - ./mcp_server:/app/mcp_server:ro
+      - ./config:/app/config:ro
       - lancedb_data:/data/lancedb
       - ./logs:/app/logs
     ports:

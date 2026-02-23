@@ -351,6 +351,116 @@ async def startup_event():
     )
     
     # ============================================
+    # Collector Tools
+    # ============================================
+    from mcp_server.tools.collector import (
+        fetch_rss,
+        fetch_apis,
+        fetch_all,
+        get_collection_stats,
+        list_sources
+    )
+    
+    tool_registry.register(
+        name="collector.fetch_rss",
+        func=fetch_rss,
+        description="Fetch items from RSS feeds (all or specific feed)",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "feed_name": {
+                    "type": "string",
+                    "description": "Optional specific feed name. If not provided, fetches all."
+                }
+            }
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "success": {"type": "boolean"},
+                "fetched": {"type": "integer"},
+                "inserted": {"type": "integer"},
+                "duplicates": {"type": "integer"},
+                "errors": {"type": "integer"},
+                "message": {"type": "string"}
+            }
+        }
+    )
+    
+    tool_registry.register(
+        name="collector.fetch_apis",
+        func=fetch_apis,
+        description="Fetch items from API sources (GitHub, ArXiv)",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "api_name": {
+                    "type": "string",
+                    "description": "Optional specific API name. If not provided, fetches all."
+                }
+            }
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "success": {"type": "boolean"},
+                "fetched": {"type": "integer"},
+                "inserted": {"type": "integer"},
+                "duplicates": {"type": "integer"},
+                "errors": {"type": "integer"},
+                "message": {"type": "string"}
+            }
+        }
+    )
+    
+    tool_registry.register(
+        name="collector.fetch_all",
+        func=fetch_all,
+        description="Fetch items from all enabled sources (RSS + APIs)",
+        input_schema={"type": "object", "properties": {}},
+        output_schema={
+            "type": "object",
+            "properties": {
+                "success": {"type": "boolean"},
+                "fetched": {"type": "integer"},
+                "inserted": {"type": "integer"},
+                "duplicates": {"type": "integer"},
+                "errors": {"type": "integer"},
+                "message": {"type": "string"}
+            }
+        }
+    )
+    
+    tool_registry.register(
+        name="collector.get_stats",
+        func=get_collection_stats,
+        description="Get statistics about data collection",
+        input_schema={"type": "object", "properties": {}},
+        output_schema={
+            "type": "object",
+            "properties": {
+                "success": {"type": "boolean"},
+                "stats": {"type": "object"}
+            }
+        }
+    )
+    
+    tool_registry.register(
+        name="collector.list_sources",
+        func=list_sources,
+        description="List all configured sources (RSS feeds, APIs)",
+        input_schema={"type": "object", "properties": {}},
+        output_schema={
+            "type": "object",
+            "properties": {
+                "success": {"type": "boolean"},
+                "sources": {"type": "object"},
+                "total_sources": {"type": "integer"}
+            }
+        }
+    )
+    
+    # ============================================
     # Classifier Tools
     # ============================================
     from mcp_server.tools.classifier import (
