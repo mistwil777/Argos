@@ -1,7 +1,8 @@
-import { FileText, CheckCircle, BookOpen, DollarSign } from 'lucide-react';
+import { FileText, CheckCircle, BookOpen, DollarSign, ArrowRight, Sparkles, Brain, MessageSquare } from 'lucide-react';
 import { Card, MetricCard } from '../components/ui/Card';
 import { useGlobalStats, useTimelineStats, useTopicsStats } from '../hooks/useApi';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Link } from 'react-router-dom';
 
 export const Dashboard = () => {
   const { data: stats, isLoading: statsLoading } = useGlobalStats();
@@ -23,6 +24,69 @@ export const Dashboard = () => {
         <p className="mt-1 text-sm text-gray-500">
           Vue d'ensemble de votre système AcademiaOps
         </p>
+      </div>
+
+      {/* Quick Start Guide */}
+      <div className="bg-gradient-to-r from-blue-50 via-purple-50 to-pink-50 border-2 border-blue-200 rounded-xl p-6 shadow-sm">
+        <div className="flex items-start gap-4">
+          <Sparkles className="h-8 w-8 text-purple-600 flex-shrink-0 mt-1" />
+          <div className="flex-1">
+            <h2 className="text-xl font-bold text-gray-900 mb-3">🚀 Comment utiliser AcademiaOps</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Link to="/items" className="group bg-white rounded-lg p-4 hover:shadow-md transition-shadow border border-gray-200">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                    <FileText className="h-4 w-4 text-blue-600" />
+                  </div>
+                  <h3 className="font-semibold text-gray-900">1. Items</h3>
+                </div>
+                <p className="text-sm text-gray-600 mb-2">
+                  Consultez les items collectés et classifiez-les avec l'IA
+                </p>
+                <div className="flex items-center text-sm text-blue-600 font-medium group-hover:gap-2 transition-all">
+                  Voir les items <ArrowRight className="h-4 w-4 ml-1" />
+                </div>
+              </Link>
+
+              <Link to="/courses" className="group bg-white rounded-lg p-4 hover:shadow-md transition-shadow border border-gray-200">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
+                    <BookOpen className="h-4 w-4 text-green-600" />
+                  </div>
+                  <h3 className="font-semibold text-gray-900">2. Cours</h3>
+                </div>
+                <p className="text-sm text-gray-600 mb-2">
+                  Générez et publiez des cours pédagogiques complets
+                </p>
+                <div className="flex items-center text-sm text-green-600 font-medium group-hover:gap-2 transition-all">
+                  Voir les cours <ArrowRight className="h-4 w-4 ml-1" />
+                </div>
+              </Link>
+
+              <Link to="/rag" className="group bg-white rounded-lg p-4 hover:shadow-md transition-shadow border border-gray-200">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center">
+                    <MessageSquare className="h-4 w-4 text-purple-600" />
+                  </div>
+                  <h3 className="font-semibold text-gray-900">3. RAG</h3>
+                </div>
+                <p className="text-sm text-gray-600 mb-2">
+                  Posez des questions sur vos cours avec l'assistant IA
+                </p>
+                <div className="flex items-center text-sm text-purple-600 font-medium group-hover:gap-2 transition-all">
+                  Poser une question <ArrowRight className="h-4 w-4 ml-1" />
+                </div>
+              </Link>
+            </div>
+            
+            <div className="mt-4 flex items-center gap-2 text-sm text-gray-600 bg-white/50 rounded-lg p-3">
+              <Brain className="h-4 w-4 text-blue-600" />
+              <span>
+                <strong>Workflow automatisé:</strong> Items collectés → Classification IA → Génération de cours → Indexation RAG → Q/A disponible
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
       
       {/* Metrics */}
