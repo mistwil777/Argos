@@ -9,6 +9,7 @@ export interface Item {
   subject?: string;
   importance?: string;
   item_type?: string;
+  status?: 'pending' | 'classified' | 'rejected';
   classification_status: 'pending' | 'classified' | 'rejected';
   published_at?: string;
   created_at: string;

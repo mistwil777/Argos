@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link2, Rss, Github, Code, Filter, Plus, Trash2, ExternalLink, Tag, CheckCircle, XCircle } from 'lucide-react';
+import { Link2, Rss, Github, Code, Filter, Trash2, ExternalLink, Tag, CheckCircle, XCircle } from 'lucide-react';
 
 interface Source {
   id?: number;
@@ -22,15 +22,16 @@ const fetchSources = async (): Promise<Source[]> => {
   return data.sources || [];
 };
 
-const addSource = async (source: Omit<Source, 'id'>): Promise<Source> => {
-  const response = await fetch('http://localhost:8000/api/v1/sources', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(source),
-  });
-  if (!response.ok) throw new Error('Failed to add source');
-  return response.json();
-};
+// TODO: Add source creation UI
+// const addSource = async (source: Omit<Source, 'id'>): Promise<Source> => {
+//   const response = await fetch('http://localhost:8000/api/v1/sources', {
+//     method: 'POST',
+//     headers: { 'Content-Type': 'application/json' },
+//     body: JSON.stringify(source),
+//   });
+//   if (!response.ok) throw new Error('Failed to add source');
+//   return response.json();
+// };
 
 const deleteSource = async (id: number): Promise<void> => {
   const response = await fetch(`http://localhost:8000/api/v1/sources/${id}`, {
