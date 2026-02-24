@@ -226,7 +226,12 @@ async def list_items(
                         "created_at": row[10].isoformat() if row[10] else None
                     })
                 
-                return items
+                # Get total count
+                count_query = f"SELECT COUNT(*) FROM items WHERE {where_clause}"
+                cur.execute(count_query, params[:-2])  # Exclude limit and offset
+                total = cur.fetchone()[0]
+                
+                return {"items": items, "total": total}
     except Exception as e:
         logger.error(f"Error listing items: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -339,7 +344,12 @@ async def list_courses(
                         "published_at": row[8].isoformat() if row[8] else None
                     })
                 
-                return courses
+                # Get total count
+                count_query = f"SELECT COUNT(*) FROM courses WHERE {where_clause}"
+                cur.execute(count_query, params[:-2])  # Exclude limit and offset
+                total = cur.fetchone()[0]
+                
+                return {"courses": courses, "total": total}
     except Exception as e:
         logger.error(f"Error listing courses: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -498,7 +508,7 @@ async def get_pending_decisions():
                         "created_at": row[7].isoformat() if row[7] else None
                     })
                 
-                return items
+                return {"items": items, "total": len(items)}
     except Exception as e:
         logger.error(f"Error fetching pending decisions: {e}")
         raise HTTPException(status_code=500, detail=str(e))
