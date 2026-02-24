@@ -87,10 +87,10 @@ export const useCourses = (params?: any) => {
   });
 };
 
-export const useCourse = (id: number) => {
+export const useCourse = (id: number | null) => {
   return useQuery({
     queryKey: ['courses', id],
-    queryFn: () => coursesApi.get(id),
+    queryFn: () => coursesApi.get(id!),
     enabled: !!id,
   });
 };

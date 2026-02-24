@@ -2,6 +2,12 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Layout } from './components/layout/Layout';
 import { Dashboard } from './pages/Dashboard';
+import Items from './pages/Items';
+import Courses from './pages/Courses';
+import RAG from './pages/RAG';
+import Analytics from './pages/Analytics';
+import HITL from './pages/HITL';
+import Admin from './pages/Admin';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -12,14 +18,6 @@ const queryClient = new QueryClient({
     },
   },
 });
-
-// Placeholder components for other pages
-const Items = () => <div className="text-2xl font-bold">Items Page (Coming soon)</div>;
-const Courses = () => <div className="text-2xl font-bold">Courses Page (Coming soon)</div>;
-const RAG = () => <div className="text-2xl font-bold">RAG Assistant (Coming soon)</div>;
-const Analytics = () => <div className="text-2xl font-bold">Analytics Page (Coming soon)</div>;
-const HITL = () => <div className="text-2xl font-bold">HITL Manager (Coming soon)</div>;
-const Admin = () => <div className="text-2xl font-bold">Admin Page (Coming soon)</div>;
 
 function App() {
   return (

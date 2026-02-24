@@ -6,6 +6,7 @@ export interface Item {
   source_type: string;
   source_url: string;
   topics?: string[];
+  subject?: string;
   importance?: string;
   item_type?: string;
   classification_status: 'pending' | 'classified' | 'rejected';
@@ -21,8 +22,10 @@ export interface Course {
   topic: string;
   level: 'beginner' | 'intermediate' | 'advanced';
   status: 'draft' | 'review' | 'published' | 'archived';
+  duration?: number;
   qa_score?: number;
   qa_issues?: any[];
+  content?: string;
   created_at: string;
   updated_at?: string;
 }

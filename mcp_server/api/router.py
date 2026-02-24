@@ -5,7 +5,7 @@ Provides REST endpoints alongside the existing JSON-RPC interface.
 """
 
 from fastapi import APIRouter, HTTPException, Query
-from typing import Optional
+from typing import Optional, Dict, Any
 import logging
 
 from mcp_server.database import DatabaseManager
@@ -165,3 +165,395 @@ async def get_costs_stats(period: str = Query(default="month", regex="^(week|mon
     except Exception as e:
         logger.error(f"Error fetching costs stats: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# Items Endpoints
+# ============================================
+
+@api_router.get("/items")
+async def list_items(
+    status: str = Query(default="all", description="Filter by status: all, pending, classified"),
+    source: str = Query(default="all", description="Filter by source"),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0)
+):
+    """List items with optional filters."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                # Build query with filters
+                where_conditions = []
+                params = []
+                
+                if status != "all":
+                    where_conditions.append("classification_status = %s")
+                    params.append(status)
+                
+                if source != "all":
+                    where_conditions.append("source_type = %s")
+                    params.append(source)
+                
+                where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
+                
+                query = f"""
+                    SELECT 
+                        id, title, summary, url, source_type, source_url,
+                        subject, importance, classification_status,
+                        published_at, created_at
+                    FROM items
+                    WHERE {where_clause}
+                    ORDER BY created_at DESC
+                    LIMIT %s OFFSET %s
+                """
+                
+                params.extend([limit, offset])
+                cur.execute(query, params)
+                
+                items = []
+                for row in cur.fetchall():
+                    items.append({
+                        "id": row[0],
+                        "title": row[1],
+                        "summary": row[2],
+                        "url": row[3],
+                        "source_type": row[4],
+                        "source_url": row[5],
+                        "subject": row[6],
+                        "importance": row[7],
+                        "status": row[8],
+                        "published_at": row[9].isoformat() if row[9] else None,
+                        "created_at": row[10].isoformat() if row[10] else None
+                    })
+                
+                return items
+    except Exception as e:
+        logger.error(f"Error listing items: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/items/{item_id}")
+async def get_item(item_id: int):
+    """Get a single item by ID."""
+    try:
+        item = db.get_item(item_id)
+        if not item:
+            raise HTTPException(status_code=404, detail="Item not found")
+        return item
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching item {item_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/items/{item_id}/classify")
+async def classify_item(item_id: int):
+    """Classify a single item."""
+    try:
+        item = db.get_item(item_id)
+        if not item:
+            raise HTTPException(status_code=404, detail="Item not found")
+        
+        # Classification logic would go here
+        # For now, just mark as classified
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE items
+                    SET classification_status = 'classified',
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                """, (item_id,))
+                conn.commit()
+        
+        return {"message": "Item classified successfully", "item_id": item_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error classifying item {item_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.delete("/items/{item_id}")
+async def delete_item(item_id: int):
+    """Delete an item."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM items WHERE id = %s", (item_id,))
+                if cur.rowcount == 0:
+                    raise HTTPException(status_code=404, detail="Item not found")
+                conn.commit()
+        
+        return {"message": "Item deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting item {item_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# Courses Endpoints
+# ============================================
+
+@api_router.get("/courses")
+async def list_courses(
+    status: str = Query(default="all"),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0)
+):
+    """List courses with optional filters."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                where_clause = "1=1" if status == "all" else "status = %s"
+                params = [] if status == "all" else [status]
+                
+                query = f"""
+                    SELECT 
+                        id, title, subject, level,
+                        estimated_duration_minutes, status, qa_score,
+                        created_at, published_at
+                    FROM courses
+                    WHERE {where_clause}
+                    ORDER BY created_at DESC
+                    LIMIT %s OFFSET %s
+                """
+                
+                params.extend([limit, offset])
+                cur.execute(query, params)
+                
+                courses = []
+                for row in cur.fetchall():
+                    courses.append({
+                        "id": row[0],
+                        "title": row[1],
+                        "topic": row[2],
+                        "level": row[3],
+                        "duration": row[4],
+                        "status": row[5],
+                        "qa_score": float(row[6]) if row[6] else None,
+                        "created_at": row[7].isoformat() if row[7] else None,
+                        "published_at": row[8].isoformat() if row[8] else None
+                    })
+                
+                return courses
+    except Exception as e:
+        logger.error(f"Error listing courses: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/courses/{course_id}")
+async def get_course(course_id: int):
+    """Get a single course by ID."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT 
+                        id, title, subject, level,
+                        estimated_duration_minutes, status, qa_score,
+                        created_at, published_at, content
+                    FROM courses
+                    WHERE id = %s
+                """, (course_id,))
+                
+                row = cur.fetchone()
+                if not row:
+                    raise HTTPException(status_code=404, detail="Course not found")
+                
+                return {
+                    "id": row[0],
+                    "title": row[1],
+                    "topic": row[2],
+                    "level": row[3],
+                    "duration": row[4],
+                    "status": row[5],
+                    "qa_score": float(row[6]) if row[6] else None,
+                    "created_at": row[7].isoformat() if row[7] else None,
+                    "published_at": row[8].isoformat() if row[8] else None,
+                    "content": row[9]
+                }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching course {course_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/courses/{course_id}/publish")
+async def publish_course(course_id: int):
+    """Publish a course."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE courses
+                    SET status = 'published',
+                        published_at = CURRENT_TIMESTAMP,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = %s AND status = 'draft'
+                """, (course_id,))
+                
+                if cur.rowcount == 0:
+                    raise HTTPException(status_code=404, detail="Course not found or already published")
+                conn.commit()
+        
+        return {"message": "Course published successfully", "course_id": course_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error publishing course {course_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# RAG Endpoints
+# ============================================
+
+@api_router.post("/rag/ask")
+async def rag_ask(request: Dict[str, Any]):
+    """Ask a question to the RAG system."""
+    try:
+        query = request.get("query")
+        if not query:
+            raise HTTPException(status_code=400, detail="Query is required")
+        
+        # RAG logic would go here
+        # For now, return a placeholder response
+        return {
+            "answer": "This is a placeholder response. RAG functionality is not yet implemented.",
+            "sources": [],
+            "confidence": 0.0
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in RAG ask: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/rag/history")
+async def rag_history(limit: int = Query(default=20, ge=1, le=100)):
+    """Get RAG query history."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT id, query, answer, created_at
+                    FROM rag_queries
+                    ORDER BY created_at DESC
+                    LIMIT %s
+                """, (limit,))
+                
+                history = []
+                for row in cur.fetchall():
+                    history.append({
+                        "id": row[0],
+                        "query": row[1],
+                        "answer": row[2],
+                        "created_at": row[3].isoformat() if row[3] else None
+                    })
+                
+                return history
+    except Exception as e:
+        logger.error(f"Error fetching RAG history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# HITL Endpoints
+# ============================================
+
+@api_router.get("/hitl/pending")
+async def get_pending_decisions():
+    """Get pending HITL decisions."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT 
+                        id, title, url, source_type, subject,
+                        importance, classification_status,
+                        created_at
+                    FROM items
+                    WHERE validation_status = 'pending'
+                        AND classification_status = 'classified'
+                    ORDER BY created_at DESC
+                    LIMIT 50
+                """)
+                
+                items = []
+                for row in cur.fetchall():
+                    items.append({
+                        "id": row[0],
+                        "title": row[1],
+                        "url": row[2],
+                        "source_type": row[3],
+                        "subject": row[4],
+                        "importance": row[5],
+                        "classification_status": row[6],
+                        "created_at": row[7].isoformat() if row[7] else None
+                    })
+                
+                return items
+    except Exception as e:
+        logger.error(f"Error fetching pending decisions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/hitl/decide")
+async def make_decision(request: Dict[str, Any]):
+    """Make a HITL decision."""
+    try:
+        item_id = request.get("item_id")
+        decision = request.get("decision")  # approve, reject, modify
+        
+        if not item_id or not decision:
+            raise HTTPException(status_code=400, detail="item_id and decision are required")
+        
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                # Record the decision
+                cur.execute("""
+                    INSERT INTO decisions (
+                        decision_type, item_id, decision, decided_by
+                    ) VALUES (%s, %s, %s, %s)
+                """, ("item_validation", item_id, decision, "admin"))
+                
+                # Update item validation status
+                validation_status = "approved" if decision == "approve" else "rejected"
+                cur.execute("""
+                    UPDATE items
+                    SET validation_status = %s,
+                        validated_at = CURRENT_TIMESTAMP,
+                        validated_by = %s
+                    WHERE id = %s
+                """, (validation_status, "admin", item_id))
+                
+                conn.commit()
+        
+        return {"message": "Decision recorded successfully", "item_id": item_id, "decision": decision}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error making decision: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/hitl/bot-status")
+async def get_bot_status():
+    """Get Telegram bot status."""
+    try:
+        # Placeholder for bot status
+        return {
+            "running": False,
+            "last_check": None,
+            "pending_count": 0
+        }
+    except Exception as e:
+        logger.error(f"Error fetching bot status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
