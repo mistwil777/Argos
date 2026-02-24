@@ -400,23 +400,66 @@ async def get_course(course_id: int):
 
 @api_router.post("/courses/{course_id}/publish")
 async def publish_course(course_id: int):
-    """Publish a course."""
+    """Publish a course and automatically index it in RAG."""
     try:
         with db.get_connection() as conn:
             with conn.cursor() as cur:
+                # First check if course exists and is in draft
+                cur.execute("""
+                    SELECT id, item_id, title, subject, content, duration
+                    FROM courses
+                    WHERE id = %s AND status = 'draft'
+                """, (course_id,))
+                
+                row = cur.fetchone()
+                if not row:
+                    raise HTTPException(status_code=404, detail="Course not found or already published")
+                
+                course = {
+                    "id": row[0],
+                    "item_id": row[1],
+                    "title": row[2],
+                    "subject": row[3],
+                    "content": row[4],
+                    "duration": row[5]
+                }
+                
+                # Publish course
                 cur.execute("""
                     UPDATE courses
                     SET status = 'published',
                         published_at = CURRENT_TIMESTAMP,
                         updated_at = CURRENT_TIMESTAMP
-                    WHERE id = %s AND status = 'draft'
+                    WHERE id = %s
                 """, (course_id,))
                 
-                if cur.rowcount == 0:
-                    raise HTTPException(status_code=404, detail="Course not found or already published")
                 conn.commit()
         
-        return {"message": "Course published successfully", "course_id": course_id}
+        # Index course in RAG system
+        try:
+            from mcp_server.services.vector_store import VectorStoreService
+            
+            vector_store = VectorStoreService(
+                db_path=str(settings.lancedb_path),
+                model_name=settings.embedding_model
+            )
+            
+            chunks_count = vector_store.index_course(course)
+            logger.info(f"Course {course_id} indexed with {chunks_count} chunks")
+            
+            return {
+                "message": "Course published and indexed successfully",
+                "course_id": course_id,
+                "chunks_indexed": chunks_count
+            }
+        except Exception as e:
+            logger.warning(f"Course published but indexing failed: {e}")
+            return {
+                "message": "Course published but indexing failed",
+                "course_id": course_id,
+                "indexing_error": str(e)
+            }
+        
     except HTTPException:
         raise
     except Exception as e:
@@ -485,12 +528,49 @@ async def rag_ask(request: Dict[str, Any]):
         if not query:
             raise HTTPException(status_code=400, detail="Query is required")
         
-        # RAG logic would go here
-        # For now, return a placeholder response
+        # Import RAG services
+        from mcp_server.services.rag import RAGService
+        from mcp_server.services.vector_store import VectorStoreService
+        from mcp_server.services.llm_provider import create_llm_provider
+        
+        # Initialize services
+        vector_store = VectorStoreService(
+            db_path=str(settings.lancedb_path),
+            model_name=settings.embedding_model
+        )
+        
+        llm_provider = create_llm_provider(
+            provider_type=settings.llm_provider,
+            aws_access_key_id=settings.aws_access_key_id if settings.llm_provider == "aws" else None,
+            aws_secret_access_key=settings.aws_secret_access_key if settings.llm_provider == "aws" else None,
+            aws_region=settings.aws_region if settings.llm_provider == "aws" else None,
+            anthropic_api_key=settings.anthropic_api_key if settings.llm_provider == "anthropic" else None,
+            openai_api_key=settings.openai_api_key if settings.llm_provider == "openai" else None,
+            model=settings.claude_model if settings.llm_provider == "anthropic" else settings.openai_model
+        )
+        
+        rag_service = RAGService(
+            llm_provider=llm_provider,
+            vector_store=vector_store,
+            db_manager=db,
+            top_k=5,
+            temperature=0.6
+        )
+        
+        # Ask question
+        result = await rag_service.ask(
+            query=query,
+            use_hybrid_search=True
+        )
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("error", "Unknown error"))
+        
         return {
-            "answer": "This is a placeholder response. RAG functionality is not yet implemented.",
-            "sources": [],
-            "confidence": 0.0
+            "answer": result.get("answer", ""),
+            "sources": result.get("sources", []),
+            "confidence": result.get("confidence", 0.0),
+            "tokens_used": result.get("tokens_used", 0)
         }
     except HTTPException:
         raise
@@ -524,6 +604,110 @@ async def rag_history(limit: int = Query(default=20, ge=1, le=100)):
                 return history
     except Exception as e:
         logger.error(f"Error fetching RAG history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/rag/index-all-courses")
+async def index_all_courses():
+    """Index all published courses in the RAG system."""
+    try:
+        from mcp_server.services.vector_store import VectorStoreService
+        
+        vector_store = VectorStoreService(
+            db_path=str(settings.lancedb_path),
+            model_name=settings.embedding_model
+        )
+        
+        # Fetch all published courses
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT id, item_id, title, subject, content, duration
+                    FROM courses
+                    WHERE status = 'published'
+                    ORDER BY created_at DESC
+                """)
+                
+                courses = []
+                for row in cur.fetchall():
+                    courses.append({
+                        "id": row[0],
+                        "item_id": row[1],
+                        "title": row[2],
+                        "subject": row[3],
+                        "content": row[4],
+                        "duration": row[5]
+                    })
+        
+        if not courses:
+            return {
+                "message": "No published courses to index",
+                "courses_indexed": 0,
+                "total_chunks": 0
+            }
+        
+        # Index each course
+        total_chunks = 0
+        indexed_count = 0
+        errors = []
+        
+        for course in courses:
+            try:
+                chunks_count = vector_store.index_course(course)
+                total_chunks += chunks_count
+                indexed_count += 1
+                logger.info(f"Indexed course {course['id']}: {chunks_count} chunks")
+            except Exception as e:
+                logger.error(f"Error indexing course {course['id']}: {e}")
+                errors.append({
+                    "course_id": course['id'],
+                    "error": str(e)
+                })
+        
+        return {
+            "message": f"Indexed {indexed_count} courses with {total_chunks} chunks",
+            "courses_indexed": indexed_count,
+            "total_chunks": total_chunks,
+            "errors": errors if errors else None
+        }
+        
+    except Exception as e:
+        logger.error(f"Error indexing courses: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/rag/stats")
+async def rag_stats():
+    """Get RAG system statistics."""
+    try:
+        from mcp_server.services.vector_store import VectorStoreService
+        
+        vector_store = VectorStoreService(
+            db_path=str(settings.lancedb_path),
+            model_name=settings.embedding_model
+        )
+        
+        stats = vector_store.get_stats()
+        
+        # Add course counts from database
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM courses WHERE status = 'published'")
+                published_courses = cur.fetchone()[0]
+                
+                cur.execute("SELECT COUNT(*) FROM rag_queries")
+                total_queries = cur.fetchone()[0]
+        
+        return {
+            "vector_store": stats,
+            "published_courses": published_courses,
+            "total_queries": total_queries,
+            "embedding_model": settings.embedding_model,
+            "lancedb_path": str(settings.lancedb_path)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching RAG stats: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
