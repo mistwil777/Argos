@@ -424,6 +424,55 @@ async def publish_course(course_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@api_router.post("/courses/generate")
+async def generate_course_from_item(request: Dict[str, Any]):
+    """
+    Generate a complete pedagogical course from a classified item.
+    
+    Request body:
+    {
+        "item_id": 123,
+        "duration_minutes": 180,  // optional, default 180
+        "language": "fr"  // optional, default "fr"
+    }
+    """
+    try:
+        item_id = request.get("item_id")
+        if not item_id:
+            raise HTTPException(status_code=400, detail="item_id is required")
+        
+        duration_minutes = request.get("duration_minutes", 180)
+        language = request.get("language", "fr")
+        
+        # Import here to avoid circular dependency
+        from mcp_server.tools.auto_course_generator import generate_course_from_item
+        
+        # Generate course
+        result = await generate_course_from_item(
+            item_id=item_id,
+            duration_minutes=duration_minutes,
+            language=language
+        )
+        
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+        
+        return {
+            "message": "Course generated successfully",
+            "course_id": result.get("course_id"),
+            "item_id": item_id,
+            "status": "draft",
+            "tokens_used": result.get("tokens_used", 0),
+            "cost": result.get("cost", 0.0),
+            "content_length": result.get("content_length", 0)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating course: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============================================
 # RAG Endpoints
 # ============================================
@@ -572,3 +621,200 @@ async def get_bot_status():
         logger.error(f"Error fetching bot status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ===========================================
+# Sources Endpoints
+# ===========================================
+
+@api_router.get("/sources")
+async def list_sources(
+    type: Optional[str] = Query(None, description="Filter by source type (rss, github, api)"),
+    category: Optional[str] = Query(None, description="Filter by category"),
+    active: Optional[bool] = Query(None, description="Filter by active status"),
+    limit: int = Query(100, ge=1, le=500)
+):
+    """List all data sources with optional filters."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                # Build query with filters
+                conditions = []
+                params = []
+                
+                if type:
+                    conditions.append("type = %s")
+                    params.append(type)
+                
+                if category:
+                    conditions.append("category = %s")
+                    params.append(category)
+                
+                if active is not None:
+                    conditions.append("active = %s")
+                    params.append(active)
+                
+                where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+                
+                cur.execute(f"""
+                    SELECT 
+                        id, name, url, type, category, description, 
+                        tags, active, created_at, updated_at
+                    FROM sources
+                    {where_clause}
+                    ORDER BY created_at DESC
+                    LIMIT %s
+                """, params + [limit])
+                
+                rows = cur.fetchall()
+                sources = []
+                for row in rows:
+                    sources.append({
+                        "id": row[0],
+                        "name": row[1],
+                        "url": row[2],
+                        "type": row[3],
+                        "category": row[4],
+                        "description": row[5],
+                        "tags": row[6] or [],
+                        "active": row[7],
+                        "createdAt": row[8].isoformat() if row[8] else None,
+                        "updatedAt": row[9].isoformat() if row[9] else None
+                    })
+                
+                return {"sources": sources, "total": len(sources)}
+    except Exception as e:
+        logger.error(f"Error listing sources: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/sources/{source_id}")
+async def get_source(source_id: int):
+    """Get details of a specific source."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT 
+                        id, name, url, type, category, description, 
+                        tags, active, created_at, updated_at
+                    FROM sources
+                    WHERE id = %s
+                """, (source_id,))
+                
+                row = cur.fetchone()
+                if not row:
+                    raise HTTPException(status_code=404, detail="Source not found")
+                
+                return {
+                    "id": row[0],
+                    "name": row[1],
+                    "url": row[2],
+                    "type": row[3],
+                    "category": row[4],
+                    "description": row[5],
+                    "tags": row[6] or [],
+                    "active": row[7],
+                    "createdAt": row[8].isoformat() if row[8] else None,
+                    "updatedAt": row[9].isoformat() if row[9] else None
+                }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching source: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/sources")
+async def create_source(source: Dict[str, Any]):
+    """Create a new data source."""
+    try:
+        # Validate required fields
+        required_fields = ["name", "url", "type", "category"]
+        for field in required_fields:
+            if field not in source:
+                raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
+        
+        # Validate type
+        if source["type"] not in ["rss", "github", "api"]:
+            raise HTTPException(status_code=400, detail="Invalid type. Must be rss, github, or api")
+        
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO sources (name, url, type, category, description, tags, active)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                """, (
+                    source["name"],
+                    source["url"],
+                    source["type"],
+                    source["category"],
+                    source.get("description", ""),
+                    source.get("tags", []),
+                    source.get("active", True)
+                ))
+                
+                source_id = cur.fetchone()[0]
+                conn.commit()
+                
+                return {"id": source_id, "message": "Source created successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating source: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.patch("/sources/{source_id}/toggle")
+async def toggle_source(source_id: int, data: Dict[str, Any]):
+    """Toggle source active status."""
+    try:
+        active = data.get("active")
+        if active is None:
+            raise HTTPException(status_code=400, detail="Missing 'active' field")
+        
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE sources
+                    SET active = %s, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                    RETURNING id
+                """, (active, source_id))
+                
+                if not cur.fetchone():
+                    raise HTTPException(status_code=404, detail="Source not found")
+                
+                conn.commit()
+                
+                return {"message": "Source updated successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error toggling source: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.delete("/sources/{source_id}")
+async def delete_source(source_id: int):
+    """Delete a data source."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    DELETE FROM sources
+                    WHERE id = %s
+                    RETURNING id
+                """, (source_id,))
+                
+                if not cur.fetchone():
+                    raise HTTPException(status_code=404, detail="Source not found")
+                
+                conn.commit()
+                
+                return {"message": "Source deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting source: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

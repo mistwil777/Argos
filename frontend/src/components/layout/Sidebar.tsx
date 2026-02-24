@@ -6,7 +6,9 @@ import {
   MessageSquare, 
   BarChart3, 
   Users, 
-  Settings 
+  Settings,
+  Link2,
+  HelpCircle
 } from 'lucide-react';
 
 const navigation = [
@@ -16,6 +18,8 @@ const navigation = [
   { name: 'RAG Assistant', href: '/rag', icon: MessageSquare },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'HITL', href: '/hitl', icon: Users },
+  { name: 'Sources', href: '/sources', icon: Link2 },
+  { name: 'Guide', href: '/guide', icon: HelpCircle },
   { name: 'Admin', href: '/admin', icon: Settings },
 ];
 

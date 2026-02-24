@@ -8,6 +8,8 @@ import RAG from './pages/RAG';
 import Analytics from './pages/Analytics';
 import HITL from './pages/HITL';
 import Admin from './pages/Admin';
+import Sources from './pages/Sources';
+import Guide from './pages/Guide';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -31,6 +33,8 @@ function App() {
             <Route path="/rag" element={<RAG />} />
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/hitl" element={<HITL />} />
+            <Route path="/sources" element={<Sources />} />
+            <Route path="/guide" element={<Guide />} />
             <Route path="/admin" element={<Admin />} />
           </Routes>
         </Layout>
