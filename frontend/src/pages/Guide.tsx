@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { BookOpen, Layers, Brain, Workflow, Database, Zap, CheckCircle, Info, AlertCircle, Code, PlayCircle } from 'lucide-react';
+import { useState } from 'react';
+import { BookOpen, Layers, Brain, Workflow, Database, Zap, CheckCircle, Info, AlertCircle, Code, PlayCircle, Rss } from 'lucide-react';
 
 export default function Guide() {
   const [activeSection, setActiveSection] = useState<string>('introduction');

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link2, Rss, Github, Code, Filter, Plus, Trash2, ExternalLink, Tag, CheckCircle, XCircle } from 'lucide-react';
 
@@ -52,7 +52,6 @@ export default function Sources() {
   const queryClient = useQueryClient();
   const [selectedType, setSelectedType] = useState<string>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [showAddModal, setShowAddModal] = useState(false);
 
   const { data: sources = [], isLoading } = useQuery({
     queryKey: ['sources'],
@@ -127,13 +126,13 @@ export default function Sources() {
             Gérez vos sources RSS, repositories GitHub et APIs pour la veille technologique
           </p>
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
+        {/* <button
+          onClick={() => {}}
           className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
         >
           <Plus className="h-5 w-5" />
           Ajouter une source
-        </button>
+        </button> */}
       </div>
 
       {/* Stats */}
