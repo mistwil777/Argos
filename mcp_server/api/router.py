@@ -259,25 +259,56 @@ async def get_item(item_id: int):
 
 @api_router.post("/items/{item_id}/classify")
 async def classify_item(item_id: int):
-    """Classify a single item."""
+    """Classify a single item using LLM."""
     try:
+        # Import the classifier service
+        from mcp_server.services.classifier import ClassifierService
+        from mcp_server.services.llm_provider import create_llm_provider
+        
+        # Get item first
         item = db.get_item(item_id)
         if not item:
             raise HTTPException(status_code=404, detail="Item not found")
         
-        # Classification logic would go here
-        # For now, just mark as classified
-        with db.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    UPDATE items
-                    SET classification_status = 'classified',
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE id = %s
-                """, (item_id,))
-                conn.commit()
+        # Initialize LLM provider
+        llm_provider = create_llm_provider(
+            provider_type=settings.llm_provider,
+            openai_api_key=settings.openai_api_key,
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            aws_region=settings.aws_region,
+            anthropic_api_key=settings.anthropic_api_key,
+            model=settings.default_classification_model
+        )
         
-        return {"message": "Item classified successfully", "item_id": item_id}
+        # Initialize classifier service
+        classifier = ClassifierService(
+            llm_provider=llm_provider,
+            db_manager=db,
+            temperature=0.3,
+            max_tokens=500
+        )
+        
+        # Run classification
+        result = await classifier.classify_item(item_id)
+        
+        logger.info(f"Item {item_id} classified successfully: topics={result.get('topics')}, importance={result.get('importance')}")
+        
+        return {
+            "message": "Item classified successfully",
+            "item_id": item_id,
+            "topics": result.get("topics", []),
+            "importance": result.get("importance"),
+            "item_type": result.get("item_type"),
+            "reasoning": result.get("reasoning"),
+            "tokens_used": result.get("tokens_used", 0),
+            "cost_usd": result.get("cost_usd", 0.0)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error classifying item {item_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Classification failed: {str(e)}")
     except HTTPException:
         raise
     except Exception as e:
