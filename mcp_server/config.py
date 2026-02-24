@@ -31,7 +31,8 @@ class Settings(BaseSettings):
     # Database
     # ============================================
     database_url: str = Field(
-        default="postgresql://academiaops_user:dev_password_change_me@localhost:5432/academiaops",
+        default="postgresql://academiaops:password@localhost:5432/academiaops",
+        validation_alias=AliasChoices('database_url', 'POSTGRES_URL'),
         description="PostgreSQL connection URL"
     )
     

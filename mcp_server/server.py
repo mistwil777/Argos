@@ -9,9 +9,11 @@ from datetime import datetime
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ValidationError
 
 from mcp_server.config import settings
+from mcp_server.api import api_router
 
 
 # ============================================
@@ -34,6 +36,22 @@ app = FastAPI(
     docs_url="/docs" if settings.environment == "development" else None,
     redoc_url="/redoc" if settings.environment == "development" else None,
 )
+
+# ============================================
+# CORS Middleware (for frontend development)
+# ============================================
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:5173"],  # Vite dev servers
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ============================================
+# REST API Router
+# ============================================
+app.include_router(api_router)
 
 
 # ============================================

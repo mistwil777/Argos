@@ -1,0 +1,151 @@
+import axios from 'axios';
+import type { Item, Course, RAGResult, Stats, Decision, TopicStat, TimelineData, CostData } from '../types';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Stats API
+export const statsApi = {
+  getGlobal: async (): Promise<Stats> => {
+    const { data } = await apiClient.get('/api/v1/stats/global');
+    return data;
+  },
+  
+  getTimeline: async (days: number = 7): Promise<TimelineData[]> => {
+    const { data } = await apiClient.get(`/api/v1/stats/timeline?days=${days}`);
+    return data;
+  },
+  
+  getTopics: async (limit: number = 10): Promise<TopicStat[]> => {
+    const { data } = await apiClient.get(`/api/v1/stats/topics?limit=${limit}`);
+    return data;
+  },
+  
+  getCosts: async (period: string = 'month'): Promise<CostData[]> => {
+    const { data } = await apiClient.get(`/api/v1/stats/costs?period=${period}`);
+    return data;
+  },
+};
+
+// Items API
+export const itemsApi = {
+  list: async (params?: { page?: number; limit?: number; status?: string; source?: string }): Promise<{ items: Item[]; total: number }> => {
+    const { data } = await apiClient.get('/api/v1/items', { params });
+    return data;
+  },
+  
+  get: async (id: number): Promise<Item> => {
+    const { data } = await apiClient.get(`/api/v1/items/${id}`);
+    return data;
+  },
+  
+  classify: async (id: number): Promise<Item> => {
+    const { data } = await apiClient.post(`/api/v1/items/${id}/classify`);
+    return data;
+  },
+  
+  classifyBatch: async (ids: number[]): Promise<any> => {
+    const { data } = await apiClient.post('/api/v1/items/batch/classify', { item_ids: ids });
+    return data;
+  },
+  
+  delete: async (id: number): Promise<void> => {
+    await apiClient.delete(`/api/v1/items/${id}`);
+  },
+};
+
+// Courses API
+export const coursesApi = {
+  list: async (params?: { page?: number; limit?: number; status?: string; topic?: string }): Promise<{ courses: Course[]; total: number }> => {
+    const { data } = await apiClient.get('/api/v1/courses', { params });
+    return data;
+  },
+  
+  get: async (id: number): Promise<Course> => {
+    const { data } = await apiClient.get(`/api/v1/courses/${id}`);
+    return data;
+  },
+  
+  getContent: async (id: number): Promise<any> => {
+    const { data } = await apiClient.get(`/api/v1/courses/${id}/content`);
+    return data;
+  },
+  
+  publish: async (id: number): Promise<Course> => {
+    const { data } = await apiClient.post(`/api/v1/courses/${id}/publish`);
+    return data;
+  },
+  
+  regenerate: async (id: number): Promise<Course> => {
+    const { data } = await apiClient.post(`/api/v1/courses/${id}/regenerate`);
+    return data;
+  },
+  
+  updateStatus: async (id: number, status: string): Promise<Course> => {
+    const { data } = await apiClient.patch(`/api/v1/courses/${id}/status`, { status });
+    return data;
+  },
+};
+
+// RAG API
+export const ragApi = {
+  ask: async (query: string, useHybridSearch: boolean = true): Promise<RAGResult> => {
+    const { data } = await apiClient.post('/api/v1/rag/ask', { 
+      query,
+      use_hybrid_search: useHybridSearch 
+    });
+    return data;
+  },
+  
+  search: async (query: string, limit: number = 5): Promise<any> => {
+    const { data } = await apiClient.post('/api/v1/rag/search', { query, limit });
+    return data;
+  },
+  
+  feedback: async (queryId: string, positive: boolean): Promise<void> => {
+    await apiClient.post('/api/v1/rag/feedback', { query_id: queryId, positive });
+  },
+  
+  history: async (limit: number = 50): Promise<any[]> => {
+    const { data } = await apiClient.get(`/api/v1/rag/history?limit=${limit}`);
+    return data;
+  },
+};
+
+// HITL API
+export const hitlApi = {
+  getPending: async (): Promise<{ items: Item[]; courses: Course[] }> => {
+    const { data } = await apiClient.get('/api/v1/hitl/pending');
+    return data;
+  },
+  
+  getDecisions: async (params?: { page?: number; limit?: number }): Promise<{ decisions: Decision[]; total: number }> => {
+    const { data } = await apiClient.get('/api/v1/hitl/decisions', { params });
+    return data;
+  },
+  
+  decide: async (type: string, id: number, decision: string): Promise<void> => {
+    await apiClient.post('/api/v1/hitl/decide', { type, id, decision });
+  },
+  
+  botStatus: async (): Promise<{ running: boolean; mode?: string }> => {
+    const { data } = await apiClient.get('/api/v1/hitl/bot/status');
+    return data;
+  },
+  
+  startBot: async (): Promise<void> => {
+    await apiClient.post('/api/v1/hitl/bot/start');
+  },
+  
+  stopBot: async (): Promise<void> => {
+    await apiClient.post('/api/v1/hitl/bot/stop');
+  },
+};
+
+export default apiClient;
