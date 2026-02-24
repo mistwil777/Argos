@@ -30,6 +30,11 @@ async def get_global_stats():
     try:
         stats = db.get_classification_stats()
         
+        # Calculate totals from stats
+        classified_items = stats.get("classified", 0)
+        pending_items = stats.get("pending", 0)
+        total_items = classified_items + pending_items
+        
         # Get total cost
         total_cost, _ = db.get_total_cost()
         
@@ -49,9 +54,9 @@ async def get_global_stats():
                 total_courses = cur.fetchone()[0]
         
         return {
-            "total_items": stats.get("total_items", 0),
-            "classified_items": stats.get("classified_items", 0),
-            "pending_items": stats.get("pending_items", 0),
+            "total_items": total_items,
+            "classified_items": classified_items,
+            "pending_items": pending_items,
             "total_courses": total_courses,
             "published_courses": published_courses,
             "draft_courses": draft_courses,
