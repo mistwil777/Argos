@@ -266,7 +266,7 @@ async def classify_item(item_id: int):
         from mcp_server.services.llm_provider import create_llm_provider
         
         # Get item first
-        item = db.get_item(item_id)
+        item = db.get_item_by_id(item_id)
         if not item:
             raise HTTPException(status_code=404, detail="Item not found")
         
@@ -277,7 +277,6 @@ async def classify_item(item_id: int):
             aws_access_key_id=settings.aws_access_key_id,
             aws_secret_access_key=settings.aws_secret_access_key,
             aws_region=settings.aws_region,
-            anthropic_api_key=settings.anthropic_api_key,
             model=settings.default_classification_model
         )
         
