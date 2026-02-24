@@ -12,15 +12,21 @@ import {
 } from 'lucide-react';
 
 const navigation = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Items', href: '/items', icon: FileText },
-  { name: 'Courses', href: '/courses', icon: BookOpen },
-  { name: 'RAG Assistant', href: '/rag', icon: MessageSquare },
-  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
-  { name: 'HITL', href: '/hitl', icon: Users },
-  { name: 'Sources', href: '/sources', icon: Link2 },
-  { name: 'Guide', href: '/guide', icon: HelpCircle },
-  { name: 'Admin', href: '/admin', icon: Settings },
+  { name: 'Dashboard', href: '/', icon: LayoutDashboard, section: 'main' },
+  { name: 'Items', href: '/items', icon: FileText, section: 'main', badge: 'Nouveau' },
+  { name: 'Courses', href: '/courses', icon: BookOpen, section: 'main' },
+  { name: 'RAG Assistant', href: '/rag', icon: MessageSquare, section: 'main' },
+  { name: 'Guide', href: '/guide', icon: HelpCircle, section: 'help' },
+  { name: 'Sources', href: '/sources', icon: Link2, section: 'config' },
+  { name: 'HITL', href: '/hitl', icon: Users, section: 'config' },
+  { name: 'Analytics', href: '/analytics', icon: BarChart3, section: 'config' },
+  { name: 'Admin', href: '/admin', icon: Settings, section: 'config' },
+];
+
+const sections = [
+  { id: 'main', label: 'Principal' },
+  { id: 'help', label: 'Aide' },
+  { id: 'config', label: 'Configuration' },
 ];
 
 export const Sidebar = () => {
@@ -35,25 +41,41 @@ export const Sidebar = () => {
       
       {/* Navigation */}
       <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">
-        {navigation.map((item) => {
-          const Icon = item.icon;
-          const isActive = location.pathname === item.href;
-          
-          return (
-            <Link
-              key={item.name}
-              to={item.href}
-              className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                isActive
-                  ? 'bg-gray-800 text-white'
-                  : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-              }`}
-            >
-              <Icon className="mr-3 h-5 w-5" />
-              {item.name}
-            </Link>
-          );
-        })}
+        {sections.map((section) => (
+          <div key={section.id} className="mb-6">
+            <h3 className="px-3 mb-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              {section.label}
+            </h3>
+            {navigation
+              .filter((item) => item.section === section.id)
+              .map((item) => {
+                const Icon = item.icon;
+                const isActive = location.pathname === item.href;
+                
+                return (
+                  <Link
+                    key={item.name}
+                    to={item.href}
+                    className={`flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                      isActive
+                        ? 'bg-gray-800 text-white'
+                        : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center">
+                      <Icon className="mr-3 h-5 w-5" />
+                      {item.name}
+                    </div>
+                    {item.badge && (
+                      <span className="px-2 py-0.5 text-xs font-semibold bg-blue-500 text-white rounded-full">
+                        {item.badge}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+          </div>
+        ))}
       </nav>
       
       {/* Footer */}

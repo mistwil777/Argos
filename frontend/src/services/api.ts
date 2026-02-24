@@ -91,6 +91,14 @@ export const coursesApi = {
     const { data } = await apiClient.patch(`/api/v1/courses/${id}/status`, { status });
     return data;
   },
+  
+  generate: async (itemId: number, durationMinutes: number = 180): Promise<{ course_id: number; status: string; tokens_used: number; cost: number; content_length: number }> => {
+    const { data } = await apiClient.post('/api/v1/courses/generate', { 
+      item_id: itemId,
+      duration_minutes: durationMinutes
+    });
+    return data;
+  },
 };
 
 // RAG API

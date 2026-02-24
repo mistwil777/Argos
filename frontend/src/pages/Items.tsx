@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { useItems, useClassifyItem, useDeleteItem } from '../hooks/useApi';
+import { useItems, useClassifyItem, useDeleteItem, useGenerateCourse } from '../hooks/useApi';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { CheckCircle, Clock, FileText, Trash2, ExternalLink } from 'lucide-react';
+import { CheckCircle, Clock, FileText, Trash2, ExternalLink, Sparkles, Brain, BookOpen } from 'lucide-react';
 
 export default function Items() {
   const [statusFilter, setStatusFilter] = useState('all');
@@ -11,10 +11,31 @@ export default function Items() {
   const { data: items, isLoading, error } = useItems({ status: statusFilter, source: sourceFilter });
   const classifyMutation = useClassifyItem();
   const deleteMutation = useDeleteItem();
+  const generateCourseMutation = useGenerateCourse();
 
   const handleClassify = async (itemId: number) => {
-    if (confirm('Classifier cet item ?')) {
-      await classifyMutation.mutateAsync(itemId);
+    if (confirm('Analyser cet item avec l\'IA pour extraire le sujet et l\'importance ?')) {
+      try {
+        await classifyMutation.mutateAsync(itemId);
+        alert('✅ Item classifié avec succès ! Vous pouvez maintenant générer un cours.');
+      } catch (error) {
+        alert('❌ Erreur lors de la classification');
+      }
+    }
+  };
+
+  const handleGenerateCourse = async (itemId: number) => {
+    if (confirm('Générer un cours pédagogique complet (5000+ mots, ~60 secondes) ?')) {
+      try {
+        const result = await generateCourseMutation.mutateAsync({ itemId });
+        alert(`✅ Cours généré avec succès !
+
+ID: ${result.course_id}
+Taille: ${result.content_length} caractères
+Coût: ${result.cost.toFixed(4)}€`);
+      } catch (error) {
+        alert('❌ Erreur lors de la génération du cours');
+      }
     }
   };
 
@@ -42,6 +63,30 @@ export default function Items() {
 
   return (
     <div className="space-y-6">
+      {/* Workflow Guide */}
+      <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-4">
+        <div className="flex items-center gap-3 mb-2">
+          <Sparkles className="h-5 w-5 text-purple-600" />
+          <h2 className="text-lg font-semibold text-gray-900">Workflow automatisé</h2>
+        </div>
+        <div className="flex items-center gap-2 text-sm text-gray-700">
+          <div className="flex items-center gap-1">
+            <Clock className="h-4 w-4 text-yellow-600" />
+            <span className="font-medium">1. Collecter</span>
+          </div>
+          <span>→</span>
+          <div className="flex items-center gap-1">
+            <Brain className="h-4 w-4 text-blue-600" />
+            <span className="font-medium">2. Classifier (IA)</span>
+          </div>
+          <span>→</span>
+          <div className="flex items-center gap-1">
+            <BookOpen className="h-4 w-4 text-green-600" />
+            <span className="font-medium">3. Générer le cours</span>
+          </div>
+        </div>
+      </div>
+
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-900">Items collectés</h1>
         <div className="flex gap-4">
@@ -136,25 +181,52 @@ export default function Items() {
                   </div>
                 </div>
                 
-                <div className="flex gap-2 ml-4">
-                  {item.status === 'pending' && (
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={() => handleClassify(item.id)}
-                      isLoading={classifyMutation.isPending}
-                    >
-                      Classifier
-                    </Button>
+                <div className="flex flex-col gap-2 ml-4">
+                  {item.status === 'pending' ? (
+                    <div className="flex gap-2">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => handleClassify(item.id)}
+                        isLoading={classifyMutation.isPending}
+                        title="Analyser avec l'IA pour extraire le sujet et l'importance"
+                      >
+                        <Brain className="h-4 w-4 mr-1" />
+                        Classifier
+                      </Button>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={() => handleDelete(item.id)}
+                        isLoading={deleteMutation.isPending}
+                        title="Supprimer cet item"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Button
+                        variant="success"
+                        size="sm"
+                        onClick={() => handleGenerateCourse(item.id)}
+                        isLoading={generateCourseMutation.isPending}
+                        title="Générer un cours pédagogique complet de 5000+ mots"
+                      >
+                        <BookOpen className="h-4 w-4 mr-1" />
+                        Générer le cours
+                      </Button>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={() => handleDelete(item.id)}
+                        isLoading={deleteMutation.isPending}
+                        title="Supprimer cet item"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   )}
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={() => handleDelete(item.id)}
-                    isLoading={deleteMutation.isPending}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
                 </div>
               </div>
             </Card>

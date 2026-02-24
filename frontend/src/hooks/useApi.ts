@@ -125,6 +125,19 @@ export const useUpdateCourseStatus = () => {
   });
 };
 
+export const useGenerateCourse = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ itemId, durationMinutes }: { itemId: number; durationMinutes?: number }) => 
+      coursesApi.generate(itemId, durationMinutes),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courses'] });
+      queryClient.invalidateQueries({ queryKey: ['items'] });
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
+    },
+  });
+};
+
 // RAG hooks
 export const useRAGAsk = () => {
   return useMutation({
