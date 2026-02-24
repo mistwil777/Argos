@@ -139,7 +139,7 @@ export default function Courses() {
           </div>
 
           {/* Course Detail */}
-          <div className="lg:sticky lg:top-6 h-fit">
+          <div className="lg:sticky lg:top-6 h-fit max-h-[calc(100vh-8rem)] overflow-hidden">
             {selectedCourseId && selectedCourse ? (
               <Card>
                 <div className="flex justify-between items-start mb-4">
@@ -168,10 +168,64 @@ export default function Courses() {
                   }`}>
                     {selectedCourse.status}
                   </span>
+                  {selectedCourse.duration && (
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800">
+                      <Clock className="h-4 w-4" />
+                      {selectedCourse.duration} min
+                    </span>
+                  )}
                 </div>
 
-                <div className="prose prose-sm max-w-none">
-                  <ReactMarkdown>{selectedCourse.content || 'Aucun contenu disponible'}</ReactMarkdown>
+                <div className="overflow-y-auto max-h-[calc(100vh-20rem)] pr-2 custom-scrollbar">
+                  <div className="prose prose-sm max-w-none 
+                    prose-headings:text-gray-900 
+                    prose-h1:text-3xl prose-h1:font-bold prose-h1:mb-6 prose-h1:mt-8 prose-h1:border-b-2 prose-h1:border-primary-500 prose-h1:pb-3
+                    prose-h2:text-2xl prose-h2:font-bold prose-h2:mt-8 prose-h2:mb-4 prose-h2:text-primary-700 prose-h2:border-l-4 prose-h2:border-primary-500 prose-h2:pl-4
+                    prose-h3:text-xl prose-h3:font-semibold prose-h3:mt-6 prose-h3:mb-3 prose-h3:text-primary-600
+                    prose-h4:text-lg prose-h4:font-semibold prose-h4:mt-4 prose-h4:mb-2 prose-h4:text-gray-800
+                    prose-p:text-gray-700 prose-p:leading-relaxed prose-p:mb-4
+                    prose-strong:text-primary-800 prose-strong:font-bold prose-strong:bg-yellow-50 prose-strong:px-1
+                    prose-em:text-purple-700 prose-em:italic
+                    prose-code:bg-gray-100 prose-code:text-pink-600 prose-code:px-2 prose-code:py-1 prose-code:rounded prose-code:text-sm prose-code:font-mono
+                    prose-pre:bg-gray-900 prose-pre:text-gray-100 prose-pre:p-4 prose-pre:rounded-lg prose-pre:overflow-x-auto prose-pre:shadow-lg
+                    prose-ul:list-none prose-ul:ml-0 prose-ul:space-y-2
+                    prose-li:text-gray-700 prose-li:mb-2 prose-li:pl-6 prose-li:relative 
+                    prose-li:before:content-['▸'] prose-li:before:absolute prose-li:before:left-0 prose-li:before:text-primary-500 prose-li:before:font-bold
+                    prose-ol:list-decimal prose-ol:ml-6 prose-ol:space-y-2
+                    prose-blockquote:border-l-4 prose-blockquote:border-primary-500 prose-blockquote:bg-primary-50 prose-blockquote:pl-4 prose-blockquote:py-2 prose-blockquote:italic prose-blockquote:text-gray-700 prose-blockquote:rounded-r
+                    prose-a:text-primary-600 prose-a:underline prose-a:font-medium hover:prose-a:text-primary-800
+                    prose-hr:border-gray-300 prose-hr:my-8
+                    prose-table:border-collapse prose-table:w-full
+                    prose-th:bg-primary-100 prose-th:p-3 prose-th:text-left prose-th:font-semibold prose-th:text-primary-900
+                    prose-td:border prose-td:border-gray-300 prose-td:p-3
+                  ">
+                    <style dangerouslySetInnerHTML={{__html: `
+                      .custom-scrollbar::-webkit-scrollbar {
+                        width: 8px;
+                      }
+                      .custom-scrollbar::-webkit-scrollbar-track {
+                        background: #f1f1f1;
+                        border-radius: 4px;
+                      }
+                      .custom-scrollbar::-webkit-scrollbar-thumb {
+                        background: #888;
+                        border-radius: 4px;
+                      }
+                      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+                        background: #555;
+                      }
+                      .prose pre code {
+                        background: transparent;
+                        color: inherit;
+                        padding: 0;
+                      }
+                      .prose code::before,
+                      .prose code::after {
+                        content: none;
+                      }
+                    `}} />
+                    <ReactMarkdown>{selectedCourse.content || 'Aucun contenu disponible'}</ReactMarkdown>
+                  </div>
                 </div>
               </Card>
             ) : (
