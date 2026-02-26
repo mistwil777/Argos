@@ -25,6 +25,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy application code
 COPY mcp_server/ ./mcp_server/
 
+# Create data directory for LanceDB and caches
+RUN mkdir -p /data/lancedb && \
+    chmod 777 /data/lancedb
+
 # Create non-root user for security
 RUN useradd -m -u 1000 appuser && \
     chown -R appuser:appuser /app

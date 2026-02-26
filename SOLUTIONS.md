@@ -39,98 +39,101 @@
 
 ---
 
-## ⚠️ PROBLÈME ACTIF: RAG Assistant Timeout
+## ⚠️ PROBLÈME ACTIF: RAG Assistant - Blocage Réseau CDN
 
 ### Symptôme
-- L'assistant RAG tourne indéfiniment (60s timeout)
-- Backend répond en 90+ secondes (trop lent)
+- L'assistant RAG timeout (ne répond jamais)
+- Backend ne peut pas télécharger le modèle SentenceTransformer
+
+### Diagnostic Réseau (2026-02-26 13:31 UTC)
+
+```bash
+# Test depuis conteneur:
+curl https://huggingface.co → ✅ 200 OK (0.15s)
+curl https://cdn-lfs-us-1.huggingface.co → ❌ DNS resolution failed
+```
+
+**Erreur HuggingFace**:
+```
+HTTPSConnectionPool(host='cdn-lfs-us-1.huggingface.co', port=443): 
+Max retries exceeded - Failed to resolve name
+```
 
 ### Cause Racine
-Le modèle `SentenceTransformer('all-MiniLM-L6-v2')` **ne se charge jamais complètement** dans Docker :
+Le **CDN HuggingFace** (`cdn-lfs-us-1.huggingface.co`) est **inaccessible** depuis le conteneur Docker :
+- Possible problème DNS temporaire
+- Firewall d'entreprise/réseau bloquant le CDN
+- CDN régional down
 
-```python
-# Logs montrent que ça bloque après:
-INFO - Load pretrained SentenceTransformer: sentence-transformers/all-MiniLM-L6-v2
-# Puis plus rien... jamais de "VectorStoreService initialized"
-```
+Sans accès au CDN, le modèle SentenceTransformer (90MB binaire) ne peut pas être téléchargé.
 
-**Pourquoi?**
-1. Le cache HuggingFace n'est pas persisté (`~/.cache/torch` vide à chaque redémarrage)
-2. Téléchargement du modèle (~100MB) prend > 90 secondes
-3. Problème de permissions ou de timeout réseau
+### Solutions Implémentées
 
-### Tentatives de Fix
+#### ✅ Option 1: Persister Cache Docker Volume
+**Implémenté** dans `docker-compose.yml` et `Dockerfile`:
 
-#### ❌ Option A: Désactiver RAG temporairement
-```python
-# router.py - désactivé temporairement
-use_rag = False  # Ne pas appeler VectorStore
-```
-
-#### 🔄 Option B: Singleton + Warmup (EN COURS)
-**État actuel**:
-- ✅ Singleton créé: `mcp_server/services/vector_store_singleton.py`
-- ✅ Warmup en background task (non-bloquant)
-- ❌ Chargement ne se termine jamais (même après 5+ minutes)
-
-**Code implémenté**:
-```python
-# server.py (DÉSACTIVÉ pour ne pas bloquer startup)
-# asyncio.create_task(warmup_vector_store())
-
-# vector_store_singleton.py
-def get_vector_store() -> VectorStoreService:
-    global _vector_store_instance
-    if _vector_store_instance is None:
-        _vector_store_instance = VectorStoreService(...)
-    return _vector_store_instance
-```
-
-### Solutions Possibles
-
-#### ✅ RECOMMANDÉ: Persister Cache Docker Volume
 ```yaml
 # docker-compose.yml
-services:
-  mcp-server:
-    volumes:
-      - sentence-transformers-cache:/home/appuser/.cache/torch/sentence_transformers
-
+environment:
+  - TRANSFORMERS_CACHE=/data/lancedb/transformers_cache
+  - SENTENCE_TRANSFORMERS_HOME=/data/lancedb/sentence_transformers
+  - HF_HOME=/data/lancedb/huggingface
 volumes:
-  sentence-transformers-cache:
+  - lancedb_data:/data/lancedb  # Réutilise volume existant
 ```
 
-**Avantages**:
-- Modèle téléchargé UNE SEULE FOIS
-- Redémarrages rapides après premier chargement
-- Warmup devient viable (30s au lieu de 90s+)
-
-#### Alternative 1: Dockerfile Pré-chargement
 ```dockerfile
-# Télécharger modèle pendant le build
-RUN python3 -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
+# Dockerfile
+RUN mkdir -p /data/lancedb && chmod 777 /data/lancedb
 ```
 
-**Inconvénient**: Image Docker plus lourde (+90MB)
+**Résultat**: ❌ **Échoue à cause du blocage réseau CDN** - permissions OK mais téléchargement impossible
 
-#### Alternative 2: Solution Frontend (html2pdf.js)
-```typescript
-// Générer PDF côté client sans WeasyPrint
-import html2pdf from 'html2pdf.js';
-html2pdf().from(htmlContent).save('course.pdf');
-```
-
-**Avantages**: 
-- Pas de dépendances backend
-- RAG reste désactivé (pas besoin)
-
-#### Alternative 3: Lazy Loading avec Timeout  Augmenté
+#### ⏸️ Warmup Désactivé Temporairement
 ```python
-# FastAPI configuration
-@app.post("/api/v1/rag/ask", timeout=120)  # 2 minutes
-async def rag_ask(request: dict):
-    vector_store = get_vector_store()  # Première fois = lent
-    ...
+# server.py - warmup commenté jusqu'à résolution réseau
+# asyncio.create_task(warmup_vector_store())
+```
+
+### Solutions Alternatives au Blocage Réseau
+
+#### 🔧 Option A: Télécharger Modèle Manuellement (RECOMMANDÉ)
+```bash
+# Sur machine locale (hors réseau Docker):
+pip install sentence-transformers
+python3 -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
+
+# Copier cache dans volume Docker:
+docker cp ~/.cache/torch/sentence_transformers/models--sentence-transformers--all-MiniLM-L6-v2 \
+  academiaops-mcp-server:/data/lancedb/sentence_transformers/
+```
+
+#### 🌐 Option B: Utiliser Miroir HuggingFace Alternatif
+```python
+# mcp_server/config.py
+os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'  # Miroir Chine
+# ou
+os.environ['HF_ENDPOINT'] = 'https://huggingface.co'  # Forcer endpoint alternatif
+```
+
+#### 🐛 Option C: Debug Réseau Docker
+```bash
+# Vérifier DNS dans conteneur:
+docker exec academiaops-mcp-server nslookup cdn-lfs-us-1.huggingface.co
+
+# Tester avec DNS public (Google 8.8.8.8):
+docker-compose.yml:
+  dns:
+    - 8.8.8.8
+    - 1.1.1.1
+```
+
+#### ❌ Option D: Désactiver RAG Complètement
+Génération de cours fonctionne sans enrichissement vectoriel (déjà prouvé fonctionnel).
+
+```python
+# router.py
+use_rag = False  # Désactiver RAG features
 ```
 
 ---

@@ -345,8 +345,9 @@ async def startup_event():
     logger.info(f"Log level: {settings.log_level}")
     
     # ============================================
-    # Warm up VectorStoreService (DISABLED - model download takes too long)
-    # First RAG request will be slow (~30-60s) but subsequent ones will be fast
+    # Warm up VectorStoreService (DISABLED - CDN HuggingFace inaccessible)
+    # Network issue: cdn-lfs-us-1.huggingface.co unreachable from container
+    # Model download fails, blocking warmup. Re-enable when network issue resolved.
     # ============================================
     # import asyncio
     # from mcp_server.services.vector_store_singleton import warmup_vector_store
