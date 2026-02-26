@@ -50,8 +50,8 @@ services:
       - DB_POSTGRESDB_HOST=postgres
       - DB_POSTGRESDB_PORT=5432
       - DB_POSTGRESDB_DATABASE=academiaops
-      - DB_POSTGRESDB_USER=academiaops_user
-      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD:-dev_password_change_me}
+      - DB_POSTGRESDB_USER=academiaops
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
       - n8n_data:/home/node/.n8n
       - ./n8n/workflows:/home/node/.n8n/workflows:rw
@@ -79,7 +79,7 @@ services:
     restart: unless-stopped
     environment:
       - ENVIRONMENT=development
-      - DATABASE_URL=postgresql://academiaops_user:${POSTGRES_PASSWORD:-dev_password_change_me}@postgres:5432/academiaops
+      - DATABASE_URL=postgresql://academiaops:${POSTGRES_PASSWORD}@postgres:5432/academiaops
       - LANCEDB_PATH=/data/lancedb
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}

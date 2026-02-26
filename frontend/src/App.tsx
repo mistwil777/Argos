@@ -10,6 +10,9 @@ import HITL from './pages/HITL';
 import Admin from './pages/Admin';
 import Sources from './pages/Sources';
 import Guide from './pages/Guide';
+import TestPage from './pages/TestPage';
+import { useToast } from './hooks/useToast';
+import { ToastContainer } from './components/ui/Toast';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -22,22 +25,27 @@ const queryClient = new QueryClient({
 });
 
 function App() {
+  const { toasts, addToast, removeToast } = useToast();
+
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Layout>
           <Routes>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/items" element={<Items />} />
-            <Route path="/courses" element={<Courses />} />
-            <Route path="/rag" element={<RAG />} />
+            <Route path="/test" element={<TestPage />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/items" element={<Items addToast={addToast} removeToast={removeToast} />} />
+            <Route path="/courses" element={<Courses addToast={addToast} removeToast={removeToast} />} />
+            <Route path="/rag" element={<RAG addToast={addToast} />} />
             <Route path="/analytics" element={<Analytics />} />
-            <Route path="/hitl" element={<HITL />} />
-            <Route path="/sources" element={<Sources />} />
+            <Route path="/hitl" element={<HITL addToast={addToast} />} />
+            <Route path="/sources" element={<Sources addToast={addToast} />} />
             <Route path="/guide" element={<Guide />} />
             <Route path="/admin" element={<Admin />} />
           </Routes>
         </Layout>
+        <ToastContainer toasts={toasts} onClose={removeToast} />
       </BrowserRouter>
     </QueryClientProvider>
   );

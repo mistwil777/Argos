@@ -92,12 +92,50 @@ export const coursesApi = {
     return data;
   },
   
-  generate: async (itemId: number, durationMinutes: number = 180): Promise<{ course_id: number; status: string; tokens_used: number; cost: number; content_length: number }> => {
+  generate: async (itemId: number, durationMinutes: number = 180): Promise<{ 
+    course_id: number; 
+    status: string; 
+    tokens_used: number; 
+    cost: number; 
+    content_length: number;
+    rag_enabled?: boolean;
+    rag_sources_count?: number;
+    updated?: boolean;
+  }> => {
     const { data } = await apiClient.post('/api/v1/courses/generate', { 
       item_id: itemId,
       duration_minutes: durationMinutes
     });
     return data;
+  },
+  
+  modify: async (id: number, instruction: string): Promise<{ message: string; tokens_used: number; cost: number }> => {
+    const { data } = await apiClient.post(`/api/v1/courses/${id}/modify`, { instruction });
+    return data;
+  },
+  
+  delete: async (id: number): Promise<{ message: string }> => {
+    const { data } = await apiClient.delete(`/api/v1/courses/${id}`);
+    return data;
+  },
+  
+  validate: async (id: number): Promise<{ message: string; status: string }> => {
+    const { data } = await apiClient.patch(`/api/v1/courses/${id}/validate`);
+    return data;
+  },
+  
+  exportMarkdown: async (id: number): Promise<Blob> => {
+    const response = await apiClient.get(`/api/v1/courses/${id}/export/markdown`, {
+      responseType: 'blob'
+    });
+    return response.data;
+  },
+  
+  exportPDF: async (id: number): Promise<Blob> => {
+    const response = await apiClient.get(`/api/v1/courses/${id}/export/pdf`, {
+      responseType: 'blob'
+    });
+    return response.data;
   },
 };
 
@@ -124,6 +162,11 @@ export const ragApi = {
     const { data } = await apiClient.get(`/api/v1/rag/history?limit=${limit}`);
     return data;
   },
+
+  clearHistory: async (): Promise<{ message: string; deleted: number }> => {
+    const { data } = await apiClient.delete('/api/v1/rag/history');
+    return data;
+  },
 };
 
 // HITL API
@@ -138,8 +181,8 @@ export const hitlApi = {
     return data;
   },
   
-  decide: async (type: string, id: number, decision: string): Promise<void> => {
-    await apiClient.post('/api/v1/hitl/decide', { type, id, decision });
+  decide: async (_type: string, id: number, decision: string): Promise<void> => {
+    await apiClient.post('/api/v1/hitl/decide', { item_id: id, decision });
   },
   
   botStatus: async (): Promise<{ running: boolean; mode?: string }> => {

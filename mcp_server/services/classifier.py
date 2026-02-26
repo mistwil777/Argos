@@ -35,10 +35,10 @@ Extract structured information in JSON format with these fields:
    Examples: ["LLM", "RAG", "Embeddings", "Agents", "FineTuning", "Multimodal", "Computer Vision", "NLP", "Transformers"]
 
 2. **importance** (enum): Strategic importance for staying up-to-date.
-   - "critical": Revolutionary impact, paradigm shift
-   - "high": Major advancement, significant implications
-   - "medium": Incremental improvement, useful to know
-   - "low": Minor update or niche topic
+   - "critical": Revolutionary impact, paradigm shift (e.g., GPT-4 release, major breakthrough)
+   - "high": Major advancement, significant implications (e.g., new SOTA model, important technique)
+   - "medium": Incremental improvement, useful to know (e.g., library update, best practice)
+   - "low": Minor update or niche topic (e.g., bug fix, specific use case)
 
 3. **item_type** (enum): Nature of the content.
    - "innovation": New technology, breakthrough, major release
@@ -48,6 +48,21 @@ Extract structured information in JSON format with these fields:
    - "opinion": Analysis, commentary, best practices
 
 4. **reasoning** (string): Brief explanation (1-2 sentences) justifying your classification.
+
+**Examples:**
+{{
+    "topics": ["LLM", "Agents", "RAG"],
+    "importance": "high",
+    "item_type": "innovation",
+    "reasoning": "New agent framework with built-in RAG capabilities, significant for production AI systems."
+}}
+
+{{
+    "topics": ["Python", "Tutorial"],
+    "importance": "medium",
+    "item_type": "tutorial",
+    "reasoning": "Practical guide for implementing a common pattern, useful reference for developers."
+}}
 
 **Output format (JSON only, no markdown code blocks):**
 {{
@@ -402,19 +417,14 @@ class ClassifierService:
         # self.db.log_decision(...)
         
         logger.info(
-            f\"Classification saved for item {item_id}\",
+            f"Classification saved for item {item_id}",
             extra={
-                \"item_id\": item_id,
-                \"importance\": importance_db,
-                \"item_type\": classification[\"item_type\"],
-                \"topics\": classification[\"topics\"],
-                \"cost_usd\": cost_usd
+                "item_id": item_id,
+                "importance": importance_db,
+                "item_type": classification["item_type"],
+                "topics": classification["topics"],
+                "cost_usd": cost_usd
             }
-        )
-            reason=classification["reasoning"],
-            model_used=model_name,
-            tokens_used=tokens_used,
-            cost_usd=cost_usd
         )
         
         logger.debug(f"Classification saved to database for item {item_id}")

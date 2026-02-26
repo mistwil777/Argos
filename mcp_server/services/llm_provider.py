@@ -4,6 +4,7 @@ LLM Provider abstraction for multiple backends (OpenAI, AWS Bedrock, etc.)
 
 import logging
 import json
+import asyncio
 from abc import ABC, abstractmethod
 from typing import Dict, Tuple
 
@@ -175,8 +176,9 @@ class AWSBedrockProvider(LLMProvider):
             else:
                 raise ValueError(f"Unsupported Bedrock model: {self.model_id}")
             
-            # Call Bedrock
-            response = self.client.invoke_model(
+            # Call Bedrock (wrap synchronous boto3 call in thread to avoid blocking event loop)
+            response = await asyncio.to_thread(
+                self.client.invoke_model,
                 modelId=self.model_id,
                 body=json.dumps(request_body)
             )

@@ -61,23 +61,40 @@ class CollectorService:
                 "settings": {}
             }
     
-    def _is_duplicate(self, url: str) -> bool:
+    def _is_duplicate(self, url: str, title: str) -> bool:
         """
-        Check if URL already exists in database.
+        Check if URL or similar title already exists in database.
+        Uses URL exact match and title similarity (GIGO principle).
         
         Args:
             url: URL to check
+            title: Title to check for similarity
             
         Returns:
             True if duplicate, False otherwise
         """
-        query = "SELECT COUNT(*) FROM items WHERE url = %s"
+        # Check exact URL match
+        url_query = "SELECT COUNT(*) FROM items WHERE url = %s"
         
         with self.db.get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(query, (url,))
-                count = cur.fetchone()[0]
-                return count > 0
+                cur.execute(url_query, (url,))
+                if cur.fetchone()[0] > 0:
+                    return True
+                
+                # Check for highly similar titles using PostgreSQL trigram similarity
+                # similarity > 0.6 means titles are very similar (likely duplicates)
+                # This catches cases where same content is published with different URLs
+                similar_query = """
+                    SELECT COUNT(*) FROM items 
+                    WHERE similarity(title, %s) > 0.6
+                """
+                cur.execute(similar_query, (title,))
+                if cur.fetchone()[0] > 0:
+                    logger.info(f"Found similar title to: {title[:50]}...")
+                    return True
+        
+        return False
     
     def _clean_html(self, html_content: str) -> str:
         """
@@ -95,7 +112,7 @@ class CollectorService:
         text = re.sub(r'\s+', ' ', text).strip()
         return text
     
-    def _extract_summary(self, content: str, max_length: int = 500) -> str:
+    def _extract_summary(self, content: str, max_length: int = 1500) -> str:
         """
         Extract summary from content.
         
@@ -384,8 +401,8 @@ class CollectorService:
         
         for item in items:
             try:
-                # Check for duplicates
-                if self._is_duplicate(item["url"]):
+                # Check for duplicates (URL + title similarity)
+                if self._is_duplicate(item["url"], item["title"]):
                     logger.debug(f"Duplicate found: {item['title']}")
                     duplicates += 1
                     continue

@@ -84,6 +84,7 @@ export const useCourses = (params?: any) => {
   return useQuery({
     queryKey: ['courses', params],
     queryFn: () => coursesApi.list(params),
+    staleTime: 10000, // Consider data fresh for 10s
   });
 };
 
@@ -131,6 +132,7 @@ export const useGenerateCourse = () => {
     mutationFn: ({ itemId, durationMinutes }: { itemId: number; durationMinutes?: number }) => 
       coursesApi.generate(itemId, durationMinutes),
     onSuccess: () => {
+      // Only invalidate, let React Query handle refetching naturally
       queryClient.invalidateQueries({ queryKey: ['courses'] });
       queryClient.invalidateQueries({ queryKey: ['items'] });
       queryClient.invalidateQueries({ queryKey: ['stats'] });
@@ -138,11 +140,72 @@ export const useGenerateCourse = () => {
   });
 };
 
+export const useModifyCourse = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, instruction }: { id: number; instruction: string }) => 
+      coursesApi.modify(id, instruction),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['courses', variables.id] });
+      queryClient.invalidateQueries({ queryKey: ['courses'] });
+    },
+  });
+};
+
+export const useDeleteCourse = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => coursesApi.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courses'] });
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
+    },
+  });
+};
+
+export const useValidateCourse = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => coursesApi.validate(id),
+    onSuccess: (_, id) => {
+      queryClient.invalidateQueries({ queryKey: ['courses', id] });
+      queryClient.invalidateQueries({ queryKey: ['courses'] });
+    },
+  });
+};
+
+export const useExportCourse = () => {
+  return useMutation({
+    mutationFn: async ({ id, format }: { id: number; format: 'markdown' | 'pdf' }) => {
+      const blob = format === 'markdown' 
+        ? await coursesApi.exportMarkdown(id)
+        : await coursesApi.exportPDF(id);
+      
+      // Download file
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `course_${id}.${format === 'markdown' ? 'md' : 'html'}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    },
+  });
+};
+
+
 // RAG hooks
 export const useRAGAsk = () => {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ query, useHybridSearch }: { query: string; useHybridSearch?: boolean }) => 
       ragApi.ask(query, useHybridSearch),
+    onSuccess: () => {
+      // Invalidate and refetch history immediately
+      queryClient.invalidateQueries({ queryKey: ['rag', 'history'] });
+      queryClient.refetchQueries({ queryKey: ['rag', 'history'] });
+    },
   });
 };
 
@@ -150,6 +213,18 @@ export const useRAGHistory = (limit: number = 50) => {
   return useQuery({
     queryKey: ['rag', 'history', limit],
     queryFn: () => ragApi.history(limit),
+  });
+};
+
+export const useClearRAGHistory = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => ragApi.clearHistory(),
+    onSuccess: () => {
+      // Invalidate and refetch history to show empty state
+      queryClient.invalidateQueries({ queryKey: ['rag', 'history'] });
+      queryClient.refetchQueries({ queryKey: ['rag', 'history'] });
+    },
   });
 };
 

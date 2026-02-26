@@ -1,17 +1,66 @@
 """
-MCP Tools for HITL (Human-in-the-Loop) with Telegram
+MCP Tools for HITL (Human-in-the-Loop) with Teams/Telegram
 
 Provides tools for sending notifications and managing human decisions.
+Supports both Microsoft Teams (corporate) and Telegram (personal).
 """
 
 import logging
 from typing import Dict, Optional
 
-from mcp_server.services.telegram_bot import get_telegram_bot
+# Try importing Telegram bot (may be blocked by Zscaler)
+try:
+    from mcp_server.services.telegram_bot import get_telegram_bot
+    TELEGRAM_AVAILABLE = True
+except ImportError:
+    logger = logging.getLogger(__name__)
+    logger.warning("Telegram module not available. Telegram notifications disabled.")
+    TELEGRAM_AVAILABLE = False
+    get_telegram_bot = None
+
+# Try importing Teams bot (corporate-friendly)
+try:
+    from mcp_server.services.teams_bot import get_teams_bot
+    TEAMS_AVAILABLE = True
+except ImportError:
+    logger = logging.getLogger(__name__)
+    logger.warning("Teams module not available. Teams notifications disabled.")
+    TEAMS_AVAILABLE = False
+    get_teams_bot = None
+
 from mcp_server.database import DatabaseManager
 from mcp_server.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================
+# Notification Helper
+# ============================================
+
+def _get_notification_service():
+    """
+    Get available notification service (Teams priority, Telegram fallback).
+    
+    Returns:
+        Tuple of (service, service_name) or (None, None)
+    """
+    # Priority 1: Microsoft Teams (corporate environment)
+    if TEAMS_AVAILABLE and hasattr(settings, 'teams_webhook_url') and settings.teams_webhook_url:
+        teams_bot = get_teams_bot(settings.teams_webhook_url)
+        if teams_bot:
+            logger.debug("Using Microsoft Teams for notifications")
+            return teams_bot, "teams"
+    
+    # Priority 2: Telegram (personal use, may be blocked by corporate proxy)
+    if TELEGRAM_AVAILABLE:
+        telegram_bot = get_telegram_bot()
+        if telegram_bot:
+            logger.debug("Using Telegram for notifications")
+            return telegram_bot, "telegram"
+    
+    logger.warning("No notification service available")
+    return None, None
 
 
 # ============================================
@@ -35,7 +84,9 @@ def _get_db_manager() -> DatabaseManager:
 
 async def notify_new_item(item_id: int) -> Dict:
     """
-    Send Telegram notification for newly collected item.
+    Send notification for newly collected item.
+    
+    Uses Teams if available (corporate), otherwise Telegram (personal).
     
     Args:
         item_id: Item identifier
@@ -43,12 +94,12 @@ async def notify_new_item(item_id: int) -> Dict:
     Returns:
         Dict with success status
     """
-    telegram_bot = get_telegram_bot()
+    service, service_name = _get_notification_service()
     
-    if telegram_bot is None:
+    if service is None:
         return {
             "success": False,
-            "error": "Telegram bot not configured"
+            "error": "No notification service configured (Teams or Telegram)"
         }
     
     try:
@@ -62,13 +113,28 @@ async def notify_new_item(item_id: int) -> Dict:
                 "error": f"Item {item_id} not found"
             }
         
-        # Send notification
-        sent = await telegram_bot.notify_new_item(item)
+        # Send notification based on service type
+        if service_name == "teams":
+            sent = await service.send_notification(
+                title="📰 Nouvel Item Collecté",
+                message=f"**{item.get('title', 'Sans titre')}**\n\nSource: {item.get('source', 'Inconnue')}",
+                color="0078D4",  # Blue
+                facts=[
+                    {"title": "ID", "value": str(item_id)},
+                    {"title": "Type", "value": item.get('type', 'article')}
+                ],
+                actions=[
+                    {"title": "📋 Voir l'item", "url": f"http://localhost:3000/items/{item_id}"}
+                ]
+            )
+        else:  # telegram
+            sent = await service.notify_new_item(item)
         
         return {
             "success": sent,
             "item_id": item_id,
-            "message": "Notification sent" if sent else "Failed to send notification"
+            "service": service_name,
+            "message": f"Notification sent via {service_name}" if sent else f"Failed to send {service_name} notification"
         }
     
     except Exception as e:

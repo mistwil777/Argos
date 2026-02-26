@@ -113,22 +113,38 @@ cp .env.example .env
 nano .env  # Remplir les secrets (API keys, passwords)
 
 # 3. Lancer tous les services
-docker-compose up -d
+docker-compose up -d postgres n8n mcp-server
 
 # 4. Vérifier que tout fonctionne
 docker-compose ps
 curl http://localhost:8000/health  # MCP Server
-curl http://localhost:5678         # n8n
-curl http://localhost:3000         # Dashboard (si hébergé localement)
+open http://localhost:5678         # n8n
+open http://localhost:3000         # Frontend React
 
-# 5. Initialiser la base de données (automatique au premier lancement)
-# Les tables, indexes et données de seed sont créés automatiquement
+# 5. Démarrer le frontend (React + Vite)
+cd frontend
+npm install
+npm run dev  # Démarre sur http://localhost:3000
 
 # 6. Importer les workflows n8n
 # - Ouvrir http://localhost:5678
 # - Login avec N8N_USER / N8N_PASSWORD (définis dans .env)
-# - Importer les fichiers JSON depuis /n8n_workflows/
+# - Configurer les credentials Telegram (voir N8N_SETUP.md)
+# - Importer workflows/n8n-hitl-auto-classification.json
+# - Importer workflows/n8n-hitl-auto-course-generation.json
+# - Activer les 2 workflows
 ```
+
+### URLs d'accès
+
+Une fois tous les services démarrés :
+
+| Service | URL | Credentials |
+|---------|-----|-------------|
+| **Frontend** | http://localhost:3000 | Aucun (accès direct) |
+| **MCP Server API** | http://localhost:8000/docs | Swagger UI interactif |
+| **n8n Orchestration** | http://localhost:5678 | Voir `.env` → N8N_USER / N8N_PASSWORD |
+| **PostgreSQL** | localhost:5432 | Voir `.env` → POSTGRES_* |
 
 ### Premier test
 
@@ -228,29 +244,45 @@ Le projet est conçu pour être implémenté **progressivement**, étape par ét
 - **Objectif** : 100 items réels classifiés automatiquement
 - **Status**: ✅ Completed Feb 23, 2026 - 5 items classifiés ($0.003)
 
-### ⏳ Phase 3 : Génération de cours (Semaine 5-6) - EN COURS
-- Agents CourseGenerator, QA Reviewer
-- Tool MCP `course.generate`
-- Indexation vectorielle (LanceDB)
+### ✅ Phase 3 : Génération de cours (Semaine 5-6) ✅ COMPLETE
+- Agents CourseGenerator, QA Reviewer ✅
+- Tool MCP `course.generate` ✅
+- Indexation vectorielle (LanceDB) ✅
+- Export PDF/Markdown avec Weasyprint ✅
+- Modification de cours avec instructions ✅
 - **Objectif** : 1 cours complet (3 niveaux) généré
-- **Status**: 🔄 Next feature - Starting soon
+- **Status**: ✅ Completed Feb 26, 2026
 
-### ⬜ Phase 4 : Dashboard (Semaine 7-8)
-- Interface Next.js déployée
-- Page de validation des items
-- Page de consultation des cours
-- Chatbot RAG basique
+### ✅ Phase 4 : Frontend & UX (Semaine 7-8) ✅ COMPLETE
+- Interface React avec Vite ✅
+- Pages : Dashboard, Items, Courses, HITL, RAG, Sources ✅
+- Toast notifications non-bloquantes ✅
+- Sélection multiple + bulk actions ✅
+- Export PDF fonctionnel ✅
 - **Objectif** : Dashboard fonctionnel et responsive
+- **Status**: ✅ Completed Feb 26, 2026 - **TOUS les popups supprimés** 🎉
 
-### ⬜ Phase 5 : Optimisations (Semaine 9-10)
+### ✅ Phase 5 : Orchestration n8n (Semaine 9) ✅ COMPLETE
+- n8n installé et configuré ✅
+- Credentials Telegram configurées ✅
+- Workflows importés :
+  - Auto-Classification HITL (toutes les 30 min) ✅
+  - Auto-Course Generation (lundis 9h) ✅
+- **Objectif** : Automatisation complète
+- **Status**: ✅ Completed Feb 26, 2026 - n8n opérationnel
+
+### ⬜ Phase 6 : Optimisations (Semaine 10)
 - Batching des appels LLM ✅ (déjà implémenté)
 - Caching des embeddings
 - Monitoring et alertes
 - **Objectif** : Coûts LLM < 5€/mois
 
-**Statut actuel** : 🟢 Phase 1 & 2 complètes ✅ | Phase 3 prête à démarrer 🚀  
-**Documentation**: Feature 2 documentée dans [`docs/feature-2-classifier-COMPLETE.md`](docs/feature-2-classifier-COMPLETE.md)  
-**Roadmap détaillée**: Voir [`docs/ROADMAP.md`](docs/ROADMAP.md)
+**Statut actuel** : 🟢 **Phase 1-5 complètes** ✅ | **Système 100% fonctionnel** 🚀  
+**Interface** : http://localhost:3000  
+**Documentation complète** : 
+- [`N8N_SETUP.md`](N8N_SETUP.md) - Configuration n8n
+- [`TELEGRAM_SETUP.md`](TELEGRAM_SETUP.md) - Bot Telegram
+- [`docs/feature-5-hitl-telegram.md`](docs/feature-5-hitl-telegram.md) - HITL complet
 
 ---
 
@@ -261,15 +293,18 @@ Le projet est conçu pour fonctionner avec un **budget LLM minimal** (< 20€/mo
 | Optimisation | Description | Gain estimé |
 |--------------|-------------|-------------|
 | **Batching** | Classifier 20 items en 1 appel vs 20 appels | 8x |
+| **AWS Bedrock Nova Pro** | Modèle ultra-économique ($0.0008/1k tokens) | 10x vs GPT-4 |
 | **Caching** | Cache les embeddings déjà calculés | 3x |
-| **Choix du modèle** | GPT-3.5 pour classification, Claude 4.5 pour cours | 5x |
+| **Choix du modèle** | Nova Pro pour classification, Claude pour cours | 5x |
 | **TTL data** | Purge automatique des anciennes données | ∞ |
 
-**Estimation mensuelle (MVP)** :
-- Classification : 20 items/jour × 30 jours = ~0.15€
-- Génération cours : 3 cours/semaine × 4 = ~1.80€
-- RAG : 50 requêtes/semaine × 4 = ~0.20€
-- **Total ≈ 2.5€/mois** (large marge)
+**Coûts réels mesurés** :
+- Classification : 5 items → **$0.003**
+- Génération cours : 1 cours (5000 mots) → **~$0.10** (avec Claude)
+- RAG : 50 requêtes/semaine × 4 → **~$0.20€**
+- **Total mensuel estimé ≈ 3-5€** (large marge)
+
+**Monitoring** : Tous les coûts sont trackés en temps réel dans la base de données (`cost_tracking` table).
 
 ---
 

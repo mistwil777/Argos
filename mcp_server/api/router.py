@@ -10,6 +10,7 @@ import logging
 
 from mcp_server.database import DatabaseManager
 from mcp_server.config import settings
+from mcp_server.services.llm_provider import create_llm_provider
 
 logger = logging.getLogger(__name__)
 
@@ -195,6 +196,11 @@ async def list_items(
                     where_conditions.append("classification_status = %s")
                     params.append(status)
                 
+                # ALWAYS filter out items that already have a course
+                # This prevents confusion and ensures clean knowledge base (GIGO principle)
+                # Items with courses should only appear in the Courses page
+                where_conditions.append("NOT EXISTS (SELECT 1 FROM courses WHERE courses.item_id = items.id)")
+                
                 if source != "all":
                     where_conditions.append("source_type = %s")
                     params.append(source)
@@ -284,8 +290,8 @@ async def classify_item(item_id: int):
         classifier = ClassifierService(
             llm_provider=llm_provider,
             db_manager=db,
-            temperature=0.3,
-            max_tokens=500
+            temperature=0.5,
+            max_tokens=800
         )
         
         # Run classification
@@ -539,10 +545,338 @@ async def generate_course_from_item(request: Dict[str, Any]):
             "cost": result.get("cost", 0.0),
             "content_length": result.get("content_length", 0)
         }
+    except Exception as e:
+        logger.error(f"Error generating course: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/courses/{course_id}/modify")
+async def modify_course_with_llm(course_id: int, request: Dict[str, Any]):
+    """
+    Modify course content using LLM based on user instructions.
+    
+    Request body:
+    {
+        "instruction": "Ajouter des exemples concrets",
+        "section": "all"  // optional, specific section to modify
+    }
+    """
+    try:
+        instruction = request.get("instruction")
+        if not instruction:
+            raise HTTPException(status_code=400, detail="instruction is required")
+        
+        db = DatabaseManager(settings.database_url)
+        
+        # Get course
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id, content, title, subject FROM courses WHERE id = %s", (course_id,))
+                row = cur.fetchone()
+                if not row:
+                    raise HTTPException(status_code=404, detail="Course not found")
+                
+                course_content = row[1]
+                course_title = row[2]
+                course_subject = row[3]
+        
+        # Use LLM to modify
+        llm_provider = create_llm_provider(
+            provider_type=settings.llm_provider,
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            aws_region=settings.aws_region,
+            openai_api_key=settings.openai_api_key,
+            model=settings.aws_bedrock_model if settings.llm_provider == "aws" else settings.default_classification_model
+        )
+        
+        system_prompt = "Tu es un expert pédagogique. Tu dois modifier le contenu d'un cours selon les instructions de l'utilisateur tout en conservant la structure et la qualité du cours."
+        user_prompt = f"""COURS ACTUEL:
+Titre: {course_title}
+Sujet: {course_subject}
+
+{course_content}
+
+---
+
+INSTRUCTION: {instruction}
+
+Modifie le cours en suivant cette instruction. Retourne UNIQUEMENT le contenuen markdown modifié, sans commentaires additionnels."""
+        
+        modified_content, usage = await llm_provider.generate(
+            prompt=user_prompt,
+            system_prompt=system_prompt,
+            max_tokens=10000,
+            temperature=0.7
+        )
+        
+        # Update course
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE courses SET content = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+                    (modified_content, course_id)
+                )
+                conn.commit()
+        
+        tokens_used = usage.get("total_tokens", 0)
+        cost = llm_provider.calculate_cost(usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
+        
+        return {
+            "message": "Course modified successfully",
+            "course_id": course_id,
+            "tokens_used": tokens_used,
+            "cost": cost
+        }
+    except Exception as e:
+        logger.error(f"Error modifying course: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.delete("/courses/{course_id}")
+async def delete_course(course_id: int):
+    """Delete a course."""
+    try:
+        db = DatabaseManager(settings.database_url)
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM courses WHERE id = %s RETURNING id", (course_id,))
+                deleted = cur.fetchone()
+                if not deleted:
+                    raise HTTPException(status_code=404, detail="Course not found")
+                conn.commit()
+        
+        return {"message": "Course deleted successfully", "course_id": course_id}
+    except Exception as e:
+        logger.error(f"Error deleting course: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/courses/{course_id}/export/markdown")
+async def export_course_markdown(course_id: int):
+    """Export course as Markdown file."""
+    try:
+        db = DatabaseManager(settings.database_url)
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT title, content FROM courses WHERE id = %s", (course_id,))
+                row = cur.fetchone()
+                if not row:
+                    raise HTTPException(status_code=404, detail="Course not found")
+                
+                title, content = row
+        
+        from fastapi.responses import Response
+        filename = f"{title.replace(' ', '_')}.md"
+        
+        return Response(
+            content=content,
+            media_type="text/markdown",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    except Exception as e:
+        logger.error(f"Error exporting markdown: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/courses/{course_id}/export/pdf")
+async def export_course_pdf(course_id: int):
+    """Export course as PDF file."""
+    try:
+        db = DatabaseManager(settings.database_url)
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT title, content FROM courses WHERE id = %s", (course_id,))
+                row = cur.fetchone()
+                if not row:
+                    raise HTTPException(status_code=404, detail="Course not found")
+                
+                title, content = row
+        
+        # Import markdown library for conversion
+        import markdown
+        from fastapi.responses import Response
+        
+        # Convert markdown to HTML
+        html_content_body = markdown.markdown(
+            content,
+            extensions=['extra', 'codehilite', 'tables', 'fenced_code']
+        )
+        
+        filename = f"{title.replace(' ', '_')}.pdf"
+        
+        # Complete HTML with styling for PDF conversion
+        html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>{title}</title>
+    <style>
+        @page {{
+            size: A4;
+            margin: 2cm;
+        }}
+        body {{ 
+            font-family: 'Arial', sans-serif; 
+            line-height: 1.6;
+            color: #1f2937;
+            max-width: 100%;
+            padding: 0;
+        }}
+        h1 {{ 
+            color: #2563eb; 
+            border-bottom: 3px solid #2563eb; 
+            padding-bottom: 10px;
+            margin-top: 0;
+            page-break-after: avoid;
+        }}
+        h2 {{ 
+            color: #1e40af; 
+            border-left: 4px solid #2563eb; 
+            padding-left: 15px; 
+            margin-top: 30px;
+            page-break-after: avoid;
+        }}
+        h3 {{ 
+            color: #1e3a8a; 
+            margin-top: 20px;
+            page-break-after: avoid;
+        }}
+        p {{
+            margin: 10px 0;
+            orphans: 3;
+            widows: 3;
+        }}
+        code {{ 
+            background: #f3f4f6; 
+            padding: 2px 6px; 
+            border-radius: 3px; 
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }}
+        pre {{ 
+            background: #1f2937; 
+            color: #f9fafb; 
+            padding: 15px; 
+            border-radius: 5px; 
+            overflow-x: auto;
+            page-break-inside: avoid;
+        }}
+        pre code {{
+            background: none;
+            padding: 0;
+            color: #f9fafb;
+        }}
+        ul, ol {{
+            margin: 10px 0;
+            padding-left: 30px;
+        }}
+        li {{
+            margin: 5px 0;
+        }}
+        blockquote {{
+            border-left: 4px solid #e5e7eb;
+            padding-left: 15px;
+            margin: 15px 0;
+            color: #6b7280;
+            font-style: italic;
+        }}
+        table {{
+            border-collapse: collapse;
+            width: 100%;
+            margin: 15px 0;
+        }}
+        th, td {{
+            border: 1px solid #e5e7eb;
+            padding: 8px 12px;
+            text-align: left;
+        }}
+        th {{
+            background: #f3f4f6;
+            font-weight: 600;
+        }}
+        .page-break {{
+            page-break-before: always;
+        }}
+    </style>
+</head>
+<body>
+    <h1>{title}</h1>
+    {html_content_body}
+</body>
+</html>"""
+        
+        # Try to use WeasyPrint for real PDF generation
+        try:
+            from weasyprint import HTML
+            from io import BytesIO
+            import asyncio
+            
+            pdf_buffer = BytesIO()
+            # Wrap synchronous WeasyPrint call in thread to avoid blocking
+            await asyncio.to_thread(
+                lambda: HTML(string=html_content).write_pdf(pdf_buffer)
+            )
+            pdf_buffer.seek(0)
+            
+            return Response(
+                content=pdf_buffer.getvalue(),
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f"attachment; filename={filename}",
+                    "Content-Type": "application/pdf"
+                }
+            )
+        except ImportError as e:
+            # Fallback: Return HTML if WeasyPrint not available
+            html_filename = filename.replace('.pdf', '.html')
+            logger.warning(f"WeasyPrint not installed: {e}. Falling back to HTML export.")
+            return Response(
+                content=html_content,
+                media_type="text/html",
+                headers={
+                    "Content-Disposition": f"attachment; filename={html_filename}",
+                    "Content-Type": "text/html; charset=utf-8"
+                }
+            )
+        except Exception as e:
+            # Handle weasyprint-specific errors (missing system libraries)
+            html_filename = filename.replace('.pdf', '.html')
+            logger.error(f"Error generating PDF with WeasyPrint: {e}. Returning HTML fallback.")
+            return Response(
+                content=html_content,
+                media_type="text/html",
+                headers={
+                    "Content-Disposition": f"attachment; filename={html_filename}",
+                    "Content-Type": "text/html; charset=utf-8"
+                }
+            )
+    except Exception as e:
+        logger.error(f"Error exporting PDF: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.patch("/courses/{course_id}/validate")
+async def validate_course(course_id: int):
+    """Mark course as validated/approved."""
+    try:
+        db = DatabaseManager(settings.database_url)
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE courses SET status = 'review', updated_at = CURRENT_TIMESTAMP WHERE id = %s RETURNING id",
+                    (course_id,)
+                )
+                updated = cur.fetchone()
+                if not updated:
+                    raise HTTPException(status_code=404, detail="Course not found")
+                conn.commit()
+        
+        return {"message": "Course validated successfully", "course_id": course_id, "status": "review"}
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error generating course: {e}")
+        logger.error(f"Error validating course: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -559,24 +893,31 @@ async def rag_ask(request: Dict[str, Any]):
             raise HTTPException(status_code=400, detail="Query is required")
         
         # Import RAG services
+        import asyncio
         from mcp_server.services.rag import RAGService
         from mcp_server.services.vector_store import VectorStoreService
         from mcp_server.services.llm_provider import create_llm_provider
         
-        # Initialize services
-        vector_store = VectorStoreService(
+        # Initialize services (wrap synchronous VectorStore init in thread)
+        vector_store = await asyncio.to_thread(
+            VectorStoreService,
             db_path=str(settings.lancedb_path),
             model_name=settings.embedding_model
         )
+        
+        # Determine model based on provider
+        if settings.llm_provider == "aws":
+            model = settings.aws_bedrock_model
+        else:
+            model = settings.default_classification_model
         
         llm_provider = create_llm_provider(
             provider_type=settings.llm_provider,
             aws_access_key_id=settings.aws_access_key_id if settings.llm_provider == "aws" else None,
             aws_secret_access_key=settings.aws_secret_access_key if settings.llm_provider == "aws" else None,
             aws_region=settings.aws_region if settings.llm_provider == "aws" else None,
-            anthropic_api_key=settings.anthropic_api_key if settings.llm_provider == "anthropic" else None,
             openai_api_key=settings.openai_api_key if settings.llm_provider == "openai" else None,
-            model=settings.claude_model if settings.llm_provider == "anthropic" else settings.openai_model
+            model=model
         )
         
         rag_service = RAGService(
@@ -634,6 +975,22 @@ async def rag_history(limit: int = Query(default=20, ge=1, le=100)):
                 return history
     except Exception as e:
         logger.error(f"Error fetching RAG history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.delete("/rag/history")
+async def clear_rag_history():
+    """Clear all RAG query history."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM rag_queries")
+                deleted_count = cur.rowcount
+                conn.commit()
+                logger.info(f"Cleared {deleted_count} RAG history entries")
+                return {"message": f"Historique effacé ({deleted_count} entrées)", "deleted": deleted_count}
+    except Exception as e:
+        logger.error(f"Error clearing RAG history: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

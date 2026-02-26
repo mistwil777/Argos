@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     # Vector Database
     # ============================================
     lancedb_path: str = Field(
-        default="/data/lancedb",
+        default="./data/lancedb",
         description="Path to LanceDB data directory"
     )
     

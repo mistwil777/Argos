@@ -120,19 +120,42 @@ export default function Admin() {
 
       <Card>
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Actions système</h3>
+        <p className="text-sm text-gray-600 mb-4">Ces actions permettent de maintenir et optimiser le système</p>
         <div className="flex flex-wrap gap-3">
-          <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
-            Vider le cache
+          <button 
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+            title="Efface les fichiers temporaires et caches applicatifs"
+          >
+            🗑️ Vider le cache
           </button>
-          <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
-            Réindexer les vecteurs
+          <button 
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+            title="Reconstruit l'index vectoriel RAG pour améliorer la recherche sémantique"
+          >
+            🔄 Réindexer les vecteurs
           </button>
-          <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
-            Exporter les données
+          <button 
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+            title="Exporte tous les items et cours au format JSON pour sauvegarde"
+          >
+            📦 Exporter les données
           </button>
-          <button className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors">
-            Nettoyer la base de données
+          <button 
+            className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors"
+            title="⚠️ ATTENTION: Supprime les items et cours non validés (action irréversible)"
+          >
+            🧹 Nettoyer la base de données
           </button>
+        </div>
+        
+        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <h4 className="font-semibold text-blue-900 mb-2">ℹ️ Guide des actions système</h4>
+          <ul className="text-sm text-blue-800 space-y-1">
+            <li><strong>Vider le cache</strong> - Libère de l'espace disque en supprimant les fichiers temporaires</li>
+            <li><strong>Réindexer les vecteurs</strong> - Améliore la qualité des recherches RAG après l'ajout de nouveaux contenus</li>
+            <li><strong>Exporter les données</strong> - Crée une sauvegarde complète en JSON pour backup ou migration</li>
+            <li><strong>Nettoyer la BD</strong> - Supprime les brouillons et items en attente pour gagner de l'espace</li>
+          </ul>
         </div>
       </Card>
     </div>

@@ -49,8 +49,8 @@ def _get_classifier_service() -> ClassifierService:
         _classifier_service = ClassifierService(
             llm_provider=llm_provider,
             db_manager=db,
-            temperature=0.3,  # Low temperature for consistent classification
-            max_tokens=500
+            temperature=0.5,  # Balanced temperature for better classification
+            max_tokens=800
         )
     return _classifier_service
 

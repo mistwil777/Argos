@@ -1,16 +1,21 @@
 import { useState } from 'react';
-import { useRAGAsk, useRAGHistory } from '../hooks/useApi';
+import { useRAGAsk, useRAGHistory, useClearRAGHistory } from '../hooks/useApi';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { MessageSquare, Send, Clock } from 'lucide-react';
+import { MessageSquare, Send, Clock, Trash2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
-export default function RAG() {
+interface RAGProps {
+  addToast?: (message: string, type?: 'success' | 'error' | 'info' | 'loading', duration?: number) => string;
+}
+
+export default function RAG({ addToast }: RAGProps) {
   const [query, setQuery] = useState('');
   const [hybridSearch, setHybridSearch] = useState(true);
   
   const { data: history } = useRAGHistory();
   const askMutation = useRAGAsk();
+  const clearHistoryMutation = useClearRAGHistory();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,6 +23,12 @@ export default function RAG() {
     
     await askMutation.mutateAsync({ query, useHybridSearch: hybridSearch });
     setQuery('');
+  };
+
+  const handleClearHistory = async () => {
+    const count = history?.length || 0;
+    await clearHistoryMutation.mutateAsync();
+    addToast?.(`Historique effacé (${count} entrées)`, 'success');
   };
 
   return (
@@ -116,7 +127,20 @@ export default function RAG() {
         {/* Sidebar - Recent Queries */}
         <div className="lg:col-span-1">
           <Card>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Historique récent</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Historique récent</h3>
+              {history && history.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleClearHistory}
+                  disabled={clearHistoryMutation.isPending}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
             <div className="space-y-3">
               {history && history.length > 0 ? (
                 history.slice(0, 10).map((item) => (
