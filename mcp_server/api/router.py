@@ -893,17 +893,12 @@ async def rag_ask(request: Dict[str, Any]):
             raise HTTPException(status_code=400, detail="Query is required")
         
         # Import RAG services
-        import asyncio
         from mcp_server.services.rag import RAGService
-        from mcp_server.services.vector_store import VectorStoreService
+        from mcp_server.services.vector_store_singleton import get_vector_store
         from mcp_server.services.llm_provider import create_llm_provider
         
-        # Initialize services (wrap synchronous VectorStore init in thread)
-        vector_store = await asyncio.to_thread(
-            VectorStoreService,
-            db_path=str(settings.lancedb_path),
-            model_name=settings.embedding_model
-        )
+        # Get pre-loaded VectorStore singleton (fast, no model loading)
+        vector_store = get_vector_store()
         
         # Determine model based on provider
         if settings.llm_provider == "aws":
@@ -998,12 +993,10 @@ async def clear_rag_history():
 async def index_all_courses():
     """Index all published courses in the RAG system."""
     try:
-        from mcp_server.services.vector_store import VectorStoreService
+        from mcp_server.services.vector_store_singleton import get_vector_store
         
-        vector_store = VectorStoreService(
-            db_path=str(settings.lancedb_path),
-            model_name=settings.embedding_model
-        )
+        # Use pre-loaded singleton (fast)
+        vector_store = get_vector_store()
         
         # Fetch all published courses
         with db.get_connection() as conn:

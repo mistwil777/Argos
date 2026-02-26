@@ -345,6 +345,14 @@ async def startup_event():
     logger.info(f"Log level: {settings.log_level}")
     
     # ============================================
+    # Warm up VectorStoreService (DISABLED - model download takes too long)
+    # First RAG request will be slow (~30-60s) but subsequent ones will be fast
+    # ============================================
+    # import asyncio
+    # from mcp_server.services.vector_store_singleton import warmup_vector_store
+    # asyncio.create_task(warmup_vector_store())
+    
+    # ============================================
     # Test Tools
     # ============================================
     from mcp_server.tools.hello import hello_world
