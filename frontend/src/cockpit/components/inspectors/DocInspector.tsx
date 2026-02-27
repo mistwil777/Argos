@@ -1,6 +1,6 @@
 // DocInspector - Panneau de détails pour un document
 import { useState } from 'react';
-import { useCourse, useCourseContent, usePublishCourse, useDeleteCourse } from '../../../hooks/useApi';
+import { useCourse, usePublishCourse, useDeleteCourse } from '../../../hooks/useApi';
 import { Check, Archive, RefreshCw, AlertTriangle, TrendingUp, Eye, EyeOff } from 'lucide-react';
 
 interface DocInspectorProps {
@@ -9,7 +9,6 @@ interface DocInspectorProps {
 
 export function DocInspector({ docId }: DocInspectorProps) {
   const { data: course, isLoading, isError, error } = useCourse(docId);
-  const { data: contentData } = useCourseContent(docId);
   const publishMutation = usePublishCourse();
   const deleteMutation = useDeleteCourse();
   const [showContent, setShowContent] = useState(false);
@@ -76,11 +75,11 @@ export function DocInspector({ docId }: DocInspectorProps) {
             <span>{showContent ? 'Masquer le contenu' : 'Afficher le contenu'}</span>
           </button>
           
-          {showContent && contentData && (
+          {showContent && course.content && (
             <div className="mt-3 p-4 bg-gray-50 rounded-lg border border-gray-200 max-h-96 overflow-y-auto">
               <div className="prose prose-sm max-w-none">
                 <pre className="whitespace-pre-wrap text-xs text-gray-700 leading-relaxed">
-                  {contentData.content || 'Aucun contenu disponible'}
+                  {course.content || 'Aucun contenu disponible'}
                 </pre>
               </div>
             </div>
