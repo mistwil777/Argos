@@ -2,7 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import './styles/animations.css'
-import App from './App.tsx'
+import { CockpitApp } from './cockpit/CockpitApp.tsx'
 
 console.log('🚀 Main.tsx loaded');
 
@@ -16,7 +16,7 @@ if (!rootElement) {
   try {
     createRoot(rootElement).render(
       <StrictMode>
-        <App />
+        <CockpitApp />
       </StrictMode>,
     );
     console.log('✅ React app rendered');

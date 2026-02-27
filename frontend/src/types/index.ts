@@ -11,6 +11,7 @@ export interface Item {
   item_type?: string;
   status?: 'pending' | 'classified' | 'rejected';
   classification_status: 'pending' | 'classified' | 'rejected';
+  confidence_score?: number;
   published_at?: string;
   created_at: string;
   updated_at?: string;
@@ -21,12 +22,16 @@ export interface Course {
   title: string;
   description: string;
   topic: string;
+  topics?: string[];
   level: 'beginner' | 'intermediate' | 'advanced';
   status: 'draft' | 'review' | 'published' | 'archived';
   duration?: number;
   qa_score?: number;
-  qa_issues?: any[];
+  qa_issues?: string[];
   content?: string;
+  template_name?: string;
+  source_item_id?: number;
+  published_at?: string;
   created_at: string;
   updated_at?: string;
 }
