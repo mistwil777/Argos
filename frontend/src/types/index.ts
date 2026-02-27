@@ -97,3 +97,52 @@ export interface CostData {
   rag_cost: number;
   total: number;
 }
+
+export interface WorkspaceStats {
+  sources_count: number;
+  items_count: number;
+  knowledge_items_count: number;
+  latest_item_date: string | null;
+}
+
+export interface Workspace {
+  id: number;
+  name: string;
+  slug: string;
+  description: string | null;
+  domain: string | null;
+  icon: string;
+  color: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  stats?: WorkspaceStats;
+}
+
+export interface WorkspaceCreate {
+  name: string;
+  description?: string;
+  domain?: string;
+  icon?: string;
+  color?: string;
+}
+
+export interface WorkspaceUpdate {
+  name?: string;
+  description?: string;
+  domain?: string;
+  icon?: string;
+  color?: string;
+  is_active?: boolean;
+}
+
+export interface ContentTemplate {
+  id: number;
+  name: string;
+  display_name: string;
+  description: string | null;
+  content_type: string;
+  default_duration_minutes: number;
+  expected_sections: string[] | null;
+  output_format: string;
+}

@@ -8,14 +8,16 @@ import {
   Users, 
   Settings,
   Link2,
-  HelpCircle
+  HelpCircle,
+  FolderOpen
 } from 'lucide-react';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard, section: 'main' },
-  { name: 'Items', href: '/items', icon: FileText, section: 'main', badge: 'Nouveau' },
-  { name: 'Courses', href: '/courses', icon: BookOpen, section: 'main' },
-  { name: 'RAG Assistant', href: '/rag', icon: MessageSquare, section: 'main' },
+  { name: 'Espaces', href: '/workspaces', icon: FolderOpen, section: 'main', badge: 'Nouveau' },
+  { name: 'Items', href: '/items', icon: FileText, section: 'main' },
+  { name: 'Bibliothèque', href: '/courses', icon: BookOpen, section: 'main' },
+  { name: 'Assistant', href: '/rag', icon: MessageSquare, section: 'main' },
   { name: 'Guide', href: '/guide', icon: HelpCircle, section: 'help' },
   { name: 'Sources', href: '/sources', icon: Link2, section: 'config' },
   { name: 'HITL', href: '/hitl', icon: Users, section: 'config' },
@@ -36,7 +38,7 @@ export const Sidebar = () => {
     <div className="flex h-screen w-64 flex-col bg-gray-900">
       {/* Logo */}
       <div className="flex h-16 items-center px-6 bg-gray-800">
-        <h1 className="text-xl font-bold text-white">AcademiaOps</h1>
+        <h1 className="text-xl font-bold text-white">VeilleOps</h1>
       </div>
       
       {/* Navigation */}

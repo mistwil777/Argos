@@ -17,6 +17,10 @@ logger = logging.getLogger(__name__)
 # Create router
 api_router = APIRouter(prefix="/api/v1", tags=["api"])
 
+# Import and include sub-routers
+from mcp_server.api.workspaces import router as workspaces_router
+api_router.include_router(workspaces_router)
+
 # Database instance
 db = DatabaseManager(settings.database_url)
 

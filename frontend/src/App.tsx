@@ -11,6 +11,7 @@ import Admin from './pages/Admin';
 import Sources from './pages/Sources';
 import Guide from './pages/Guide';
 import TestPage from './pages/TestPage';
+import { Workspaces } from './pages/Workspaces';
 import { useToast } from './hooks/useToast';
 import { ToastContainer } from './components/ui/Toast';
 
@@ -35,6 +36,7 @@ function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/test" element={<TestPage />} />
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/workspaces" element={<Workspaces />} />
             <Route path="/items" element={<Items addToast={addToast} removeToast={removeToast} />} />
             <Route path="/courses" element={<Courses addToast={addToast} removeToast={removeToast} />} />
             <Route path="/rag" element={<RAG addToast={addToast} />} />
