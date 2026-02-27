@@ -1,6 +1,6 @@
 // ItemInspector - Panneau de détails pour un item sélectionné
-import { useItem, useClassifyItem, useDeleteItem } from '../../../hooks/useApi';
-import { Sparkles, XCircle, FileText, Calendar, Link as LinkIcon, TrendingUp } from 'lucide-react';
+import { useItem, useClassifyItem, useDeleteItem, useGenerateCourse } from '../../../hooks/useApi';
+import { Sparkles, XCircle, FileText, Calendar, Link as LinkIcon, TrendingUp, BookOpen } from 'lucide-react';
 
 interface ItemInspectorProps {
   itemId: number;
@@ -10,6 +10,7 @@ export function ItemInspector({ itemId }: ItemInspectorProps) {
   const { data: item, isLoading } = useItem(itemId);
   const classifyMutation = useClassifyItem();
   const deleteMutation = useDeleteItem();
+  const generateMutation = useGenerateCourse();
 
   if (isLoading || !item) {
     return (
@@ -26,10 +27,12 @@ export function ItemInspector({ itemId }: ItemInspectorProps) {
     classifyMutation.mutate(item.id);
   };
 
-  const handleReject = () => {
-    if (confirm('Supprimer cet item ?')) {
-      deleteMutation.mutate(item.id);
-    }
+  const handleDelete = () => {
+    deleteMutation.mutate(item.id);
+  };
+
+  const handleGenerate = () => {
+    generateMutation.mutate({ itemId: item.id, durationMinutes: 60 });
   };
 
   return (
@@ -125,26 +128,49 @@ export function ItemInspector({ itemId }: ItemInspectorProps) {
       </div>
 
       {/* Actions */}
-      {isPending && (
-        <div className="p-4 border-t border-gray-200 space-y-2">
-          <button
-            onClick={handleClassify}
-            disabled={classifyMutation.isPending}
-            className="w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>{classifyMutation.isPending ? 'Classification...' : 'Classifier'}</span>
-          </button>
-          <button
-            onClick={handleReject}
-            disabled={deleteMutation.isPending}
-            className="w-full px-4 py-2.5 bg-red-50 text-red-700 rounded-lg font-medium hover:bg-red-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
-          >
-            <XCircle className="w-4 h-4" />
-            <span>{deleteMutation.isPending ? 'Suppression...' : 'Supprimer'}</span>
-          </button>
-        </div>
-      )}
+      <div className="p-4 border-t border-gray-200 space-y-2">
+        {isPending && (
+          <>
+            <button
+              onClick={handleClassify}
+              disabled={classifyMutation.isPending}
+              className="w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>{classifyMutation.isPending ? 'Classification...' : 'Classifier'}</span>
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={deleteMutation.isPending}
+              className="w-full px-4 py-2.5 bg-red-50 text-red-700 rounded-lg font-medium hover:bg-red-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+            >
+              <XCircle className="w-4 h-4" />
+              <span>{deleteMutation.isPending ? 'Suppression...' : 'Supprimer'}</span>
+            </button>
+          </>
+        )}
+        
+        {isClassified && (
+          <>
+            <button
+              onClick={handleGenerate}
+              disabled={generateMutation.isPending}
+              className="w-full px-4 py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+            >
+              <BookOpen className="w-4 h-4" />
+              <span>{generateMutation.isPending ? 'Génération...' : 'Générer document'}</span>
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={deleteMutation.isPending}
+              className="w-full px-4 py-2.5 bg-red-50 text-red-700 rounded-lg font-medium hover:bg-red-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+            >
+              <XCircle className="w-4 h-4" />
+              <span>{deleteMutation.isPending ? 'Suppression...' : 'Supprimer'}</span>
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }

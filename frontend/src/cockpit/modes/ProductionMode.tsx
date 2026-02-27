@@ -89,14 +89,14 @@ export function ProductionMode() {
       </div>
 
       {/* Docs Grid */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto p-6">
         {courses.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-500">
             <BookOpen className="w-12 h-12 mb-3 text-gray-300" />
             <p>Aucun document trouvé</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
             {courses.map((course) => (
               <DocCard
                 key={course.id}
@@ -125,57 +125,63 @@ function DocCard({ course, onClick }: DocCardProps) {
   return (
     <div
       onClick={onClick}
-      className="bg-white rounded-lg border border-gray-200 p-4 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer"
+      className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-lg hover:scale-[1.02] transition-all cursor-pointer group flex flex-col"
     >
       <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center space-x-2">
-          <BookOpen className="w-5 h-5 text-blue-600" />
-          <h3 className="font-semibold text-gray-900 line-clamp-2">{course.title}</h3>
+        <div className="flex items-center space-x-2 flex-1">
+          <BookOpen className="w-5 h-5 text-blue-600 flex-shrink-0" />
+          <h3 className="font-semibold text-gray-900 line-clamp-2 group-hover:text-blue-600 transition-colors">
+            {course.title}
+          </h3>
         </div>
       </div>
 
-      <p className="text-sm text-gray-600 line-clamp-3 mb-4">{course.description}</p>
+      <p className="text-sm text-gray-600 line-clamp-3 mb-4 leading-relaxed flex-1">
+        {course.description}
+      </p>
 
-      <div className="flex items-center justify-between">
-        <span className={`px-2 py-1 rounded text-xs font-medium ${
-          isPublished ? 'bg-green-100 text-green-700' :
-          isReview ? 'bg-orange-100 text-orange-700' :
-          'bg-gray-100 text-gray-700'
-        }`}>
-          {course.status}
-        </span>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+            isPublished ? 'bg-green-100 text-green-700' :
+            isReview ? 'bg-orange-100 text-orange-700' :
+            'bg-gray-100 text-gray-600'
+          }`}>
+            {course.status}
+          </span>
 
-        {course.qa_score !== undefined && (
-          <div className="flex items-center space-x-1">
-            <span className="text-xs text-gray-500">QA:</span>
-            <span className={`text-xs font-medium ${
-              course.qa_score >= 0.8 ? 'text-green-600' :
-              course.qa_score >= 0.6 ? 'text-orange-600' :
-              'text-red-600'
-            }`}>
-              {(course.qa_score * 100).toFixed(0)}%
-            </span>
+          {course.qa_score !== undefined && (
+            <div className="flex items-center space-x-1.5">
+              <span className="text-xs text-gray-500 font-medium">QA:</span>
+              <span className={`text-xs font-bold ${
+                course.qa_score >= 0.8 ? 'text-green-600' :
+                course.qa_score >= 0.6 ? 'text-orange-600' :
+                'text-red-600'
+              }`}>
+                {(course.qa_score * 100).toFixed(0)}%
+              </span>
+            </div>
+          )}
+        </div>
+
+        {course.topics && course.topics.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {course.topics.slice(0, 3).map((topic: string, idx: number) => (
+              <span
+                key={idx}
+                className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full font-medium"
+              >
+                {topic}
+              </span>
+            ))}
+            {course.topics.length > 3 && (
+              <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full">
+                +{course.topics.length - 3}
+              </span>
+            )}
           </div>
         )}
       </div>
-
-      {course.topics && course.topics.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-1">
-          {course.topics.slice(0, 3).map((topic, idx) => (
-            <span
-              key={idx}
-              className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-xs"
-            >
-              {topic}
-            </span>
-          ))}
-          {course.topics.length > 3 && (
-            <span className="px-2 py-0.5 bg-gray-50 text-gray-600 rounded-full text-xs">
-              +{course.topics.length - 3}
-            </span>
-          )}
-        </div>
-      )}
     </div>
   );
 }
