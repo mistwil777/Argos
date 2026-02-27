@@ -440,11 +440,11 @@ async def publish_course(course_id: int):
     try:
         with db.get_connection() as conn:
             with conn.cursor() as cur:
-                # First check if course exists and is in draft
+                # First check if course exists and is in draft or review
                 cur.execute("""
-                    SELECT id, item_id, title, subject, content, duration
+                    SELECT id, item_id, title, subject, content, estimated_duration_minutes
                     FROM courses
-                    WHERE id = %s AND status = 'draft'
+                    WHERE id = %s AND status IN ('draft', 'review')
                 """, (course_id,))
                 
                 row = cur.fetchone()
@@ -471,14 +471,11 @@ async def publish_course(course_id: int):
                 
                 conn.commit()
         
-        # Index course in RAG system
+        # Index course in RAG system using singleton (with Bedrock Embeddings!)
         try:
-            from mcp_server.services.vector_store import VectorStoreService
+            from mcp_server.services.vector_store_singleton import get_vector_store
             
-            vector_store = VectorStoreService(
-                db_path=str(settings.lancedb_path),
-                model_name=settings.embedding_model
-            )
+            vector_store = get_vector_store()
             
             chunks_count = vector_store.index_course(course)
             logger.info(f"Course {course_id} indexed with {chunks_count} chunks")
@@ -697,160 +694,42 @@ async def export_course_pdf(course_id: int):
         import markdown
         from fastapi.responses import Response
         
-        # Convert markdown to HTML
-        html_content_body = markdown.markdown(
-            content,
-            extensions=['extra', 'codehilite', 'tables', 'fenced_code']
-        )
+        # Check if pre-generated PDF exists
+        from mcp_server.services.pdf_generator import get_pdf_path, generate_html_export
+        from pathlib import Path
         
-        filename = f"{title.replace(' ', '_')}.pdf"
+        pdf_path = get_pdf_path(course_id)
         
-        # Complete HTML with styling for PDF conversion
-        html_content = f"""<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>{title}</title>
-    <style>
-        @page {{
-            size: A4;
-            margin: 2cm;
-        }}
-        body {{ 
-            font-family: 'Arial', sans-serif; 
-            line-height: 1.6;
-            color: #1f2937;
-            max-width: 100%;
-            padding: 0;
-        }}
-        h1 {{ 
-            color: #2563eb; 
-            border-bottom: 3px solid #2563eb; 
-            padding-bottom: 10px;
-            margin-top: 0;
-            page-break-after: avoid;
-        }}
-        h2 {{ 
-            color: #1e40af; 
-            border-left: 4px solid #2563eb; 
-            padding-left: 15px; 
-            margin-top: 30px;
-            page-break-after: avoid;
-        }}
-        h3 {{ 
-            color: #1e3a8a; 
-            margin-top: 20px;
-            page-break-after: avoid;
-        }}
-        p {{
-            margin: 10px 0;
-            orphans: 3;
-            widows: 3;
-        }}
-        code {{ 
-            background: #f3f4f6; 
-            padding: 2px 6px; 
-            border-radius: 3px; 
-            font-family: 'Courier New', monospace;
-            font-size: 0.9em;
-        }}
-        pre {{ 
-            background: #1f2937; 
-            color: #f9fafb; 
-            padding: 15px; 
-            border-radius: 5px; 
-            overflow-x: auto;
-            page-break-inside: avoid;
-        }}
-        pre code {{
-            background: none;
-            padding: 0;
-            color: #f9fafb;
-        }}
-        ul, ol {{
-            margin: 10px 0;
-            padding-left: 30px;
-        }}
-        li {{
-            margin: 5px 0;
-        }}
-        blockquote {{
-            border-left: 4px solid #e5e7eb;
-            padding-left: 15px;
-            margin: 15px 0;
-            color: #6b7280;
-            font-style: italic;
-        }}
-        table {{
-            border-collapse: collapse;
-            width: 100%;
-            margin: 15px 0;
-        }}
-        th, td {{
-            border: 1px solid #e5e7eb;
-            padding: 8px 12px;
-            text-align: left;
-        }}
-        th {{
-            background: #f3f4f6;
-            font-weight: 600;
-        }}
-        .page-break {{
-            page-break-before: always;
-        }}
-    </style>
-</head>
-<body>
-    <h1>{title}</h1>
-    {html_content_body}
-</body>
-</html>"""
-        
-        # Try to use WeasyPrint for real PDF generation
-        try:
-            from weasyprint import HTML
-            from io import BytesIO
-            import asyncio
+        if pdf_path and pdf_path.exists():
+            # Serve pre-generated PDF
+            logger.info(f"📄 Serving pre-generated PDF for course {course_id}")
+            filename = f"{title.replace(' ', '_')}.pdf"
             
-            pdf_buffer = BytesIO()
-            # Wrap synchronous WeasyPrint call in thread to avoid blocking
-            await asyncio.to_thread(
-                lambda: HTML(string=html_content).write_pdf(pdf_buffer)
-            )
-            pdf_buffer.seek(0)
+            with open(pdf_path, 'rb') as f:
+                pdf_content = f.read()
             
             return Response(
-                content=pdf_buffer.getvalue(),
+                content=pdf_content,
                 media_type="application/pdf",
                 headers={
                     "Content-Disposition": f"attachment; filename={filename}",
                     "Content-Type": "application/pdf"
                 }
             )
-        except ImportError as e:
-            # Fallback: Return HTML if WeasyPrint not available
-            html_filename = filename.replace('.pdf', '.html')
-            logger.warning(f"WeasyPrint not installed: {e}. Falling back to HTML export.")
-            return Response(
-                content=html_content,
-                media_type="text/html",
-                headers={
-                    "Content-Disposition": f"attachment; filename={html_filename}",
-                    "Content-Type": "text/html; charset=utf-8"
-                }
-            )
-        except Exception as e:
-            # Handle weasyprint-specific errors (missing system libraries)
-            html_filename = filename.replace('.pdf', '.html')
-            logger.error(f"Error generating PDF with WeasyPrint: {e}. Returning HTML fallback.")
-            return Response(
-                content=html_content,
-                media_type="text/html",
-                headers={
-                    "Content-Disposition": f"attachment; filename={html_filename}",
-                    "Content-Type": "text/html; charset=utf-8"
-                }
-            )
+        
+        # Fallback: Generate HTML on-the-fly
+        logger.warning(f"⚠️ No PDF found for course {course_id}, generating HTML fallback")
+        html_content = generate_html_export(title, content)
+        filename = f"{title.replace(' ', '_')}.html"
+        
+        return Response(
+            content=html_content,
+            media_type="text/html",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}",
+                "Content-Type": "text/html; charset=utf-8"
+            }
+        )
     except Exception as e:
         logger.error(f"Error exporting PDF: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -926,22 +805,22 @@ async def rag_ask(request: Dict[str, Any]):
         # Ask question
         result = await rag_service.ask(
             query=query,
-            use_hybrid_search=True
+            use_hybrid_search=request.get("use_hybrid_search", True)
         )
         
-        if not result.get("success"):
-            raise HTTPException(status_code=500, detail=result.get("error", "Unknown error"))
-        
+        # Return result (RAGService returns all required fields)
         return {
             "answer": result.get("answer", ""),
             "sources": result.get("sources", []),
-            "confidence": result.get("confidence", 0.0),
-            "tokens_used": result.get("tokens_used", 0)
+            "confidence": result.get("confidence_score", 0.0),
+            "tokens_used": result.get("tokens_used", 0),
+            "cost_usd": result.get("cost_usd", 0.0),
+            "model": result.get("model", "unknown")
         }
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in RAG ask: {e}")
+        logger.error(f"Error in RAG ask: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -952,7 +831,7 @@ async def rag_history(limit: int = Query(default=20, ge=1, le=100)):
         with db.get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT id, query, answer, created_at
+                    SELECT id, query, answer, sources, created_at
                     FROM rag_queries
                     ORDER BY created_at DESC
                     LIMIT %s
@@ -964,7 +843,8 @@ async def rag_history(limit: int = Query(default=20, ge=1, le=100)):
                         "id": row[0],
                         "query": row[1],
                         "answer": row[2],
-                        "created_at": row[3].isoformat() if row[3] else None
+                        "sources": row[3],  # JSONB field
+                        "created_at": row[4].isoformat() if row[4] else None
                     })
                 
                 return history
@@ -1002,7 +882,7 @@ async def index_all_courses():
         with db.get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT id, item_id, title, subject, content, duration
+                    SELECT id, item_id, title, subject, content, estimated_duration_minutes
                     FROM courses
                     WHERE status = 'published'
                     ORDER BY created_at DESC

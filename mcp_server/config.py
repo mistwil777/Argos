@@ -44,14 +44,29 @@ class Settings(BaseSettings):
         description="Path to LanceDB data directory"
     )
     
+    embedding_provider: Literal["sentence-transformers", "bedrock"] = Field(
+        default="bedrock",
+        description="Embedding provider to use (sentence-transformers or bedrock)"
+    )
+    
     embedding_model: str = Field(
         default="sentence-transformers/all-MiniLM-L6-v2",
-        description="Sentence transformer model for embeddings"
+        description="Sentence transformer model for embeddings (only used if embedding_provider=sentence-transformers)"
     )
     
     embedding_dimension: int = Field(
-        default=384,
-        description="Dimension of embedding vectors"
+        default=1024,
+        description="Dimension of embedding vectors (384 for MiniLM, 1024 for Titan)"
+    )
+    
+    bedrock_embedding_dimensions: int = Field(
+        default=1024,
+        description="Dimensions for Bedrock Titan Embeddings V2 (256, 512, or 1024)"
+    )
+    
+    bedrock_embedding_normalize: bool = Field(
+        default=True,
+        description="Normalize Bedrock embeddings"
     )
     
     # ============================================

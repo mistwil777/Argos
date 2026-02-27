@@ -39,6 +39,81 @@
 
 ---
 
+## ✅ RÉSOLU: Export PDF/HTML avec Génération en Arrière-Plan
+
+### Implémentation (2026-02-26 13:48 UTC)
+
+**Architecture**:
+1. **Génération PDF en background** : Au moment de créer un cours, le système tente automatiquement de générer le PDF en arrière-plan (non-bloquant)
+2. **Stockage persistant** : PDFs stockés dans `/data/lancedb/pdfs/` (volume Docker)
+3. **Téléchargement intelligent** : Si PDF existe → envoi PDF, sinon → fallback HTML
+
+**Fichiers créés/modifiés**:
+- `mcp_server/services/pdf_generator.py` (nouveau, 232 lignes)
+  - `generate_pdf_background()` : Génération async non-bloquante
+  - `get_pdf_path()` : Vérification existence PDF
+  - `generate_html_export()` : Export HTML stylisé
+
+- `mcp_server/tools/auto_course_generator.py` (modifié)
+  - Appel `asyncio.create_task()` après commit du cours
+  - Génération PDF en background sans ralentir la réponse
+
+- `mcp_server/api/router.py` (modifié, endpoint `/courses/{id}/export`)
+  - Vérifie si PDF pré-généré existe
+  - Si oui → `Response(application/pdf)`
+  - Sinon → `generate_html_export()` → `Response(text/html)`
+
+**Avantages**:
+- ✅ Génération de cours rapide (pas d'attente PDF)
+- ✅ Téléchargement instantané (PDF déjà prêt)
+- ✅ Fallback gracieux vers HTML si PDF échoue
+- ✅ Pas de modification BDD nécessaire
+
+**Comportement attendu**:
+```
+1. Utilisateur clique "Générer cours" → 25s (même vitesse qu'avant)
+2. Backend génère le PDF en arrière-plan → ~5-10s (invisible pour l'utilisateur)
+3. Utilisateur clique "Télécharger" → < 1s (PDF ou HTML prêt)
+```
+
+**Limitations actuelles**:
+- WeasyPrint nécessite dépendances système (libpango, libcairo)
+- Sans ces dépendances, tous les PDFs échoueront silencieusement → fallback HTML
+- Pour activer PDF réel : installer dépendances dans Dockerfile (voir section ci-dessous)
+
+---
+
+## ⚠️ PROBLÈME ACTIF: RAG Assistant - Blocage Réseau CDN
+
+- `mcp_server/tools/auto_course_generator.py` (modifié)
+  - Appel `asyncio.create_task()` après commit du cours
+  - Génération PDF en background sans ralentir la réponse
+
+- `mcp_server/api/router.py` (modifié, endpoint `/courses/{id}/export`)
+  - Vérifie si PDF pré-généré existe
+  - Si oui → `Response(application/pdf)`
+  - Sinon → `generate_html_export()` → `Response(text/html)`
+
+**Avantages**:
+- ✅ Génération de cours rapide (pas d'attente PDF)
+- ✅ Téléchargement instantané (PDF déjà prêt)
+- ✅ Fallback gracieux vers HTML si PDF échoue
+- ✅ Pas de modification BDD nécessaire
+
+**Comportement attendu**:
+```
+1. Utilisateur clique "Générer cours" → 25s (même vitesse qu'avant)
+2. Backend génère le PDF en arrière-plan → ~5-10s (invisible pour l'utilisateur)
+3. Utilisateur clique "Télécharger" → < 1s (PDF ou HTML prêt)
+```
+
+**Limitations actuelles**:
+- WeasyPrint nécessite dépendances système (libpango, libcairo)
+- Sans ces dépendances, tous les PDFs échoueront silencieusement → fallback HTML
+- Pour activer PDF réel : installer dépendances dans Dockerfile (voir section ci-dessous)
+
+---
+
 ## ⚠️ PROBLÈME ACTIF: RAG Assistant - Blocage Réseau CDN
 
 ### Symptôme
@@ -82,6 +157,7 @@ volumes:
   - lancedb_data:/data/lancedb  # Réutilise volume existant
 ```
 
+>>>>>>> 710389e (feat: Background PDF generation + smart download (PDF or HTML fallback))
 ```dockerfile
 # Dockerfile
 RUN mkdir -p /data/lancedb && chmod 777 /data/lancedb

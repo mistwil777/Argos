@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRAGAsk, useRAGHistory, useClearRAGHistory } from '../hooks/useApi';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { MessageSquare, Send, Clock, Trash2 } from 'lucide-react';
+import { MessageSquare, Send, Clock, Trash2, ExternalLink, BookOpen } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import { Source } from '../types';
 
 interface RAGProps {
   addToast?: (message: string, type?: 'success' | 'error' | 'info' | 'loading', duration?: number) => string;
@@ -64,6 +65,40 @@ export default function RAG({ addToast }: RAGProps) {
                         <div className="prose prose-sm max-w-none">
                           <ReactMarkdown>{item.answer}</ReactMarkdown>
                         </div>
+                        
+                        {/* Sources Section */}
+                        {item.sources && item.sources.length > 0 && (
+                          <div className="mt-4 pt-4 border-t border-gray-300">
+                            <div className="flex items-center gap-2 mb-2">
+                              <BookOpen className="h-4 w-4 text-gray-600" />
+                              <h4 className="text-sm font-semibold text-gray-700">Sources :</h4>
+                            </div>
+                            <div className="space-y-2">
+                              {item.sources.map((source: Source, index: number) => (
+                                <a
+                                  key={index}
+                                  href={`/courses/${source.course_id}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-start gap-2 p-2 text-sm bg-white hover:bg-blue-50 rounded border border-gray-200 hover:border-blue-300 transition-colors group"
+                                >
+                                  <ExternalLink className="h-4 w-4 text-gray-500 group-hover:text-blue-600 mt-0.5 flex-shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-baseline gap-2">
+                                      <span className="font-medium text-blue-700">[Source {index + 1}]</span>
+                                      <span className="text-gray-900 truncate">{source.title}</span>
+                                    </div>
+                                    {source.chunk_text && (
+                                      <p className="text-gray-600 text-xs mt-1 line-clamp-2">
+                                        {source.chunk_text.substring(0, 150)}...
+                                      </p>
+                                    )}
+                                  </div>
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

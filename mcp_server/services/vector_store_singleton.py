@@ -39,11 +39,42 @@ def get_vector_store(
         db_path = db_path or str(settings.lancedb_path)
         model_name = model_name or settings.embedding_model
         
-        logger.info("Initializing VectorStoreService singleton (first load may take 30-60s)...")
+        # Create embedding provider based on settings
+        embedding_provider = None
+        
+        if settings.embedding_provider == "bedrock":
+            logger.info("Initializing Amazon Bedrock Titan Embeddings V2...")
+            
+            # Import BedrockEmbeddingsProvider
+            from mcp_server.services.bedrock_embeddings import BedrockEmbeddingsProvider
+            
+            # Validate AWS credentials
+            if not settings.aws_access_key_id or not settings.aws_secret_access_key:
+                logger.error("AWS credentials not configured! Cannot use Bedrock embeddings.")
+                raise ValueError(
+                    "AWS credentials required for Bedrock embeddings. "
+                    "Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in .env"
+                )
+            
+            # Create Bedrock provider
+            embedding_provider = BedrockEmbeddingsProvider(
+                aws_access_key_id=settings.aws_access_key_id,
+                aws_secret_access_key=settings.aws_secret_access_key,
+                region=settings.aws_region,
+                dimensions=settings.bedrock_embedding_dimensions,
+                normalize=settings.bedrock_embedding_normalize
+            )
+            logger.info(f"✅ Bedrock Embeddings provider ready ({settings.bedrock_embedding_dimensions}D)")
+        
+        else:
+            logger.info("Using SentenceTransformer for embeddings (may fail if HuggingFace CDN is blocked)")
+        
+        logger.info("Initializing VectorStoreService singleton...")
         _vector_store_instance = VectorStoreService(
             db_path=db_path,
             model_name=model_name,
-            table_name=table_name
+            table_name=table_name,
+            embedding_provider=embedding_provider
         )
         logger.info("✅ VectorStoreService singleton ready!")
     

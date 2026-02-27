@@ -39,11 +39,18 @@ export interface CourseSection {
   exercises?: any[];
 }
 
+export interface Source {
+  course_id: number;
+  title: string;
+  chunk_text: string;
+  _distance?: number;
+}
+
 export interface RAGResult {
   success: boolean;
   query: string;
   answer?: string;
-  sources?: any[];
+  sources?: Source[];
   confidence_score?: number;
   error?: string;
 }

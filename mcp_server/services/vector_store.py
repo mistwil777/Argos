@@ -1,17 +1,17 @@
 """
 Vector Store Service for AcademiaOps
 
-Handles embeddings and vector storage using LanceDB + sentence-transformers.
+Handles embeddings and vector storage using LanceDB.
+Supports multiple embedding providers: SentenceTransformer or Amazon Bedrock Titan.
 """
 
 import logging
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 from pathlib import Path
 
 import lancedb
 import numpy as np
-from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger(__name__)
 
@@ -23,15 +23,18 @@ class VectorStoreService:
         self,
         db_path: str = "./data/lancedb",
         model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
-        table_name: str = "academiaops_embeddings"
+        table_name: str = "academiaops_embeddings",
+        embedding_provider: Optional[Any] = None
     ):
         """
         Initialize VectorStoreService.
         
         Args:
             db_path: Path to LanceDB database directory
-            model_name: Sentence transformer model for embeddings
+            model_name: Sentence transformer model for embeddings (if embedding_provider is None)
             table_name: LanceDB table name
+            embedding_provider: Optional embedding provider (BedrockEmbeddingsProvider or SentenceTransformer).
+                               If None, will load SentenceTransformer with model_name.
         """
         self.db_path = db_path
         self.model_name = model_name
@@ -43,16 +46,31 @@ class VectorStoreService:
         # Initialize LanceDB
         self.db = lancedb.connect(db_path)
         
-        # Initialize sentence transformer model
-        logger.info(f"Loading embedding model: {model_name}")
-        self.model = SentenceTransformer(model_name)
-        self.embedding_dim = self.model.get_sentence_embedding_dimension()
+        # Initialize embedding model
+        if embedding_provider is not None:
+            # Use provided embedding provider (e.g., BedrockEmbeddingsProvider)
+            logger.info(f"Using provided embedding provider: {type(embedding_provider).__name__}")
+            self.model = embedding_provider
+            self.embedding_dim = self.model.get_sentence_embedding_dimension()
+        else:
+            # Fallback to SentenceTransformer (may fail if HuggingFace CDN is blocked)
+            try:
+                from sentence_transformers import SentenceTransformer
+                logger.info(f"Loading SentenceTransformer model: {model_name}")
+                self.model = SentenceTransformer(model_name)
+                self.embedding_dim = self.model.get_sentence_embedding_dimension()
+            except Exception as e:
+                logger.error(f"Failed to load SentenceTransformer: {e}")
+                raise RuntimeError(
+                    "Failed to initialize embedding model. "
+                    "Consider using BedrockEmbeddingsProvider to bypass HuggingFace CDN issues."
+                ) from e
         
         logger.info(
             f"VectorStoreService initialized",
             extra={
                 "db_path": db_path,
-                "model": model_name,
+                "model": type(self.model).__name__,
                 "embedding_dim": self.embedding_dim,
                 "table": table_name
             }

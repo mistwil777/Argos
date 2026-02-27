@@ -11,7 +11,8 @@ from typing import Dict, Any, Optional
 from mcp_server.config import settings
 from mcp_server.database import DatabaseManager
 from mcp_server.services.llm_provider import create_llm_provider
-from mcp_server.services.vector_store import VectorStoreService
+from mcp_server.services.vector_store_singleton import get_vector_store
+from mcp_server.services.pdf_generator import generate_pdf_background
 
 logger = logging.getLogger(__name__)
 
@@ -245,59 +246,55 @@ async def generate_course_from_item(
         if not item.get("subject"):
             item["subject"] = item.get("item_type", "AI/Tech")
         
-        logger.info(f"📚 Step 1/4: Indexing item content into RAG... (SKIPPED for faster testing)")
+        logger.info(f"📚 Step 1/4: Indexing item content into RAG...")
         
-        # 2. Index the item content into RAG for retrieval
-        # TEMPORARILY DISABLED: SentenceTransformer model loading is too slow
+        # 2. Index the item content into RAG for retrieval (now using Bedrock embeddings!)
         vector_store = None
-        # try:
-        #     vector_store = VectorStoreService(
-        #         db_path=str(settings.lancedb_path),
-        #         model_name=settings.embedding_model
-        #     )
-        #     
-        #     # Index the item (combines title + summary + content)
-        #     # Wrap synchronous call in thread to avoid blocking event loop
-        #     await asyncio.to_thread(
-        #         vector_store.index_item,
-        #         {
-        #             "id": item_id,
-        #             "title": item["title"],
-        #             "summary": f"{item.get('description', '')}\n\n{item.get('content', '')[:2000]}"  # First 2000 chars of content
-        #         }
-        #     )
-        #     
-        #     logger.info(f"✅ Item {item_id} indexed into RAG")
-        # except Exception as e:
-        #     logger.warning(f"⚠️ RAG indexing failed (continuing without RAG): {e}")
+        try:
+            # Use singleton to avoid reloading embedding model
+            vector_store = get_vector_store()
+            
+            # Index the item (combines title + summary + content)
+            # Wrap synchronous call in thread to avoid blocking event loop
+            await asyncio.to_thread(
+                vector_store.index_item,
+                {
+                    "id": item_id,
+                    "title": item["title"],
+                    "summary": f"{item.get('description', '')}\n\n{item.get('content', '')[:2000]}"  # First 2000 chars of content
+                }
+            )
+            
+            logger.info(f"✅ Item {item_id} indexed into RAG")
+        except Exception as e:
+            logger.warning(f"⚠️ RAG indexing failed (continuing without RAG): {e}")
         
-        logger.info(f"🔍 Step 2/4: Retrieving relevant context from RAG... (SKIPPED for faster testing)")
+        logger.info(f"🔍 Step 2/4: Retrieving relevant context from RAG...")
         
-        # 3. Retrieve relevant context using RAG
-        # TEMPORARILY DISABLED: Too slow for testing
+        # 3. Retrieve relevant context using RAG (powered by Bedrock Titan Embeddings!)
         rag_context = ""
         search_results = []
-        # try:
-        #     if vector_store is not None:
-        #         # Search for related content
-        #         search_query = f"Informations détaillées sur {item['title']} - {item.get('subject', '')} - concepts, architectures, applications pratiques"
-        #         # Wrap synchronous call in thread to avoid blocking event loop
-        #         search_results = await asyncio.to_thread(
-        #             vector_store.search,
-        #             query=search_query,
-        #             limit=5
-        #         )
-        #     
-        #     if search_results:
-        #         rag_context = "\n\n---\n\n".join([
-        #             f"**Source {i+1}** (score: {result.get('_distance', 0):.3f}):\n{result.get('chunk_text', '')[:500]}..."
-        #             for i, result in enumerate(search_results)
-        #         ])
-        #         logger.info(f"✅ Retrieved {len(search_results)} relevant documents from RAG")
-        #     else:
-        #         logger.info("⚠️ No relevant documents found in RAG (this is normal if it's the first item)")
-        # except Exception as e:
-        #     logger.warning(f"⚠️ RAG retrieval failed (continuing without context): {e}")
+        try:
+            if vector_store is not None:
+                # Search for related content
+                search_query = f"Informations détaillées sur {item['title']} - {item.get('subject', '')} - concepts, architectures, applications pratiques"
+                # Wrap synchronous call in thread to avoid blocking event loop
+                search_results = await asyncio.to_thread(
+                    vector_store.search,
+                    query=search_query,
+                    limit=5
+                )
+            
+            if search_results:
+                rag_context = "\n\n---\n\n".join([
+                    f"**Source {i+1}** (score: {result.get('_distance', 0):.3f}):\n{result.get('chunk_text', '')[:500]}..."
+                    for i, result in enumerate(search_results)
+                ])
+                logger.info(f"✅ Retrieved {len(search_results)} relevant documents from RAG")
+            else:
+                logger.info("⚠️ No relevant documents found in RAG (this is normal if it's the first item)")
+        except Exception as e:
+            logger.warning(f"⚠️ RAG retrieval failed (continuing without context): {e}")
         
         logger.info(f"📝 Step 3/4: Generating course content with LLM...")
         
@@ -434,6 +431,11 @@ async def generate_course_from_item(
         
         logger.info(f"🎉 Course {course_id} generated successfully from item {item_id} with RAG enrichment")
         
+        # Generate PDF in background (non-blocking)
+        asyncio.create_task(
+            _generate_pdf_for_course(course_id, course_title, course_content)
+        )
+        
         return {
             "course_id": course_id,
             "item_id": item_id,
@@ -452,3 +454,15 @@ async def generate_course_from_item(
     except Exception as e:
         logger.error(f"❌ Error generating course from item {item_id}: {e}", exc_info=True)
         return {"error": str(e)}
+
+
+async def _generate_pdf_for_course(course_id: int, title: str, content: str):
+    """Helper to generate PDF in background after course creation."""
+    try:
+        pdf_path = await generate_pdf_background(course_id, title, content)
+        if pdf_path:
+            logger.info(f"✅ PDF generated for course {course_id}: {pdf_path}")
+        else:
+            logger.warning(f"⚠️ PDF generation skipped/failed for course {course_id}")
+    except Exception as e:
+        logger.error(f"❌ Background PDF generation failed for course {course_id}: {e}")
