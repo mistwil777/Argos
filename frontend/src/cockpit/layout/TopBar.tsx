@@ -1,6 +1,7 @@
 // TopBar - Barre supérieure avec stats, workspace selector, user
 import { useGlobalStats } from '../../hooks/useApi';
 import { Bell, DollarSign, Clock } from 'lucide-react';
+import { UserMenu } from '../components/UserMenu';
 
 export function TopBar() {
   const { data: stats } = useGlobalStats();
@@ -29,25 +30,20 @@ export function TopBar() {
       {/* Right: User section */}
       <div className="flex items-center space-x-3">
         {/* Workspace Selector - Disabled for now */}
-        <div className="flex items-center space-x-2 px-3 py-1.5 bg-gray-50 rounded-lg border border-gray-200">
-          <span className="text-sm font-medium text-gray-700">Général</span>
+        <div className="flex items-center space-x-2 px-3 py-1.5 bg-blue-950/30 rounded-lg border border-blue-700/30">
+          <span className="text-sm font-medium text-blue-300">Général</span>
         </div>
 
         {/* Notifications */}
-        <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors relative">
-          <Bell className="w-5 h-5 text-gray-600" />
+        <button className="p-2 hover:bg-blue-900/20 rounded-lg transition-colors relative">
+          <Bell className="w-5 h-5 text-blue-300" />
           {pendingCount > 0 && (
-            <div className="absolute top-1 right-1 w-2 h-2 bg-orange-500 rounded-full"></div>
+            <div className="absolute top-1 right-1 w-2 h-2 bg-orange-500 rounded-full cockpit-indicator-active"></div>
           )}
         </button>
 
-        {/* User */}
-        <button className="flex items-center space-x-2 px-3 py-1.5 hover:bg-gray-100 rounded-lg transition-colors">
-          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold">
-            U
-          </div>
-          <span className="text-sm font-medium">User</span>
-        </button>
+        {/* User Menu */}
+        <UserMenu />
       </div>
     </div>
   );

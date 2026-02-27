@@ -1,0 +1,355 @@
+/* Cockpit Spatial Theme - Professional Futuristic Design */
+
+:root {
+  --hue-primary: 210deg;
+  --hue-accent: 200deg;
+  --button-bg: #0f1318;
+  --cockpit-bg-start: #0a0e1a;
+  --cockpit-bg-end: #1a1e2e;
+  --border-glow: hsla(var(--hue-primary), 100%, 70%, 0.3);
+}
+
+/* Cockpit Button Styles */
+.cockpit-btn {
+  --border-radius: 8px;
+  --padding: 3px;
+  --transition: 0.3s;
+  --button-color: var(--button-bg);
+  --highlight-color-hue: var(--hue-primary);
+
+  user-select: none;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.6em 1.2em;
+  font-family: "Inter", "Segoe UI", sans-serif;
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+
+  background-color: var(--button-color);
+
+  box-shadow:
+    inset 0px 1px 1px rgba(255, 255, 255, 0.15),
+    inset 0px 2px 2px rgba(255, 255, 255, 0.1),
+    inset 0px 4px 4px rgba(255, 255, 255, 0.05),
+    0px 2px 4px rgba(0, 0, 0, 0.3),
+    0px 4px 8px rgba(0, 0, 0, 0.2);
+
+  border: solid 1px rgba(255, 255, 255, 0.15);
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.85);
+
+  transition: all var(--transition);
+}
+
+.cockpit-btn::before {
+  content: "";
+  position: absolute;
+  top: calc(0px - var(--padding));
+  left: calc(0px - var(--padding));
+  width: calc(100% + var(--padding) * 2);
+  height: calc(100% + var(--padding) * 2);
+  border-radius: calc(var(--border-radius) + var(--padding));
+  pointer-events: none;
+  background-image: linear-gradient(135deg, 
+    rgba(0, 0, 0, 0.3) 0%, 
+    rgba(0, 0, 0, 0.6) 100%
+  );
+  z-index: -1;
+  transition: all var(--transition);
+  box-shadow: 
+    0 -4px 8px -4px rgba(0, 0, 0, 0) inset,
+    1px 1px 1px rgba(255, 255, 255, 0.1),
+    -1px -1px 1px rgba(0, 0, 0, 0.2);
+}
+
+.cockpit-btn::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  pointer-events: none;
+  background-image: linear-gradient(
+    135deg,
+    hsl(var(--highlight-color-hue), 100%, 70%),
+    hsla(var(--highlight-color-hue), 100%, 60%, 0.3),
+    15%,
+    transparent
+  );
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+
+/* Hover state */
+.cockpit-btn:hover {
+  border-color: hsla(var(--hue-primary), 100%, 70%, 0.5);
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0px 1px 1px rgba(255, 255, 255, 0.2),
+    inset 0px 2px 2px rgba(255, 255, 255, 0.15),
+    0px 4px 8px rgba(0, 0, 0, 0.4),
+    0px 0px 16px hsla(var(--hue-primary), 100%, 70%, 0.2);
+}
+
+.cockpit-btn:hover::before {
+  box-shadow: 
+    0 -4px 8px -4px hsla(var(--hue-primary), 100%, 70%, 0.3) inset,
+    1px 1px 2px rgba(255, 255, 255, 0.15),
+    -1px -1px 1px rgba(0, 0, 0, 0.2);
+}
+
+.cockpit-btn:hover::after {
+  opacity: 0.6;
+}
+
+/* Active state */
+.cockpit-btn:active {
+  transform: translateY(0px);
+  border-color: hsla(var(--hue-primary), 100%, 80%, 0.7);
+  background-color: hsla(var(--hue-primary), 40%, 15%, 0.8);
+  box-shadow:
+    inset 0px 2px 4px rgba(0, 0, 0, 0.5),
+    0px 2px 4px rgba(0, 0, 0, 0.3),
+    0px 0px 20px hsla(var(--hue-primary), 100%, 70%, 0.4);
+}
+
+.cockpit-btn:active::before {
+  box-shadow: 
+    0 -4px 12px -4px hsla(var(--hue-primary), 100%, 70%, 0.6) inset,
+    1px 1px 2px rgba(255, 255, 255, 0.2);
+}
+
+.cockpit-btn:active::after {
+  opacity: 1;
+}
+
+/* Primary variant (actions importantes) */
+.cockpit-btn-primary {
+  background-color: hsla(var(--hue-primary), 60%, 20%, 0.8);
+  border-color: hsla(var(--hue-primary), 100%, 60%, 0.4);
+  color: hsl(var(--hue-primary), 100%, 90%);
+  font-weight: 600;
+}
+
+.cockpit-btn-primary:hover {
+  background-color: hsla(var(--hue-primary), 70%, 25%, 0.9);
+  border-color: hsla(var(--hue-primary), 100%, 70%, 0.6);
+  box-shadow:
+    inset 0px 1px 2px rgba(255, 255, 255, 0.2),
+    0px 4px 12px rgba(0, 0, 0, 0.5),
+    0px 0px 24px hsla(var(--hue-primary), 100%, 70%, 0.4);
+}
+
+/* Danger variant */
+.cockpit-btn-danger {
+  --highlight-color-hue: 0deg;
+  background-color: hsla(0, 60%, 20%, 0.6);
+  border-color: hsla(0, 100%, 60%, 0.3);
+  color: hsl(0, 100%, 90%);
+}
+
+.cockpit-btn-danger:hover {
+  background-color: hsla(0, 70%, 25%, 0.8);
+  border-color: hsla(0, 100%, 70%, 0.5);
+  box-shadow:
+    inset 0px 1px 2px rgba(255, 255, 255, 0.2),
+    0px 4px 12px rgba(0, 0, 0, 0.5),
+    0px 0px 20px hsla(0, 100%, 60%, 0.3);
+}
+
+/* Success variant */
+.cockpit-btn-success {
+  --highlight-color-hue: 160deg;
+  background-color: hsla(160, 60%, 20%, 0.6);
+  border-color: hsla(160, 100%, 60%, 0.3);
+  color: hsl(160, 100%, 90%);
+}
+
+.cockpit-btn-success:hover {
+  background-color: hsla(160, 70%, 25%, 0.8);
+  border-color: hsla(160, 100%, 70%, 0.5);
+  box-shadow:
+    inset 0px 1px 2px rgba(255, 255, 255, 0.2),
+    0px 4px 12px rgba(0, 0, 0, 0.5),
+    0px 0px 20px hsla(160, 100%, 60%, 0.3);
+}
+
+/* Small variant */
+.cockpit-btn-sm {
+  padding: 0.4em 0.8em;
+  font-size: 0.75rem;
+}
+
+/* Icon dans le bouton */
+.cockpit-btn svg {
+  width: 1.1em;
+  height: 1.1em;
+  margin-right: 0.5em;
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.3));
+  transition: filter 0.3s;
+}
+
+.cockpit-btn:hover svg {
+  filter: drop-shadow(0 0 4px hsl(var(--highlight-color-hue), 100%, 70%));
+}
+
+/* Disabled state */
+.cockpit-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.cockpit-btn:disabled::before,
+.cockpit-btn:disabled::after {
+  display: none;
+}
+
+/* Background gradients pour les sections */
+.cockpit-panel {
+  background: linear-gradient(
+    135deg,
+    hsla(var(--hue-primary), 20%, 12%, 0.6) 0%,
+    hsla(var(--hue-accent), 15%, 10%, 0.8) 100%
+  );
+  border: 1px solid hsla(var(--hue-primary), 100%, 70%, 0.1);
+  backdrop-filter: blur(10px);
+}
+
+/* Glow effect pour les stats importantes */
+.cockpit-stat {
+  text-shadow: 0 0 8px hsla(var(--hue-primary), 100%, 70%, 0.4);
+}
+
+/* Pulse animation subtle pour indicateurs actifs */
+@keyframes cockpit-pulse {
+  0%, 100% {
+    box-shadow: 0 0 4px hsla(var(--hue-primary), 100%, 70%, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 12px hsla(var(--hue-primary), 100%, 70%, 0.7);
+  }
+}
+
+.cockpit-indicator-active {
+  animation: cockpit-pulse 2s ease-in-out infinite;
+}
+
+/* Cards avec effet glass */
+.cockpit-card {
+  background: linear-gradient(
+    135deg,
+    hsla(var(--hue-primary), 20%, 15%, 0.4) 0%,
+    hsla(var(--hue-accent), 15%, 12%, 0.6) 100%
+  );
+  border: 1px solid hsla(var(--hue-primary), 100%, 70%, 0.15);
+  backdrop-filter: blur(8px);
+  transition: all 0.3s ease;
+}
+
+.cockpit-card:hover {
+  border-color: hsla(var(--hue-primary), 100%, 70%, 0.4);
+  box-shadow: 
+    0 8px 24px rgba(0, 0, 0, 0.4),
+    0 0 20px hsla(var(--hue-primary), 100%, 70%, 0.15);
+  transform: translateY(-4px);
+}
+
+/* Scanline effect subtil pour l'ambiance */
+.cockpit-scanlines {
+  position: relative;
+  overflow: hidden;
+}
+
+.cockpit-scanlines::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    to bottom,
+    transparent 50%,
+    rgba(0, 0, 0, 0.02) 51%
+  );
+  background-size: 100% 4px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Animations for CockpitHeader */
+@keyframes grid-flow {
+  0% {
+    transform: translateY(0) translateX(0);
+  }
+  100% {
+    transform: translateY(-4rem) translateX(-4rem);
+  }
+}
+
+@keyframes pulse-slow {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes pulse-slower {
+  0%, 100% {
+    opacity: 0.2;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 4s ease-in-out infinite;
+}
+
+.animate-pulse-slower {
+  animation: pulse-slower 6s ease-in-out infinite;
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.animate-scaleIn {
+  animation: scaleIn 0.3s ease-out;
+}

@@ -1,6 +1,7 @@
 // ControleMode - Mode HITL + Monitoring (décisions humaines + health)
 import { useState } from 'react';
 import { Shield, AlertTriangle, CheckCircle, XCircle, TrendingUp, Activity } from 'lucide-react';
+import { usePendingDecisions, useMakeDecision } from '../../hooks/useApi';
 
 interface HITLDecision {
   id: number;
@@ -15,20 +16,51 @@ interface HITLDecision {
 export function ControleMode() {
   const [activeTab, setActiveTab] = useState<'hitl' | 'health'>('hitl');
   const [selectedDecision, setSelectedDecision] = useState<HITLDecision | null>(null);
-  void selectedDecision; // TODO: to be used for detail panel
+  const [comment, setComment] = useState('');
+  
+  const { data: pendingData } = usePendingDecisions();
+  const makeDecisionMutation = useMakeDecision();
 
-  // Mock data - À remplacer par useHITLQueue() et useHealthMetrics()
-  const pendingDecisions: HITLDecision[] = [
-    {
-      id: 1,
-      item_id: 42,
-      item_title: 'Nouvelle approche pour le NLP multilingue',
-      decision_type: 'classification',
-      ai_suggestion: 'High importance - Machine Learning topic',
-      confidence: 0.65,
-      created_at: new Date().toISOString(),
-    },
-  ];
+  // Convert items to HITLDecision format
+  const pendingDecisions: HITLDecision[] = pendingData?.items.map((item: any) => ({
+    id: item.id,
+    item_id: item.id,
+    item_title: item.title || 'Sans titre',
+    decision_type: 'classification',
+    ai_suggestion: item.importance ? `${item.importance} importance - ${item.classification || 'Classifié'}` : 'En attente de classification',
+    confidence: item.confidence_score || 0.5,
+    created_at: item.created_at,
+  })) || [];
+
+  const handleApprove = () => {
+    if (!selectedDecision) return;
+    
+    makeDecisionMutation.mutate({
+      type: selectedDecision.decision_type,
+      id: selectedDecision.item_id,
+      decision: `approve:${comment}`,
+    }, {
+      onSuccess: () => {
+        setSelectedDecision(null);
+        setComment('');
+      }
+    });
+  };
+
+  const handleReject = () => {
+    if (!selectedDecision) return;
+    
+    makeDecisionMutation.mutate({
+      type: selectedDecision.decision_type,
+      id: selectedDecision.item_id,
+      decision: `reject:${comment}`,
+    }, {
+      onSuccess: () => {
+        setSelectedDecision(null);
+        setComment('');
+      }
+    });
+  };
 
   return (
     <div className="h-full flex flex-col">
@@ -61,7 +93,16 @@ export function ControleMode() {
       {/* Content */}
       <div className="flex-1 overflow-hidden">
         {activeTab === 'hitl' ? (
-          <HITLQueue decisions={pendingDecisions} onSelect={setSelectedDecision} />
+          <HITLQueue 
+            decisions={pendingDecisions} 
+            onSelect={setSelectedDecision}
+            selectedDecision={selectedDecision}
+            comment={comment}
+            setComment={setComment}
+            onApprove={handleApprove}
+            onReject={handleReject}
+            isProcessing={makeDecisionMutation.isPending}
+          />
         ) : (
           <HealthMonitor />
         )}
@@ -74,11 +115,17 @@ export function ControleMode() {
 interface HITLQueueProps {
   decisions: HITLDecision[];
   onSelect: (decision: HITLDecision) => void;
+  selectedDecision: HITLDecision | null;
+  comment: string;
+  setComment: (comment: string) => void;
+  onApprove: () => void;
+  onReject: () => void;
+  isProcessing: boolean;
 }
 
-function HITLQueue({ decisions, onSelect }: HITLQueueProps) {
+function HITLQueue({ decisions, onSelect, selectedDecision, comment, setComment, onApprove, onReject, isProcessing }: HITLQueueProps) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const selected = decisions.find(d => d.id === selectedId);
+  const selected = selectedId ? decisions.find(d => d.id === selectedId) : selectedDecision;
 
   return (
     <div className="h-full flex">
@@ -173,6 +220,8 @@ function HITLQueue({ decisions, onSelect }: HITLQueueProps) {
             <div>
               <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Votre décision</h3>
               <textarea
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
                 placeholder="Commentaire ou ajustement..."
                 rows={4}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
@@ -181,13 +230,21 @@ function HITLQueue({ decisions, onSelect }: HITLQueueProps) {
           </div>
 
           <div className="space-y-2 mt-6">
-            <button className="w-full px-4 py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors flex items-center justify-center space-x-2">
+            <button 
+              onClick={onApprove}
+              disabled={isProcessing}
+              className="w-full px-4 py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2"
+            >
               <CheckCircle className="w-4 h-4" />
-              <span>Approuver</span>
+              <span>{isProcessing ? 'Approbation...' : 'Approuver'}</span>
             </button>
-            <button className="w-full px-4 py-2.5 bg-red-50 text-red-700 rounded-lg font-medium hover:bg-red-100 transition-colors flex items-center justify-center space-x-2">
+            <button 
+              onClick={onReject}
+              disabled={isProcessing}
+              className="w-full px-4 py-2.5 bg-red-50 text-red-700 rounded-lg font-medium hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2"
+            >
               <XCircle className="w-4 h-4" />
-              <span>Rejeter</span>
+              <span>{isProcessing ? 'Rejet...' : 'Rejeter'}</span>
             </button>
           </div>
         </div>

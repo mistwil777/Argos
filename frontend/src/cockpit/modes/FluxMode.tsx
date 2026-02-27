@@ -2,7 +2,8 @@
 import { useState } from 'react';
 import { useItems } from '../../hooks/useApi';
 import { useCockpit } from '../context/CockpitContext';
-import { Clock, AlertCircle, CheckCircle, Sparkles } from 'lucide-react';
+import { Clock, AlertCircle, CheckCircle, Sparkles, FileText } from 'lucide-react';
+import { CockpitHeader } from '../components/CockpitHeader';
 import type { Item } from '../../types';
 
 export function FluxMode() {
@@ -30,6 +31,13 @@ export function FluxMode() {
 
   return (
     <div className="h-full flex flex-col">
+      {/* Header */}
+      <CockpitHeader 
+        title="Flux d'items"
+        subtitle="Classez et organisez vos sources d'information"
+        icon={<FileText className="w-8 h-8 text-blue-300" />}
+      />
+      
       {/* Filters Bar */}
       <div className="h-14 bg-white border-b border-gray-200 flex items-center px-4 space-x-3">
         <button
@@ -70,7 +78,7 @@ export function FluxMode() {
 
         {/* Actions rapides */}
         {statusFilter === 'pending' && items.length > 0 && (
-          <button className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center space-x-2">
+          <button className="cockpit-btn cockpit-btn-primary cockpit-btn-sm">
             <Sparkles className="w-4 h-4" />
             <span>Classifier tout</span>
           </button>
@@ -113,40 +121,40 @@ function ItemCard({ item, onClick }: ItemCardProps) {
   return (
     <div
       onClick={onClick}
-      className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-lg hover:scale-[1.02] transition-all cursor-pointer group"
+      className="cockpit-card rounded-xl p-5 hover:scale-[1.02] transition-all cursor-pointer group shadow-lg"
     >
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center space-x-2 flex-1 mr-2">
           {isPending && (
-            <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
+            <div className="w-2 h-2 bg-orange-500 rounded-full cockpit-indicator-active" />
           )}
           {isClassified && (
             <div className="w-2 h-2 bg-green-500 rounded-full" />
           )}
-          <h3 className="font-semibold text-gray-900 line-clamp-2 group-hover:text-blue-600 transition-colors">
+          <h3 className="font-semibold text-gray-100 line-clamp-2 group-hover:text-blue-300 transition-colors">
             {item.title}
           </h3>
         </div>
         
         {item.importance && (
-          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold flex-shrink-0 ${
-            item.importance === 'High' ? 'bg-red-100 text-red-700' :
-            item.importance === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
-            'bg-gray-100 text-gray-600'
+          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold flex-shrink-0 border ${
+            item.importance === 'High' ? 'bg-red-900/40 text-red-300 border-red-600/40' :
+            item.importance === 'Medium' ? 'bg-yellow-900/40 text-yellow-300 border-yellow-600/40' :
+            'bg-gray-800/40 text-gray-400 border-gray-600/40'
           }`}>
             {item.importance}
           </span>
         )}
       </div>
 
-      <p className="text-sm text-gray-600 line-clamp-3 mb-4 leading-relaxed">
+      <p className="text-sm text-gray-400 line-clamp-3 mb-4 leading-relaxed">
         {item.summary}
       </p>
 
       <div className="flex items-center justify-between text-xs">
         <div className="flex items-center space-x-2">
           {item.item_type && (
-            <span className="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-full font-medium">
+            <span className="px-2.5 py-1 bg-blue-900/40 text-blue-300 rounded-full font-medium border border-blue-600/30">
               {item.item_type}
             </span>
           )}
@@ -154,7 +162,7 @@ function ItemCard({ item, onClick }: ItemCardProps) {
             <span className="text-gray-500">{item.source_type}</span>
           )}
         </div>
-        <span className="text-gray-400">
+        <span className="text-gray-500">
           {new Date(item.created_at).toLocaleDateString('fr-FR', { 
             day: 'numeric', 
             month: 'short' 
@@ -167,13 +175,13 @@ function ItemCard({ item, onClick }: ItemCardProps) {
           {item.topics.slice(0, 3).map((topic: string, idx: number) => (
             <span
               key={idx}
-              className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded"
+              className="text-xs px-2 py-0.5 bg-gray-800/50 text-gray-400 rounded border border-gray-700/30"
             >
               {topic}
             </span>
           ))}
           {item.topics.length > 3 && (
-            <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded">
+            <span className="text-xs px-2 py-0.5 bg-gray-800/50 text-gray-500 rounded border border-gray-700/30">
               +{item.topics.length - 3}
             </span>
           )}

@@ -45,13 +45,13 @@ export function ItemInspector({ itemId }: ItemInspectorProps) {
   };
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col bg-gradient-to-b from-[#0f1420]/80 to-[#1a1e2e]/80 backdrop-blur-sm">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200">
+      <div className="p-4 border-b border-blue-900/30">
         <div className="flex items-start space-x-2 mb-2">
-          {isPending && <div className="w-2 h-2 bg-orange-500 rounded-full mt-2" />}
+          {isPending && <div className="w-2 h-2 bg-orange-500 rounded-full mt-2 cockpit-indicator-active" />}
           {isClassified && <div className="w-2 h-2 bg-green-500 rounded-full mt-2" />}
-          <h2 className="text-lg font-semibold text-gray-900 flex-1">{item.title}</h2>
+          <h2 className="text-lg font-semibold text-gray-100 flex-1">{item.title}</h2>
         </div>
         
         {item.importance && (
@@ -69,40 +69,40 @@ export function ItemInspector({ itemId }: ItemInspectorProps) {
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
         {/* Résumé */}
         <div>
-          <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Résumé</h3>
-          <p className="text-sm text-gray-700 leading-relaxed">{item.summary}</p>
+          <h3 className="text-xs font-semibold text-blue-400 uppercase mb-2">Résumé</h3>
+          <p className="text-sm text-gray-200 leading-relaxed">{item.summary}</p>
         </div>
 
         {/* Métadonnées */}
         <div>
-          <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Métadonnées</h3>
+          <h3 className="text-xs font-semibold text-blue-400 uppercase mb-2">Métadonnées</h3>
           <div className="space-y-2 text-sm">
             {item.item_type && (
               <div className="flex items-center space-x-2">
-                <FileText className="w-4 h-4 text-gray-400" />
-                <span className="text-gray-600">Type:</span>
-                <span className="font-medium text-gray-900">{item.item_type}</span>
+                <FileText className="w-4 h-4 text-blue-400" />
+                <span className="text-gray-400">Type:</span>
+                <span className="font-medium text-gray-100">{item.item_type}</span>
               </div>
             )}
             <div className="flex items-center space-x-2">
-              <Calendar className="w-4 h-4 text-gray-400" />
-              <span className="text-gray-600">Date:</span>
-              <span className="font-medium text-gray-900">
+              <Calendar className="w-4 h-4 text-blue-400" />
+              <span className="text-gray-400">Date:</span>
+              <span className="font-medium text-gray-100">
                 {new Date(item.created_at).toLocaleDateString('fr-FR')}
               </span>
             </div>
             {item.source_type && (
               <div className="flex items-center space-x-2">
-                <LinkIcon className="w-4 h-4 text-gray-400" />
-                <span className="text-gray-600">Source:</span>
-                <span className="font-medium text-gray-900">{item.source_type}</span>
+                <LinkIcon className="w-4 h-4 text-blue-400" />
+                <span className="text-gray-400">Source:</span>
+                <span className="font-medium text-gray-100">{item.source_type}</span>
               </div>
             )}
             {item.confidence_score !== undefined && (
               <div className="flex items-center space-x-2">
-                <TrendingUp className="w-4 h-4 text-gray-400" />
-                <span className="text-gray-600">Confiance:</span>
-                <span className="font-medium text-gray-900">
+                <TrendingUp className="w-4 h-4 text-blue-400" />
+                <span className="text-gray-400">Confiance:</span>
+                <span className="font-medium text-gray-100">
                   {(item.confidence_score * 100).toFixed(0)}%
                 </span>
               </div>
@@ -113,12 +113,12 @@ export function ItemInspector({ itemId }: ItemInspectorProps) {
         {/* Topics */}
         {item.topics && item.topics.length > 0 && (
           <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Topics</h3>
+            <h3 className="text-xs font-semibold text-blue-400 uppercase mb-2">Topics</h3>
             <div className="flex flex-wrap gap-2">
               {item.topics.map((topic: string, idx: number) => (
                 <span
                   key={idx}
-                  className="px-2 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-medium"
+                  className="px-2 py-1 bg-blue-900/40 text-blue-200 border border-blue-700/40 rounded-full text-xs font-medium"
                 >
                   {topic}
                 </span>
@@ -130,20 +130,20 @@ export function ItemInspector({ itemId }: ItemInspectorProps) {
         {/* Subject */}
         {item.subject && (
           <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Sujet</h3>
-            <p className="text-sm text-gray-700">{item.subject}</p>
+            <h3 className="text-xs font-semibold text-blue-400 uppercase mb-2">Sujet</h3>
+            <p className="text-sm text-gray-200">{item.subject}</p>
           </div>
         )}
       </div>
 
       {/* Actions */}
-      <div className="p-4 border-t border-gray-200 space-y-2">
+      <div className="p-4 border-t border-blue-900/30 space-y-2">
         {isPending && (
           <>
             <button
               onClick={handleClassify}
               disabled={classifyMutation.isPending}
-              className="w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+              className="w-full cockpit-btn cockpit-btn-primary"
             >
               <Sparkles className="w-4 h-4" />
               <span>{classifyMutation.isPending ? 'Classification...' : 'Classifier'}</span>
@@ -151,7 +151,7 @@ export function ItemInspector({ itemId }: ItemInspectorProps) {
             <button
               onClick={handleDelete}
               disabled={deleteMutation.isPending}
-              className="w-full px-4 py-2.5 bg-red-50 text-red-700 rounded-lg font-medium hover:bg-red-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+              className="w-full cockpit-btn cockpit-btn-danger"
             >
               <XCircle className="w-4 h-4" />
               <span>{deleteMutation.isPending ? 'Suppression...' : 'Supprimer'}</span>
@@ -164,7 +164,7 @@ export function ItemInspector({ itemId }: ItemInspectorProps) {
             <button
               onClick={handleGenerate}
               disabled={generateMutation.isPending}
-              className="w-full px-4 py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+              className="w-full cockpit-btn cockpit-btn-success"
             >
               <BookOpen className="w-4 h-4" />
               <span>{generateMutation.isPending ? 'Génération...' : 'Générer document'}</span>
@@ -172,7 +172,7 @@ export function ItemInspector({ itemId }: ItemInspectorProps) {
             <button
               onClick={handleDelete}
               disabled={deleteMutation.isPending}
-              className="w-full px-4 py-2.5 bg-red-50 text-red-700 rounded-lg font-medium hover:bg-red-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+              className="w-full cockpit-btn cockpit-btn-danger"
             >
               <XCircle className="w-4 h-4" />
               <span>{deleteMutation.isPending ? 'Suppression...' : 'Supprimer'}</span>

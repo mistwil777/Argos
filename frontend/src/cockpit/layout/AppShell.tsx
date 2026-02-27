@@ -26,12 +26,15 @@ export function AppShell() {
   }, []);
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
+    <div className="flex h-screen overflow-hidden relative bg-gradient-to-br from-[#0a0e1a] via-[#0f1420] to-[#1a1e2e] cockpit-scanlines">
+      {/* Ambient glow effect */}
+      <div className="absolute inset-0 bg-gradient-radial from-blue-900/5 via-transparent to-transparent pointer-events-none"></div>
+      
       {/* Left Rail - Navigation minimale */}
       <LeftRail onOpenCommandPalette={() => setCommandPaletteOpen(true)} />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden relative z-10">
         {/* Top Bar */}
         <TopBar />
 

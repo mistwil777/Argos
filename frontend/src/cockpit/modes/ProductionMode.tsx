@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useCourses } from '../../hooks/useApi';
 import { useCockpit } from '../context/CockpitContext';
 import { BookOpen, CheckCircle, FileText, AlertTriangle } from 'lucide-react';
+import { CockpitHeader } from '../components/CockpitHeader';
 import type { Course } from '../../types';
 
 export function ProductionMode() {
@@ -30,24 +31,31 @@ export function ProductionMode() {
 
   return (
     <div className="h-full flex flex-col">
+      {/* Header */}
+      <CockpitHeader 
+        title="Production de documents"
+        subtitle="Gérez vos cours et documents générés"
+        icon={<BookOpen className="w-8 h-8 text-blue-300" />}
+      />
+      
       {/* Filters Bar */}
-      <div className="h-14 bg-white border-b border-gray-200 flex items-center px-4 space-x-3">
+      <div className="h-14 bg-gradient-to-r from-[#0f1420]/40 to-[#1a1e2e]/40 backdrop-blur-sm border-b border-blue-900/30 flex items-center px-4 space-x-3">
         <button
           onClick={() => setStatusFilter('all')}
-          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all border ${
             statusFilter === 'all'
-              ? 'bg-gray-900 text-white'
-              : 'text-gray-600 hover:bg-gray-100'
+              ? 'bg-blue-600/40 text-blue-200 border-blue-500/50 shadow-lg shadow-blue-500/20'
+              : 'text-gray-400 hover:bg-blue-900/20 hover:text-blue-300 border-transparent hover:border-blue-700/30'
           }`}
         >
           Tout
         </button>
         <button
           onClick={() => setStatusFilter('draft')}
-          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 ${
+          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center space-x-2 border ${
             statusFilter === 'draft'
-              ? 'bg-gray-500 text-white'
-              : 'text-gray-600 hover:bg-gray-100'
+              ? 'bg-gray-500/40 text-gray-200 border-gray-500/50 shadow-lg shadow-gray-500/20'
+              : 'text-gray-400 hover:bg-gray-700/20 hover:text-gray-300 border-transparent hover:border-gray-700/30'
           }`}
         >
           <FileText className="w-4 h-4" />
@@ -55,10 +63,10 @@ export function ProductionMode() {
         </button>
         <button
           onClick={() => setStatusFilter('review')}
-          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 ${
+          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center space-x-2 border ${
             statusFilter === 'review'
-              ? 'bg-orange-500 text-white'
-              : 'text-gray-600 hover:bg-gray-100'
+              ? 'bg-orange-500/40 text-orange-200 border-orange-500/50 shadow-lg shadow-orange-500/20'
+              : 'text-gray-400 hover:bg-orange-900/20 hover:text-orange-300 border-transparent hover:border-orange-700/30'
           }`}
         >
           <AlertTriangle className="w-4 h-4" />
@@ -66,10 +74,10 @@ export function ProductionMode() {
         </button>
         <button
           onClick={() => setStatusFilter('published')}
-          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 ${
+          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center space-x-2 border ${
             statusFilter === 'published'
-              ? 'bg-green-500 text-white'
-              : 'text-gray-600 hover:bg-gray-100'
+              ? 'bg-green-500/40 text-green-200 border-green-500/50 shadow-lg shadow-green-500/20'
+              : 'text-gray-400 hover:bg-green-900/20 hover:text-green-300 border-transparent hover:border-green-700/30'
           }`}
         >
           <CheckCircle className="w-4 h-4" />
@@ -80,7 +88,7 @@ export function ProductionMode() {
         <div className="flex-1" />
 
         {/* Template filter */}
-        <select className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <select className="px-3 py-1.5 bg-[#0f1420]/60 border border-blue-800/30 rounded-lg text-sm text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/50 hover:bg-[#1a1e2e]/60 transition-colors">
           <option value="">Tous les templates</option>
           <option value="course">Course</option>
           <option value="guide">Guide</option>
@@ -125,27 +133,27 @@ function DocCard({ course, onClick }: DocCardProps) {
   return (
     <div
       onClick={onClick}
-      className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-lg hover:scale-[1.02] transition-all cursor-pointer group flex flex-col"
+      className="cockpit-card rounded-xl p-5 hover:scale-[1.02] transition-all cursor-pointer group flex flex-col shadow-lg"
     >
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center space-x-2 flex-1">
-          <BookOpen className="w-5 h-5 text-blue-600 flex-shrink-0" />
-          <h3 className="font-semibold text-gray-900 line-clamp-2 group-hover:text-blue-600 transition-colors">
+          <BookOpen className="w-5 h-5 text-blue-400 flex-shrink-0" />
+          <h3 className="font-semibold text-gray-100 line-clamp-2 group-hover:text-blue-300 transition-colors">
             {course.title}
           </h3>
         </div>
       </div>
 
-      <p className="text-sm text-gray-600 line-clamp-3 mb-4 leading-relaxed flex-1">
+      <p className="text-sm text-gray-400 line-clamp-3 mb-4 leading-relaxed flex-1">
         {course.description}
       </p>
 
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-            isPublished ? 'bg-green-100 text-green-700' :
-            isReview ? 'bg-orange-100 text-orange-700' :
-            'bg-gray-100 text-gray-600'
+          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${
+            isPublished ? 'bg-green-900/40 text-green-300 border-green-600/40' :
+            isReview ? 'bg-orange-900/40 text-orange-300 border-orange-600/40' :
+            'bg-gray-800/40 text-gray-400 border-gray-600/40'
           }`}>
             {course.status}
           </span>

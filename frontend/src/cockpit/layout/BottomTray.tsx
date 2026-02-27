@@ -11,13 +11,13 @@ export function BottomTray() {
   const costToday = stats?.cost_this_month || 0;
 
   return (
-    <div className="h-12 bg-gray-900 text-white flex items-center justify-between px-6 border-t border-gray-800">
+    <div className="h-12 bg-gradient-to-r from-[#0a0e1a]/90 to-[#0f1420]/90 backdrop-blur-md text-white flex items-center justify-between px-6 border-t border-blue-900/30 shadow-2xl">
       {/* Left: System status */}
       <div className="flex items-center space-x-6">
-        <button className="flex items-center space-x-2 hover:bg-gray-800 px-3 py-1.5 rounded-lg transition-colors group">
+        <button className="flex items-center space-x-2 hover:bg-green-900/20 px-3 py-1.5 rounded-lg transition-colors group border border-transparent hover:border-green-600/30">
           <CheckCircle className="w-4 h-4 text-green-400" />
-          <span className="text-sm font-medium">Sources actives</span>
-          <span className="text-xs bg-gray-800 group-hover:bg-gray-700 px-2 py-0.5 rounded-full font-bold">{sourcesTotal}</span>
+          <span className="text-sm font-medium text-gray-300">Sources actives</span>
+          <span className="text-xs bg-green-900/40 group-hover:bg-green-900/60 px-2 py-0.5 rounded-full font-bold text-green-300 border border-green-600/30">{sourcesTotal}</span>
         </button>
         
         {sourcesError > 0 && (

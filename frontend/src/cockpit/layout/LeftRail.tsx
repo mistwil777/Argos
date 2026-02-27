@@ -72,13 +72,22 @@ export function LeftRail({ onOpenCommandPalette }: LeftRailProps) {
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Command Palette trigger */}
+      {/* Command Palette trigger - HIGHLY VISIBLE */}
       <button
         onClick={onOpenCommandPalette}
-        className="w-12 h-12 rounded-xl flex items-center justify-center text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"
+        className="relative w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-blue-600/30 to-purple-600/30 border-2 border-blue-500/50 hover:border-blue-400 transition-all hover:scale-110 group shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50"
         title="Command Palette (⌘K)"
       >
-        <Command className="w-5 h-5" />
+        <Command className="w-6 h-6 text-blue-300 group-hover:text-blue-100 transition-colors drop-shadow-lg" />
+        
+        {/* Pulse animation ring */}
+        <div className="absolute inset-0 rounded-xl border-2 border-blue-400 animate-ping opacity-20" />
+        
+        {/* Tooltip */}
+        <div className="absolute left-16 px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity z-50 font-semibold shadow-xl">
+          ⌘K
+          <div className="absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2 w-2 h-2 bg-blue-600 rotate-45"></div>
+        </div>
       </button>
     </div>
   );
