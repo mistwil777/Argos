@@ -256,7 +256,7 @@ async def list_items(
 async def get_item(item_id: int):
     """Get a single item by ID."""
     try:
-        item = db.get_item(item_id)
+        item = db.get_item_by_id(item_id)
         if not item:
             raise HTTPException(status_code=404, detail="Item not found")
         return item
