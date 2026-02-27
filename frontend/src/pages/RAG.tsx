@@ -4,7 +4,14 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { MessageSquare, Send, Clock, Trash2, ExternalLink, BookOpen } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import { Source } from '../types';
+
+// Temporary inline type definition to fix import issue
+interface Source {
+  course_id: number;
+  title: string;
+  chunk_text: string;
+  _distance?: number;
+}
 
 interface RAGProps {
   addToast?: (message: string, type?: 'success' | 'error' | 'info' | 'loading', duration?: number) => string;

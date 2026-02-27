@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Layout } from './components/layout/Layout';
 import { Dashboard } from './pages/Dashboard';
+import { Workspaces } from './pages/Workspaces';
 import Items from './pages/Items';
 import Courses from './pages/Courses';
 import RAG from './pages/RAG';
@@ -11,9 +12,10 @@ import Admin from './pages/Admin';
 import Sources from './pages/Sources';
 import Guide from './pages/Guide';
 import TestPage from './pages/TestPage';
-import { Workspaces } from './pages/Workspaces';
 import { useToast } from './hooks/useToast';
 import { ToastContainer } from './components/ui/Toast';
+
+console.log('📱 App.tsx loaded');
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -25,8 +27,12 @@ const queryClient = new QueryClient({
   },
 });
 
+console.log('🔧 QueryClient created');
+
 function App() {
+  console.log('🎨 App component rendering');
   const { toasts, addToast, removeToast } = useToast();
+  console.log('📋 Toasts initialized');
 
   return (
     <QueryClientProvider client={queryClient}>

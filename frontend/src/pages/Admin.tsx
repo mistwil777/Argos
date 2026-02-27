@@ -28,7 +28,7 @@ export default function Admin() {
             </div>
             <div className="flex justify-between items-center py-2">
               <span className="text-gray-600">Nom</span>
-              <span className="text-gray-900 font-medium">academiaops</span>
+              <span className="text-gray-900 font-medium">veilleops</span>
             </div>
           </div>
         </Card>

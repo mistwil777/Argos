@@ -22,7 +22,7 @@ export const Dashboard = () => {
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Vue d'ensemble de votre système AcademiaOps
+          Vue d'ensemble de votre système VeilleOps
         </p>
       </div>
 
@@ -31,7 +31,7 @@ export const Dashboard = () => {
         <div className="flex items-start gap-4">
           <Sparkles className="h-8 w-8 text-purple-600 flex-shrink-0 mt-1" />
           <div className="flex-1">
-            <h2 className="text-xl font-bold text-gray-900 mb-3">🚀 Comment utiliser AcademiaOps</h2>
+            <h2 className="text-xl font-bold text-gray-900 mb-3">🚀 Comment utiliser VeilleOps</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Link to="/items" className="group bg-white rounded-lg p-4 hover:shadow-md transition-shadow border border-gray-200">
                 <div className="flex items-center gap-3 mb-2">

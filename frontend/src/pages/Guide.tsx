@@ -49,7 +49,7 @@ export default function Guide() {
           {activeSection === 'introduction' && (
             <div className="prose prose-sm max-w-none">
               <h1 className="text-3xl font-bold text-gray-900 mb-4">
-                🎓 Guide d'Utilisation - AcademiaOps
+                🎓 Guide d'Utilisation - VeilleOps
               </h1>
               
               <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
@@ -58,7 +58,7 @@ export default function Guide() {
                   <div>
                     <h3 className="text-sm font-medium text-blue-900">Bienvenue !</h3>
                     <p className="mt-1 text-sm text-blue-800">
-                      AcademiaOps est une plateforme de veille technologique intelligente qui automatise
+                      VeilleOps est une plateforme de veille technologique intelligente qui automatise
                       la collecte, l'analyse et la transformation de contenus techniques en cours pédagogiques.
                     </p>
                   </div>
@@ -260,7 +260,7 @@ export default function Guide() {
                 <h3 className="font-semibold text-gray-900 mb-2">Variables d'environnement requises</h3>
                 <div className="bg-gray-900 text-gray-100 p-4 rounded font-mono text-xs overflow-x-auto">
                   <pre>{`# .env
-DATABASE_URL=postgresql://academiaops:devpassword123@localhost:5432/academiaops
+DATABASE_URL=postgresql://veilleops:devpassword123@localhost:5432/veilleops
 OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=sk-ant-...
 LANCEDB_PATH=./data/lancedb
@@ -635,7 +635,7 @@ Question utilisateur
               <h1 className="text-3xl font-bold text-gray-900 mb-4">🔌 API & Intégrations</h1>
               
               <p className="text-gray-700 mb-6">
-                Le backend expose une API REST complète pour intégrer AcademiaOps dans vos workflows.
+                Le backend expose une API REST complète pour intégrer VeilleOps dans vos workflows.
               </p>
 
               <h2 className="text-2xl font-bold text-gray-900 mt-8 mb-4">📡 Endpoints Principaux</h2>

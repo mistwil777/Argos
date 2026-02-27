@@ -4,8 +4,23 @@ import './index.css'
 import './styles/animations.css'
 import App from './App.tsx'
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+console.log('🚀 Main.tsx loaded');
+
+const rootElement = document.getElementById('root');
+console.log('🎯 Root element:', rootElement);
+
+if (!rootElement) {
+  console.error('❌ Root element not found!');
+} else {
+  console.log('✅ Creating React root...');
+  try {
+    createRoot(rootElement).render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    );
+    console.log('✅ React app rendered');
+  } catch (error) {
+    console.error('❌ Error rendering React app:', error);
+  }
+}
