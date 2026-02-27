@@ -7,15 +7,24 @@ interface ItemInspectorProps {
 }
 
 export function ItemInspector({ itemId }: ItemInspectorProps) {
-  const { data: item, isLoading } = useItem(itemId);
+  const { data: item, isLoading, isError, error } = useItem(itemId);
   const classifyMutation = useClassifyItem();
   const deleteMutation = useDeleteItem();
   const generateMutation = useGenerateCourse();
 
-  if (isLoading || !item) {
+  if (isLoading) {
     return (
-      <div className="p-4 text-gray-500 text-sm">
-        Chargement...
+      <div className="p-4 text-gray-500 text-sm flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (isError || !item) {
+    return (
+      <div className="p-4 text-red-500 text-sm">
+        <p className="font-medium mb-2">Erreur de chargement</p>
+        <p className="text-xs text-gray-500">{error?.message || 'Item introuvable'}</p>
       </div>
     );
   }

@@ -8,16 +8,25 @@ interface DocInspectorProps {
 }
 
 export function DocInspector({ docId }: DocInspectorProps) {
-  const { data: course, isLoading } = useCourse(docId);
+  const { data: course, isLoading, isError, error } = useCourse(docId);
   const { data: contentData } = useCourseContent(docId);
   const publishMutation = usePublishCourse();
   const deleteMutation = useDeleteCourse();
   const [showContent, setShowContent] = useState(false);
 
-  if (isLoading || !course) {
+  if (isLoading) {
     return (
-      <div className="p-4 text-gray-500 text-sm">
-        Chargement...
+      <div className="p-4 text-gray-500 text-sm flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (isError || !course) {
+    return (
+      <div className="p-4 text-red-500 text-sm">
+        <p className="font-medium mb-2">Erreur de chargement</p>
+        <p className="text-xs text-gray-500">{error?.message || 'Document introuvable'}</p>
       </div>
     );
   }

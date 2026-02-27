@@ -1,75 +1,50 @@
 // BottomTray - Barre inférieure pour jobs, alertes, coûts
-import { Loader2, AlertTriangle, DollarSign } from 'lucide-react';
-import { useState } from 'react';
-
-interface Job {
-  id: string;
-  type: 'classification' | 'generation' | 'rag';
-  label: string;
-  progress: number;
-  total: number;
-}
+import { DollarSign, CheckCircle, XCircle, Activity } from 'lucide-react';
+import { useGlobalStats } from '../../hooks/useApi';
 
 export function BottomTray() {
-  // TODO: Récupérer les jobs actifs via un hook
-  const [jobs] = useState<Job[]>([]);  // TODO: connect to real jobs API
-  const [alerts] = useState<Array<{ id: string; message: string }>>([]); // TODO: connect to alerts
+  const { data: stats } = useGlobalStats();
 
-  const hasActiveJobs = jobs.length > 0;
-  const hasAlerts = alerts.length > 0;
+  const sourcesTotal = 15; // TODO: get from API
+  const sourcesError = 2;  // TODO: get from API
+  const jobsActive = 0;    // TODO: get from API
+  const costToday = stats?.cost_this_month || 0;
 
-  // Si rien à afficher, barre compacte
-  if (!hasActiveJobs && !hasAlerts) {
-    return (
-      <div className="h-10 bg-gray-900 text-gray-400 flex items-center justify-between px-4 text-xs">
-        <div className="flex items-center space-x-4">
-          <span>Ready</span>
-        </div>
-        <div className="flex items-center space-x-2">
-          <DollarSign className="w-3 h-3" />
-          <span>$0.42 today</span>
-        </div>
-      </div>
-    );
-  }
-
-  // Barre étendue avec jobs/alertes
   return (
-    <div className="bg-gray-900 text-white">
-      {/* Jobs actifs */}
-      {hasActiveJobs && (
-        <div className="border-b border-gray-800">
-          {jobs.map((job) => (
-            <div key={job.id} className="px-4 py-2 flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
-                <span className="text-sm">{job.label}</span>
-                <span className="text-xs text-gray-400">
-                  {job.progress}/{job.total}
-                </span>
-              </div>
-              <div className="w-32 h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-blue-500 transition-all duration-300"
-                  style={{ width: `${(job.progress / job.total) * 100}%` }}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+    <div className="h-12 bg-gray-900 text-white flex items-center justify-between px-6 border-t border-gray-800">
+      {/* Left: System status */}
+      <div className="flex items-center space-x-6">
+        <button className="flex items-center space-x-2 hover:bg-gray-800 px-3 py-1.5 rounded-lg transition-colors group">
+          <CheckCircle className="w-4 h-4 text-green-400" />
+          <span className="text-sm font-medium">Sources actives</span>
+          <span className="text-xs bg-gray-800 group-hover:bg-gray-700 px-2 py-0.5 rounded-full font-bold">{sourcesTotal}</span>
+        </button>
+        
+        {sourcesError > 0 && (
+          <button className="flex items-center space-x-2 hover:bg-red-900/20 px-3 py-1.5 rounded-lg transition-colors group">
+            <XCircle className="w-4 h-4 text-red-400" />
+            <span className="text-sm font-medium">Sources en erreur</span>
+            <span className="text-xs bg-red-900/40 group-hover:bg-red-900/60 px-2 py-0.5 rounded-full font-bold">{sourcesError}</span>
+          </button>
+        )}
+        
+        {jobsActive > 0 && (
+          <button className="flex items-center space-x-2 hover:bg-blue-900/20 px-3 py-1.5 rounded-lg transition-colors group">
+            <Activity className="w-4 h-4 text-blue-400 animate-pulse" />
+            <span className="text-sm font-medium">Jobs actifs</span>
+            <span className="text-xs bg-blue-900/40 group-hover:bg-blue-900/60 px-2 py-0.5 rounded-full font-bold">{jobsActive}</span>
+          </button>
+        )}
+      </div>
 
-      {/* Alertes */}
-      {hasAlerts && (
-        <div className="border-b border-gray-800">
-          {alerts.map((alert) => (
-            <div key={alert.id} className="px-4 py-2 flex items-center space-x-3 bg-orange-900/20">
-              <AlertTriangle className="w-4 h-4 text-orange-400" />
-              <span className="text-sm">{alert.message}</span>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Right: Cost */}
+      <div className="flex items-center space-x-2 text-gray-400">
+        <DollarSign className="w-4 h-4" />
+        <span className="text-sm font-medium">${costToday.toFixed(2)}</span>
+        <span className="text-xs">today</span>
+      </div>
     </div>
   );
+
+
 }

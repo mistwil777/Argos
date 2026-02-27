@@ -1,6 +1,6 @@
 // TopBar - Barre supérieure avec stats, workspace selector, user
 import { useGlobalStats } from '../../hooks/useApi';
-import { Bell, ChevronDown, DollarSign, Clock } from 'lucide-react';
+import { Bell, DollarSign, Clock } from 'lucide-react';
 
 export function TopBar() {
   const { data: stats } = useGlobalStats();
@@ -26,13 +26,12 @@ export function TopBar() {
         </div>
       </div>
 
-      {/* Right: Workspace + User */}
+      {/* Right: User section */}
       <div className="flex items-center space-x-3">
-        {/* Workspace Selector */}
-        <button className="flex items-center space-x-2 px-3 py-1.5 hover:bg-gray-100 rounded-lg transition-colors">
-          <span className="text-sm font-medium">Général</span>
-          <ChevronDown className="w-4 h-4 text-gray-400" />
-        </button>
+        {/* Workspace Selector - Disabled for now */}
+        <div className="flex items-center space-x-2 px-3 py-1.5 bg-gray-50 rounded-lg border border-gray-200">
+          <span className="text-sm font-medium text-gray-700">Général</span>
+        </div>
 
         {/* Notifications */}
         <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors relative">
