@@ -49,19 +49,25 @@ Extract structured information in JSON format with these fields:
 
 4. **reasoning** (string): Brief explanation (1-2 sentences) justifying your classification.
 
+5. **summary_fr** (string): A clear and concise summary (2-3 sentences) of the item's content IN FRENCH. 
+   Even if the original content is in English or another language, provide a French summary.
+   Focus on key points, technical details, and practical implications.
+
 **Examples:**
 {{
     "topics": ["LLM", "Agents", "RAG"],
     "importance": "high",
     "item_type": "innovation",
-    "reasoning": "New agent framework with built-in RAG capabilities, significant for production AI systems."
+    "reasoning": "New agent framework with built-in RAG capabilities, significant for production AI systems.",
+    "summary_fr": "Nouveau framework d'agents IA avec capacités RAG intégrées, permettant de construire des systèmes d'IA plus performants en production. Combine la génération de langage avec la recherche de documents pertinents pour des réponses plus précises et contextuelles."
 }}
 
 {{
     "topics": ["Python", "Tutorial"],
     "importance": "medium",
     "item_type": "tutorial",
-    "reasoning": "Practical guide for implementing a common pattern, useful reference for developers."
+    "reasoning": "Practical guide for implementing a common pattern, useful reference for developers.",
+    "summary_fr": "Guide pratique expliquant comment implémenter un pattern courant en Python. Fournit des exemples de code et des bonnes pratiques pour les développeurs."
 }}
 
 **Output format (JSON only, no markdown code blocks):**
@@ -69,7 +75,8 @@ Extract structured information in JSON format with these fields:
     "topics": ["topic1", "topic2"],
     "importance": "high",
     "item_type": "innovation",
-    "reasoning": "Your explanation here."
+    "reasoning": "Your explanation here.",
+    "summary_fr": "Résumé en français ici."
 }}"""
 
 
@@ -81,7 +88,7 @@ class ClassifierService:
         llm_provider: LLMProvider,
         db_manager: DatabaseManager,
         temperature: float = 0.3,
-        max_tokens: int = 500
+        max_tokens: int = 800
     ):
         """
         Initialize ClassifierService.
@@ -159,6 +166,7 @@ class ClassifierService:
             "importance": classification["importance"],
             "item_type": classification["item_type"],
             "reasoning": classification["reasoning"],
+            "summary_fr": classification.get("summary_fr", ""),
             "model": model_name,
             "tokens_used": tokens_total,
             "cost_usd": round(cost_usd, 6),
@@ -367,6 +375,12 @@ class ClassifierService:
         if not isinstance(classification["reasoning"], str) or len(classification["reasoning"]) < 10:
             raise ValueError("Reasoning must be a string with at least 10 characters")
         
+        # Validate summary_fr if present (optional for backward compatibility)
+        if "summary_fr" in classification:
+            if not isinstance(classification["summary_fr"], str) or len(classification["summary_fr"]) < 20:
+                logger.warning(f"summary_fr is too short or invalid, ignoring: {classification.get('summary_fr')}")
+                classification["summary_fr"] = ""
+        
         logger.debug(f"Classification parsed and validated: {classification}")
         return classification
     
@@ -404,6 +418,14 @@ class ClassifierService:
             importance=importance_db,
             item_type=classification["item_type"]
         )
+        
+        # Update summary with French version if available
+        if "summary_fr" in classification and classification["summary_fr"]:
+            self.db.execute_query(
+                "UPDATE items SET summary = %s WHERE id = %s",
+                (classification["summary_fr"], item_id)
+            )
+            logger.info(f"Updated summary with French translation for item {item_id}")
         
         # TODO: Create items_topics table and enable this
         # Link topics

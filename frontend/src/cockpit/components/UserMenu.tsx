@@ -18,9 +18,54 @@ export function UserMenu() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const handleProfile = () => {
+    setIsOpen(false);
+    alert('Profil utilisateur\n\nNom: User\nEmail: user@entreprise.com\nRôle: Administrateur');
+  };
+
+  const handleSettings = () => {
+    setIsOpen(false);
+    alert('Paramètres\n\nCette section permettra de configurer:\n- Préférences d\'affichage\n- Notifications\n- Langue\n- Raccourcis clavier');
+  };
+
   const toggleTheme = () => {
-    setTheme(theme === 'dark' ? 'light' : 'dark');
-    // TODO: implémenter le changement de thème
+    const newTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+    // Apply theme change to document
+    if (newTheme === 'light') {
+      document.documentElement.classList.remove('dark');
+      alert('Mode clair activé\n\n⚠️ Le thème clair sera implémenté dans une prochaine version.');
+    } else {
+      document.documentElement.classList.add('dark');
+    }
+  };
+
+  const handleHelp = () => {
+    setIsOpen(false);
+    const helpText = `Aide & Raccourcis\n\n
+Navigation:
+⌘K - Ouvrir la palette de commandes
+Échap - Fermer les modals
+
+Modes:
+1-5 - Basculer entre les modes
+
+Actions:
+⌘S - Sauvegarder
+⌘Enter - Approuver (HITL)
+⌘Backspace - Rejeter
+
+Support: support@entreprise.com`;
+    alert(helpText);
+  };
+
+  const handleLogout = () => {
+    setIsOpen(false);
+    if (confirm('Êtes-vous sûr de vouloir vous déconnecter ?')) {
+      // TODO: Implémenter la déconnexion réelle
+      alert('Déconnexion...\n\n✅ Session terminée avec succès');
+      // window.location.href = '/login';
+    }
   };
 
   return (
@@ -62,12 +107,18 @@ export function UserMenu() {
 
           {/* Menu Items */}
           <div className="py-2">
-            <button className="w-full px-4 py-2.5 flex items-center space-x-3 hover:bg-blue-900/20 transition-colors text-gray-300 hover:text-blue-300 group">
+            <button 
+              onClick={handleProfile}
+              className="w-full px-4 py-2.5 flex items-center space-x-3 hover:bg-blue-900/20 transition-colors text-gray-300 hover:text-blue-300 group"
+            >
               <User className="w-4 h-4" />
               <span className="text-sm font-medium">Mon profil</span>
             </button>
             
-            <button className="w-full px-4 py-2.5 flex items-center space-x-3 hover:bg-blue-900/20 transition-colors text-gray-300 hover:text-blue-300 group">
+            <button 
+              onClick={handleSettings}
+              className="w-full px-4 py-2.5 flex items-center space-x-3 hover:bg-blue-900/20 transition-colors text-gray-300 hover:text-blue-300 group"
+            >
               <Settings className="w-4 h-4" />
               <span className="text-sm font-medium">Paramètres</span>
             </button>
@@ -82,7 +133,10 @@ export function UserMenu() {
               </span>
             </button>
 
-            <button className="w-full px-4 py-2.5 flex items-center space-x-3 hover:bg-blue-900/20 transition-colors text-gray-300 hover:text-blue-300 group">
+            <button 
+              onClick={handleHelp}
+              className="w-full px-4 py-2.5 flex items-center space-x-3 hover:bg-blue-900/20 transition-colors text-gray-300 hover:text-blue-300 group"
+            >
               <HelpCircle className="w-4 h-4" />
               <span className="text-sm font-medium">Aide & Support</span>
             </button>
@@ -90,7 +144,10 @@ export function UserMenu() {
 
           {/* Logout */}
           <div className="border-t border-blue-900/30 py-2">
-            <button className="w-full px-4 py-2.5 flex items-center space-x-3 hover:bg-red-900/20 transition-colors text-gray-300 hover:text-red-400 group">
+            <button 
+              onClick={handleLogout}
+              className="w-full px-4 py-2.5 flex items-center space-x-3 hover:bg-red-900/20 transition-colors text-gray-300 hover:text-red-400 group"
+            >
               <LogOut className="w-4 h-4" />
               <span className="text-sm font-medium">Déconnexion</span>
             </button>

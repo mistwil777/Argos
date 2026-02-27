@@ -1,6 +1,7 @@
 // ItemInspector - Panneau de détails pour un item sélectionné
 import { useItem, useClassifyItem, useDeleteItem, useGenerateCourse } from '../../../hooks/useApi';
 import { Sparkles, XCircle, FileText, Calendar, Link as LinkIcon, TrendingUp, BookOpen } from 'lucide-react';
+import { Preloader } from '../Preloader';
 
 interface ItemInspectorProps {
   itemId: number;
@@ -180,6 +181,11 @@ export function ItemInspector({ itemId }: ItemInspectorProps) {
           </>
         )}
       </div>
+
+      {/* Loading Animation */}
+      {classifyMutation.isPending && <Preloader message="Classification en cours" />}
+      {generateMutation.isPending && <Preloader message="Génération du document" />}
+      {deleteMutation.isPending && <Preloader message="Suppression" />}
     </div>
   );
 }
