@@ -1,25 +1,20 @@
-// Preloader - Animation de chargement
+// Preloader - Indicateur de tâche non-bloquant (coin bas-droite)
 interface PreloaderProps {
   message?: string;
 }
 
 export function Preloader({ message = "Chargement" }: PreloaderProps) {
   return (
-    <div className="fixed inset-0 bg-zinc-950/85 backdrop-blur-sm z-50 flex items-center justify-center">
-      <div className="flex flex-col items-center">
-        <div className="preloader">
-          <div className="preloader__square"></div>
-          <div className="preloader__square"></div>
-          <div className="preloader__square"></div>
-          <div className="preloader__square"></div>
-        </div>
-        <div className="status text-sm font-medium text-zinc-400">
-          {message}
-          <span className="status__dot">.</span>
-          <span className="status__dot">.</span>
-          <span className="status__dot">.</span>
-        </div>
+    <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 bg-zinc-900 border border-white/[0.08] rounded-xl shadow-2xl shadow-black/60">
+      {/* Animated spinner */}
+      <div className="w-4 h-4 rounded-full border-2 border-white/[0.08] border-t-sky-500 animate-spin shrink-0" />
+      <span className="text-xs font-medium text-zinc-300">{message}</span>
+      <div className="flex gap-0.5">
+        <span className="status__dot" style={{ color: 'rgb(113 113 122)' }}>.</span>
+        <span className="status__dot" style={{ color: 'rgb(113 113 122)' }}>.</span>
+        <span className="status__dot" style={{ color: 'rgb(113 113 122)' }}>.</span>
       </div>
     </div>
   );
 }
+

@@ -169,6 +169,47 @@ export const ragApi = {
   },
 };
 
+// Workspaces API (no /api/v1 prefix)
+export interface WorkspaceResponse {
+  id: number;
+  name: string;
+  slug: string;
+  description?: string;
+  domain?: string;
+  icon: string;
+  color: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at?: string;
+  stats?: Record<string, unknown>;
+}
+
+export interface WorkspaceCreate {
+  name: string;
+  description?: string;
+  domain?: string;
+  icon?: string;
+  color?: string;
+}
+
+export const workspacesApi = {
+  list: async (): Promise<WorkspaceResponse[]> => {
+    const { data } = await apiClient.get('/workspaces');
+    return data;
+  },
+  create: async (payload: WorkspaceCreate): Promise<WorkspaceResponse> => {
+    const { data } = await apiClient.post('/workspaces', payload);
+    return data;
+  },
+  update: async (id: number, payload: Partial<WorkspaceCreate>): Promise<WorkspaceResponse> => {
+    const { data } = await apiClient.patch(`/workspaces/${id}`, payload);
+    return data;
+  },
+  delete: async (id: number): Promise<void> => {
+    await apiClient.delete(`/workspaces/${id}`);
+  },
+};
+
 // HITL API
 export const hitlApi = {
   getPending: async (): Promise<{ items: Item[]; courses: Course[] }> => {

@@ -21,6 +21,8 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
   const { setActiveMode } = useCockpit();
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [showConfirmReject, setShowConfirmReject] = useState(false);
+  const [showClassifyInfo, setShowClassifyInfo] = useState(false);
 
   // Commandes disponibles
   const commands: Command[] = [
@@ -74,8 +76,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
       description: 'Lancer la classification en batch',
       icon: <Sparkles className="w-5 h-5" />,
       action: () => {
-        alert('Classification batch à implémenter');
-        onClose();
+        setShowClassifyInfo(true);
       },
       keywords: ['classify', 'batch', 'pending', 'all'],
     },
@@ -85,10 +86,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
       description: 'Nettoyage des items peu importants',
       icon: <XCircle className="w-5 h-5" />,
       action: () => {
-        if (confirm('Rejeter tous les items Low importance ?')) {
-          alert('Rejet batch à implémenter');
-        }
-        onClose();
+        setShowConfirmReject(true);
       },
       keywords: ['reject', 'low', 'importance', 'cleanup'],
     },
@@ -136,6 +134,60 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
   }, [query]);
 
   if (!isOpen) return null;
+
+  if (showConfirmReject) {
+    return (
+      <>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50" onClick={() => { setShowConfirmReject(false); onClose(); }} />
+        <div className="fixed top-1/4 left-1/2 -translate-x-1/2 w-full max-w-sm z-50">
+          <div className="bg-zinc-900 border border-white/[0.08] rounded-xl shadow-2xl shadow-black/50 p-6">
+            <XCircle className="w-8 h-8 text-red-400 mb-3" strokeWidth={1.5} />
+            <h3 className="text-sm font-semibold text-zinc-200 mb-2">Rejeter tous les items Low importance ?</h3>
+            <p className="text-xs text-zinc-600 mb-5">Cette action est irréversible. Tous les items marqués « low importance » seront rejetés.</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setShowConfirmReject(false); onClose(); }}
+                className="flex-1 cockpit-btn"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={() => {
+                  // TODO: implement batch reject
+                  setShowConfirmReject(false);
+                  onClose();
+                }}
+                className="flex-1 cockpit-btn cockpit-btn-danger"
+              >
+                Confirmer
+              </button>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if (showClassifyInfo) {
+    return (
+      <>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50" onClick={() => { setShowClassifyInfo(false); onClose(); }} />
+        <div className="fixed top-1/4 left-1/2 -translate-x-1/2 w-full max-w-sm z-50">
+          <div className="bg-zinc-900 border border-white/[0.08] rounded-xl shadow-2xl shadow-black/50 p-6">
+            <Sparkles className="w-8 h-8 text-sky-400 mb-3" strokeWidth={1.5} />
+            <h3 className="text-sm font-semibold text-zinc-200 mb-2">Classification batch</h3>
+            <p className="text-xs text-zinc-600 mb-5">Déclenchez la classification depuis le mode Flux — sélectionnez les items pending et cliquez sur « Classifier tout ».</p>
+            <button
+              onClick={() => { setShowClassifyInfo(false); setActiveMode('flux'); onClose(); }}
+              className="w-full cockpit-btn cockpit-btn-primary"
+            >
+              Aller au Flux
+            </button>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>

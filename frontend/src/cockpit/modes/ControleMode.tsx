@@ -29,7 +29,7 @@ export function ControleMode() {
     item_title: item.title || 'Sans titre',
     decision_type: 'classification',
     ai_suggestion: item.importance ? `${item.importance} importance - ${item.classification || 'Classifié'}` : 'En attente de classification',
-    confidence: item.confidence_score || 0.5,
+    confidence: item.confidence_score ?? 0,
     created_at: item.created_at,
   })) || [];
 
@@ -202,23 +202,27 @@ function HITLQueue({ decisions, onSelect, selectedDecision, comment, setComment,
 
             <div>
               <h3 className="text-[10px] font-semibold text-zinc-700 uppercase tracking-wider mb-1.5">Confiance</h3>
-              <div className="flex items-center gap-3">
-                <div className="flex-1">
-                  <div className="w-full bg-white/[0.08] rounded-full h-1.5">
-                    <div
-                      className={`h-1.5 rounded-full transition-all ${
-                        selected.confidence >= 0.7 ? 'bg-emerald-500' :
-                        selected.confidence >= 0.5 ? 'bg-amber-500' :
-                        'bg-red-500'
-                      }`}
-                      style={{ width: `${selected.confidence * 100}%` }}
-                    />
+              {selected.confidence > 0 ? (
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <div className="w-full bg-white/[0.08] rounded-full h-1.5">
+                      <div
+                        className={`h-1.5 rounded-full transition-all ${
+                          selected.confidence >= 0.7 ? 'bg-emerald-500' :
+                          selected.confidence >= 0.5 ? 'bg-amber-500' :
+                          'bg-red-500'
+                        }`}
+                        style={{ width: `${selected.confidence * 100}%` }}
+                      />
+                    </div>
                   </div>
+                  <span className="text-xs font-mono text-zinc-300">
+                    {(selected.confidence * 100).toFixed(0)}%
+                  </span>
                 </div>
-                <span className="text-xs font-mono text-zinc-300">
-                  {(selected.confidence * 100).toFixed(0)}%
-                </span>
-              </div>
+              ) : (
+                <p className="text-xs text-zinc-700">Score non disponible</p>
+              )}
             </div>
 
             <div>

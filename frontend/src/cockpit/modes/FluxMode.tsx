@@ -13,8 +13,11 @@ export function FluxMode() {
   const { data: itemsData, isLoading } = useItems({ 
     status: statusFilter === 'all' ? undefined : statusFilter 
   });
+  // Separate query without filter for accurate tab counts
+  const { data: allItemsData } = useItems();
 
   const items = itemsData?.items || [];
+  const allItems = allItemsData?.items || [];
 
   const handleItemClick = (item: Item) => {
     setSelectedItemId(item.id);
@@ -42,8 +45,8 @@ export function FluxMode() {
       <div className="h-12 border-b border-white/[0.06] flex items-center px-5 gap-2">
         {([
           { key: 'all', label: 'Tout' },
-          { key: 'pending', label: `En attente\u00a0(${items.filter(i => i.classification_status === 'pending').length})` },
-          { key: 'classified', label: `Classifiés\u00a0(${items.filter(i => i.classification_status === 'classified').length})` },
+          { key: 'pending', label: `En attente\u00a0(${allItems.filter(i => i.classification_status === 'pending').length})` },
+          { key: 'classified', label: `Classifiés\u00a0(${allItems.filter(i => i.classification_status === 'classified').length})` },
         ] as const).map(({ key, label }) => (
           <button
             key={key}

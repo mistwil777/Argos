@@ -13,8 +13,11 @@ export function ProductionMode() {
   const { data: coursesData, isLoading } = useCourses({
     status: statusFilter === 'all' ? undefined : statusFilter
   });
+  // Separate query without filter for accurate tab counts
+  const { data: allCoursesData } = useCourses();
 
   const courses = coursesData?.courses || [];
+  const allCourses = allCoursesData?.courses || [];
 
   const handleDocClick = (course: Course) => {
     setSelectedDocId(course.id);
@@ -41,9 +44,9 @@ export function ProductionMode() {
       <div className="h-12 border-b border-white/[0.06] flex items-center px-5 gap-2">
         {([
           { key: 'all', label: 'Tout' },
-          { key: 'draft', label: `Brouillons\u00a0(${courses.filter(c => c.status === 'draft').length})` },
-          { key: 'review', label: `Revue\u00a0(${courses.filter(c => c.status === 'review').length})` },
-          { key: 'published', label: `Publiés\u00a0(${courses.filter(c => c.status === 'published').length})` },
+          { key: 'draft', label: `Brouillons\u00a0(${allCourses.filter(c => c.status === 'draft').length})` },
+          { key: 'review', label: `Revue\u00a0(${allCourses.filter(c => c.status === 'review').length})` },
+          { key: 'published', label: `Publiés\u00a0(${allCourses.filter(c => c.status === 'published').length})` },
         ] as const).map(({ key, label }) => (
           <button
             key={key}
@@ -117,14 +120,17 @@ function DocCard({ course, onClick }: DocCardProps) {
           {course.status}
         </span>
 
-        {course.qa_score !== undefined && (
-          <span className={`text-xs font-mono ${
-            course.qa_score >= 0.8 ? 'text-emerald-500' :
-            course.qa_score >= 0.6 ? 'text-amber-500' : 'text-red-500'
-          }`}>
-            {(course.qa_score * 100).toFixed(0)}%
-          </span>
-        )}
+        {course.qa_score !== undefined && course.qa_score !== null && (() => {
+          const qaPercent = course.qa_score > 1 ? course.qa_score : course.qa_score * 100;
+          return (
+            <span className={`text-xs font-mono ${
+              qaPercent >= 80 ? 'text-emerald-500' :
+              qaPercent >= 60 ? 'text-amber-500' : 'text-red-500'
+            }`}>
+              {qaPercent.toFixed(0)}%
+            </span>
+          );
+        })()}
       </div>
 
       {course.topics && course.topics.length > 0 && (

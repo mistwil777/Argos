@@ -1,7 +1,7 @@
 // DocInspector - Panneau de détails pour un document
 import { useState } from 'react';
-import { useCourse, usePublishCourse, useDeleteCourse } from '../../../hooks/useApi';
-import { Check, Archive, RefreshCw, AlertTriangle, TrendingUp, Eye, EyeOff } from 'lucide-react';
+import { useCourse, usePublishCourse, useDeleteCourse, useModifyCourse } from '../../../hooks/useApi';
+import { Check, Archive, RefreshCw, AlertTriangle, TrendingUp, Eye, EyeOff, Sparkles } from 'lucide-react';
 import { ContentModal } from '../ContentModal';
 import { Preloader } from '../Preloader';
 
@@ -13,8 +13,18 @@ export function DocInspector({ docId }: DocInspectorProps) {
   const { data: course, isLoading, isError, error } = useCourse(docId);
   const publishMutation = usePublishCourse();
   const deleteMutation = useDeleteCourse();
+  const modifyMutation = useModifyCourse();
   const [showContent, setShowContent] = useState(false);
   const [showFullContent, setShowFullContent] = useState(false);
+  const [improveInstruction, setImproveInstruction] = useState('');
+
+  const handleImprove = () => {
+    if (!improveInstruction.trim()) return;
+    modifyMutation.mutate(
+      { id: course!.id, instruction: improveInstruction },
+      { onSuccess: () => setImproveInstruction('') }
+    );
+  };
 
   if (isLoading) {
     return (
@@ -104,36 +114,57 @@ export function DocInspector({ docId }: DocInspectorProps) {
           content={course.content || ''}
         />
 
+        {/* Améliorer avec IA */}
+        <div>
+          <h3 className="text-[10px] font-semibold text-zinc-700 uppercase tracking-wider mb-2">Améliorer avec IA</h3>
+          <textarea
+            value={improveInstruction}
+            onChange={(e) => setImproveInstruction(e.target.value)}
+            placeholder="Ex: Ajoute plus d'exemples concrets, restructure la section 2..."
+            rows={3}
+            className="w-full px-3 py-2 bg-white/[0.04] border border-white/[0.08] rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-sky-500/50 text-xs text-zinc-300 placeholder-zinc-700"
+          />
+          <button
+            onClick={handleImprove}
+            disabled={!improveInstruction.trim() || modifyMutation.isPending}
+            className="w-full cockpit-btn cockpit-btn-primary mt-2"
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>{modifyMutation.isPending ? 'Amélioration...' : 'Améliorer avec IA'}</span>
+          </button>
+        </div>
+
         {/* QA Score */}
-        {course.qa_score !== undefined && (
-          <div>
-            <h3 className="text-[10px] font-semibold text-zinc-700 uppercase tracking-wider mb-2">Qualité (QA)</h3>
-            <div className="flex items-center gap-3">
-              <TrendingUp className={`w-4 h-4 ${
-                course.qa_score >= 0.8 ? 'text-emerald-500' :
-                course.qa_score >= 0.6 ? 'text-amber-500' :
-                'text-red-500'
-              }`} />
-              <div className="flex-1">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs font-mono text-zinc-300">
-                    {(course.qa_score * 100).toFixed(0)}%
-                  </span>
-                </div>
-                <div className="w-full bg-white/[0.08] rounded-full h-1.5">
-                  <div
-                    className={`h-1.5 rounded-full transition-all ${
-                      course.qa_score >= 0.8 ? 'bg-emerald-500' :
-                      course.qa_score >= 0.6 ? 'bg-amber-500' :
-                      'bg-red-500'
-                    }`}
-                    style={{ width: `${course.qa_score * 100}%` }}
-                  />
+        {course.qa_score !== undefined && course.qa_score !== null && (() => {
+          const qaPercent = course.qa_score > 1 ? course.qa_score : course.qa_score * 100;
+          return (
+            <div>
+              <h3 className="text-[10px] font-semibold text-zinc-700 uppercase tracking-wider mb-2">Qualité (QA)</h3>
+              <div className="flex items-center gap-3">
+                <TrendingUp className={`w-4 h-4 ${
+                  qaPercent >= 80 ? 'text-emerald-500' :
+                  qaPercent >= 60 ? 'text-amber-500' :
+                  'text-red-500'
+                }`} />
+                <div className="flex-1">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-mono text-zinc-300">{qaPercent.toFixed(0)}%</span>
+                  </div>
+                  <div className="w-full bg-white/[0.08] rounded-full h-1.5">
+                    <div
+                      className={`h-1.5 rounded-full transition-all ${
+                        qaPercent >= 80 ? 'bg-emerald-500' :
+                        qaPercent >= 60 ? 'bg-amber-500' :
+                        'bg-red-500'
+                      }`}
+                      style={{ width: `${Math.min(qaPercent, 100)}%` }}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* QA Issues */}
         {course.qa_issues && course.qa_issues.length > 0 && (
@@ -238,6 +269,7 @@ export function DocInspector({ docId }: DocInspectorProps) {
       {/* Loading Animation */}
       {publishMutation.isPending && <Preloader message="Publication en cours" />}
       {deleteMutation.isPending && <Preloader message="Suppression" />}
+      {modifyMutation.isPending && <Preloader message="Amélioration en cours" />}
     </div>
   );
 }

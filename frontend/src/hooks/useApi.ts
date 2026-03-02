@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { statsApi, itemsApi, coursesApi, ragApi, hitlApi } from '../services/api';
+import { statsApi, itemsApi, coursesApi, ragApi, hitlApi, workspacesApi } from '../services/api';
+import type { WorkspaceCreate } from '../services/api';
 
 // Stats hooks
 export const useGlobalStats = () => {
@@ -262,5 +263,33 @@ export const useBotStatus = () => {
     queryKey: ['hitl', 'bot', 'status'],
     queryFn: hitlApi.botStatus,
     refetchInterval: 10000, // Refetch every 10s
+  });
+};
+
+// Workspace hooks
+export const useWorkspaces = () => {
+  return useQuery({
+    queryKey: ['workspaces'],
+    queryFn: workspacesApi.list,
+  });
+};
+
+export const useCreateWorkspace = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: WorkspaceCreate) => workspacesApi.create(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workspaces'] });
+    },
+  });
+};
+
+export const useDeleteWorkspace = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => workspacesApi.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workspaces'] });
+    },
   });
 };
