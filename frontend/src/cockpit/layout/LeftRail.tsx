@@ -1,4 +1,4 @@
-// LeftRail - Navigation par modes (icônes + tooltips)
+// LeftRail - Navigation par modes
 import { useCockpit, type CockpitMode } from '../context/CockpitContext';
 import { FileText, BookOpen, MessageSquare, Shield, Command } from 'lucide-react';
 
@@ -6,7 +6,6 @@ interface ModeConfig {
   id: CockpitMode;
   icon: typeof FileText;
   label: string;
-  badge?: number;
 }
 
 const MODES: ModeConfig[] = [
@@ -24,71 +23,52 @@ export function LeftRail({ onOpenCommandPalette }: LeftRailProps) {
   const { activeMode, setActiveMode } = useCockpit();
 
   return (
-    <div className="w-16 bg-gray-900 flex flex-col items-center py-4 space-y-2">
+    <div className="w-14 bg-zinc-950 border-r border-white/[0.06] flex flex-col items-center py-4 gap-1 shrink-0">
       {/* Logo */}
-      <div className="mb-6">
-        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm">
-          VO
-        </div>
+      <div className="mb-5 w-8 h-8 rounded-xl bg-sky-500 flex items-center justify-center font-bold text-white text-xs tracking-tight select-none">
+        VO
       </div>
 
       {/* Mode Icons */}
       {MODES.map((mode) => {
         const Icon = mode.icon;
         const isActive = activeMode === mode.id;
-
         return (
           <button
             key={mode.id}
             onClick={() => setActiveMode(mode.id)}
-            className={`
-              group relative w-12 h-12 rounded-xl flex items-center justify-center
-              transition-all duration-200
-              ${isActive
-                ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/50'
-                : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-              }
-            `}
+            className={`group relative w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 ${
+              isActive
+                ? 'bg-sky-500/12 text-sky-400'
+                : 'text-zinc-600 hover:text-zinc-300 hover:bg-white/[0.05]'
+            }`}
             title={mode.label}
           >
-            <Icon className="w-5 h-5" />
-            
-            {/* Tooltip */}
-            <div className="absolute left-16 px-3 py-1.5 bg-gray-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity z-50">
-              {mode.label}
-              <div className="absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2 w-2 h-2 bg-gray-800 rotate-45"></div>
-            </div>
-
-            {/* Badge pour notifications */}
-            {mode.badge && (
-              <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
-                {mode.badge}
-              </div>
+            {isActive && (
+              <div className="absolute -left-[1px] top-2.5 bottom-2.5 w-0.5 rounded-r-full bg-sky-500" />
             )}
+            <Icon className="w-[18px] h-[18px]" strokeWidth={isActive ? 2 : 1.5} />
+            <div className="absolute left-12 px-2.5 py-1.5 bg-zinc-800 border border-white/[0.08] text-zinc-200 text-xs rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity duration-150 z-50 shadow-xl">
+              {mode.label}
+            </div>
           </button>
         );
       })}
 
-      {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Command Palette trigger - HIGHLY VISIBLE */}
+      {/* Command Palette */}
       <button
         onClick={onOpenCommandPalette}
-        className="relative w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-blue-600/30 to-purple-600/30 border-2 border-blue-500/50 hover:border-blue-400 transition-all hover:scale-110 group shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50"
-        title="Command Palette (⌘K)"
+        className="group relative w-10 h-10 rounded-xl flex items-center justify-center text-zinc-600 hover:text-zinc-300 hover:bg-white/[0.05] transition-all duration-200"
+        title="Palette de commandes (⌘K)"
       >
-        <Command className="w-6 h-6 text-blue-300 group-hover:text-blue-100 transition-colors drop-shadow-lg" />
-        
-        {/* Pulse animation ring */}
-        <div className="absolute inset-0 rounded-xl border-2 border-blue-400 animate-ping opacity-20" />
-        
-        {/* Tooltip */}
-        <div className="absolute left-16 px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity z-50 font-semibold shadow-xl">
+        <Command className="w-[18px] h-[18px]" strokeWidth={1.5} />
+        <div className="absolute left-12 px-2.5 py-1.5 bg-zinc-800 border border-white/[0.08] text-zinc-200 text-xs rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity duration-150 z-50 shadow-xl">
           ⌘K
-          <div className="absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2 w-2 h-2 bg-blue-600 rotate-45"></div>
         </div>
       </button>
     </div>
   );
 }
+

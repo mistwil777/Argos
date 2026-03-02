@@ -141,61 +141,61 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black bg-opacity-50 z-50"
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
         onClick={onClose}
       />
 
       {/* Palette */}
-      <div className="fixed top-1/4 left-1/2 -translate-x-1/2 w-full max-w-2xl z-50">
-        <div className="bg-white rounded-lg shadow-2xl overflow-hidden">
+      <div className="fixed top-1/4 left-1/2 -translate-x-1/2 w-full max-w-xl z-50">
+        <div className="bg-zinc-900 border border-white/[0.08] rounded-xl shadow-2xl shadow-black/50 overflow-hidden">
           {/* Search Input */}
-          <div className="flex items-center px-4 py-3 border-b border-gray-200">
-            <Search className="w-5 h-5 text-gray-400 mr-3" />
+          <div className="flex items-center px-4 py-3 border-b border-white/[0.06]">
+            <Search className="w-4 h-4 text-zinc-600 mr-3" strokeWidth={1.5} />
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Rechercher une commande..."
-              className="flex-1 outline-none text-gray-900"
+              className="flex-1 outline-none bg-transparent text-sm text-zinc-200 placeholder-zinc-700"
               autoFocus
             />
-            <kbd className="px-2 py-1 text-xs font-semibold text-gray-500 bg-gray-100 rounded">
+            <kbd className="px-2 py-0.5 text-xs font-semibold text-zinc-600 bg-white/[0.06] border border-white/[0.08] rounded">
               ⌘K
             </kbd>
           </div>
 
           {/* Commands List */}
-          <div className="max-h-96 overflow-y-auto">
+          <div className="max-h-80 overflow-y-auto scrollable">
             {filteredCommands.length === 0 ? (
-              <div className="px-4 py-8 text-center text-gray-500">
+              <div className="px-4 py-8 text-center text-xs text-zinc-700">
                 Aucune commande trouvée
               </div>
             ) : (
-              <div className="py-2">
+              <div className="py-1.5">
                 {filteredCommands.map((command, index) => (
                   <button
                     key={command.id}
                     onClick={command.action}
-                    className={`w-full px-4 py-3 flex items-center space-x-3 transition-colors ${
+                    className={`w-full px-4 py-2.5 flex items-center gap-3 transition-colors ${
                       index === selectedIndex
-                        ? 'bg-blue-50'
-                        : 'hover:bg-gray-50'
+                        ? 'bg-sky-500/10'
+                        : 'hover:bg-white/[0.04]'
                     }`}
                     onMouseEnter={() => setSelectedIndex(index)}
                   >
                     <div className={`flex-shrink-0 ${
-                      index === selectedIndex ? 'text-blue-600' : 'text-gray-400'
+                      index === selectedIndex ? 'text-sky-400' : 'text-zinc-700'
                     }`}>
                       {command.icon}
                     </div>
                     <div className="flex-1 text-left">
-                      <p className="text-sm font-medium text-gray-900">{command.label}</p>
+                      <p className="text-sm font-medium text-zinc-200">{command.label}</p>
                       {command.description && (
-                        <p className="text-xs text-gray-500 mt-0.5">{command.description}</p>
+                        <p className="text-xs text-zinc-600 mt-0.5">{command.description}</p>
                       )}
                     </div>
                     {index === selectedIndex && (
-                      <kbd className="px-2 py-1 text-xs font-semibold text-gray-500 bg-gray-100 rounded">
+                      <kbd className="px-2 py-0.5 text-xs font-semibold text-zinc-600 bg-white/[0.06] border border-white/[0.08] rounded">
                         ↵
                       </kbd>
                     )}
@@ -206,7 +206,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
           </div>
 
           {/* Footer */}
-          <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 flex items-center justify-between text-xs text-gray-500">
+          <div className="px-4 py-2 bg-white/[0.02] border-t border-white/[0.06] flex items-center justify-between text-[10px] text-zinc-700">
             <span>Naviguez avec ↑ ↓</span>
             <span>Validez avec ↵</span>
             <span>Fermez avec ESC</span>

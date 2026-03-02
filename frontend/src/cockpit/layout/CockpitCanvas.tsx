@@ -1,4 +1,4 @@
-// CockpitCanvas - Zone principale qui affiche le contenu selon le mode actif
+// CockpitCanvas - Zone principale selon le mode actif
 import { useCockpit } from '../context/CockpitContext';
 import { FluxMode } from '../modes/FluxMode';
 import { ProductionMode } from '../modes/ProductionMode';
@@ -9,7 +9,7 @@ export function CockpitCanvas() {
   const { activeMode } = useCockpit();
 
   return (
-    <div className="flex-1 overflow-hidden bg-gradient-to-br from-gray-50 to-blue-50/30">
+    <div className="flex-1 overflow-hidden bg-zinc-950">
       {activeMode === 'flux' && <FluxMode />}
       {activeMode === 'production' && <ProductionMode />}
       {activeMode === 'assistant' && <AssistantMode />}
@@ -17,3 +17,4 @@ export function CockpitCanvas() {
     </div>
   );
 }
+

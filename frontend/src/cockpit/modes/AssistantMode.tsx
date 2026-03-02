@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useRAGAsk } from '../../hooks/useApi';
 import { Send, Settings, Sparkles } from 'lucide-react';
+import { Preloader } from '../components/Preloader';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -60,46 +61,50 @@ export function AssistantMode() {
   return (
     <div className="h-full flex">
       {/* Chat Area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto scrollable p-5 flex flex-col gap-5">
           {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-gray-500">
-              <Sparkles className="w-16 h-16 mb-4 text-blue-300" />
-              <h2 className="text-xl font-semibold text-gray-700 mb-2">Assistant RAG</h2>
-              <p className="text-sm text-center max-w-md">
-                Posez des questions sur vos documents. L'assistant utilise la recherche sémantique
-                pour vous fournir les réponses les plus pertinentes.
-              </p>
+            <div className="flex flex-col items-center justify-center h-full gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-zinc-600" strokeWidth={1.5} />
+              </div>
+              <div className="text-center">
+                <h2 className="text-sm font-medium text-zinc-400 mb-1">Assistant RAG</h2>
+                <p className="text-xs text-zinc-700 max-w-sm leading-relaxed">
+                  Posez des questions sur vos documents. L'assistant utilise la recherche sémantique
+                  pour vous fournir les réponses les plus pertinentes.
+                </p>
+              </div>
             </div>
           ) : (
             messages.map((msg, idx) => (
               <div
                 key={idx}
-                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                className={`flex ${ msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-3xl rounded-lg px-4 py-3 ${
+                  className={`max-w-[80%] rounded-xl px-4 py-3 text-sm leading-relaxed ${
                     msg.role === 'user'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-900'
+                      ? 'bg-sky-500/15 text-zinc-200 border border-sky-500/20'
+                      : 'bg-white/[0.04] text-zinc-300 border border-white/[0.06]'
                   }`}
                 >
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-                  
+                  <p className="whitespace-pre-wrap">{msg.content}</p>
+
                   {/* Sources */}
                   {msg.sources && msg.sources.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-gray-200 space-y-2">
-                      <p className="text-xs font-semibold text-gray-600 uppercase">
+                    <div className="mt-3 pt-3 border-t border-white/[0.06] flex flex-col gap-1.5">
+                      <p className="text-[10px] font-semibold text-zinc-700 uppercase tracking-wider">
                         Sources ({msg.sources.length})
                       </p>
                       {msg.sources.map((source, sidx) => (
                         <div
                           key={sidx}
-                          className="p-2 bg-white rounded border border-gray-200 hover:border-blue-300 transition-colors cursor-pointer"
+                          className="p-2 bg-white/[0.03] rounded-lg border border-white/[0.06] hover:border-sky-500/20 transition-colors cursor-pointer"
                         >
-                          <p className="text-xs font-medium text-gray-900 mb-1">{source.title}</p>
-                          <p className="text-xs text-gray-600 line-clamp-2">{source.chunk_text}</p>
+                          <p className="text-xs font-medium text-zinc-300 mb-0.5">{source.title}</p>
+                          <p className="text-xs text-zinc-600 line-clamp-2">{source.chunk_text}</p>
                         </div>
                       ))}
                     </div>
@@ -110,11 +115,11 @@ export function AssistantMode() {
           )}
           {ragMutation.isPending && (
             <div className="flex justify-start">
-              <div className="bg-gray-100 rounded-lg px-4 py-3">
-                <div className="flex items-center space-x-2 text-gray-500">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse" />
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse delay-100" />
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse delay-200" />
+              <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl px-4 py-3">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-1.5 h-1.5 bg-zinc-600 rounded-full animate-pulse" />
+                  <div className="w-1.5 h-1.5 bg-zinc-600 rounded-full animate-pulse [animation-delay:0.1s]" />
+                  <div className="w-1.5 h-1.5 bg-zinc-600 rounded-full animate-pulse [animation-delay:0.2s]" />
                 </div>
               </div>
             </div>
@@ -122,8 +127,8 @@ export function AssistantMode() {
         </div>
 
         {/* Input */}
-        <div className="p-4 bg-white border-t border-gray-200">
-          <div className="flex items-end space-x-3">
+        <div className="p-4 border-t border-white/[0.06]">
+          <div className="flex items-end gap-3">
             <div className="flex-1">
               <textarea
                 value={input}
@@ -131,15 +136,15 @@ export function AssistantMode() {
                 onKeyPress={handleKeyPress}
                 placeholder="Posez votre question..."
                 rows={2}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                className="w-full px-4 py-3 bg-white/[0.04] border border-white/[0.08] rounded-xl resize-none focus:outline-none focus:ring-1 focus:ring-sky-500/50 text-sm text-zinc-200 placeholder-zinc-700 transition-colors"
               />
             </div>
             <button
               onClick={handleSend}
               disabled={!input.trim() || ragMutation.isPending}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="cockpit-btn cockpit-btn-primary px-4 py-3 self-end"
             >
-              <Send className="w-5 h-5" />
+              <Send className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -147,45 +152,44 @@ export function AssistantMode() {
 
       {/* Right Sidebar - Settings */}
       {showSettings && (
-        <div className="w-80 bg-gray-50 border-l border-gray-200 p-4 space-y-4">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-900">Paramètres</h3>
+        <div className="w-72 bg-zinc-950 border-l border-white/[0.06] p-5 flex flex-col gap-5">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-semibold text-zinc-600 uppercase tracking-wider">Paramètres</h3>
             <button
               onClick={() => setShowSettings(false)}
-              className="text-gray-400 hover:text-gray-600"
+              className="w-6 h-6 flex items-center justify-center text-zinc-700 hover:text-zinc-300 transition-colors"
             >
               ✕
             </button>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-xs font-medium text-zinc-600 mb-2">
               Document spécifique
             </label>
             <select
               value={selectedCourseId || ''}
               onChange={(e) => setSelectedCourseId(e.target.value ? Number(e.target.value) : null)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 bg-white/[0.04] border border-white/[0.08] rounded-lg text-sm text-zinc-300 focus:outline-none focus:ring-1 focus:ring-sky-500/50"
             >
               <option value="">Tous les documents</option>
-              {/* TODO: charger la liste des cours */}
             </select>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-xs font-medium text-zinc-600 mb-2">
               Mode de recherche
             </label>
-            <div className="space-y-2">
-              <label className="flex items-center">
-                <input type="checkbox" defaultChecked className="mr-2" />
-                <span className="text-sm text-gray-700">Recherche hybride</span>
+            <div className="flex flex-col gap-1.5">
+              <label className="flex items-center gap-2 text-sm text-zinc-500">
+                <input type="checkbox" defaultChecked className="accent-sky-500" />
+                Recherche hybride
               </label>
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-xs font-medium text-zinc-600 mb-2">
               Nombre de sources (top_k)
             </label>
             <input
@@ -193,7 +197,7 @@ export function AssistantMode() {
               defaultValue={5}
               min={1}
               max={10}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 bg-white/[0.04] border border-white/[0.08] rounded-lg text-sm text-zinc-300 focus:outline-none focus:ring-1 focus:ring-sky-500/50"
             />
           </div>
         </div>
@@ -203,11 +207,14 @@ export function AssistantMode() {
       {!showSettings && (
         <button
           onClick={() => setShowSettings(true)}
-          className="absolute top-4 right-4 p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          className="absolute top-4 right-4 p-2 bg-white/[0.04] border border-white/[0.08] rounded-lg hover:bg-white/[0.07] transition-colors"
         >
-          <Settings className="w-5 h-5 text-gray-600" />
+          <Settings className="w-4 h-4 text-zinc-600" strokeWidth={1.5} />
         </button>
       )}
+
+      {/* Loading Animation */}
+      {ragMutation.isPending && <Preloader message="Recherche en cours" />}
     </div>
   );
 }

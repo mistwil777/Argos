@@ -2,12 +2,12 @@
 import { useState } from 'react';
 import { useCourses } from '../../hooks/useApi';
 import { useCockpit } from '../context/CockpitContext';
-import { BookOpen, CheckCircle, FileText, AlertTriangle } from 'lucide-react';
+import { BookOpen } from 'lucide-react';
 import { CockpitHeader } from '../components/CockpitHeader';
 import type { Course } from '../../types';
 
 export function ProductionMode() {
-  const { setInspectorOpen, setSelectedDocId } = useCockpit();
+  const { setSelectedDocId, setInspectorOpen } = useCockpit();
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'review' | 'published'>('all');
   
   const { data: coursesData, isLoading } = useCourses({
@@ -24,87 +24,50 @@ export function ProductionMode() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-gray-500">Chargement...</div>
+        <div className="w-8 h-8 rounded-full border-2 border-white/[0.06] border-t-sky-500 animate-spin" />
       </div>
     );
   }
 
   return (
     <div className="h-full flex flex-col">
-      {/* Header */}
-      <CockpitHeader 
-        title="Production de documents"
+      <CockpitHeader
+        title="Production"
         subtitle="Gérez vos cours et documents générés"
-        icon={<BookOpen className="w-8 h-8 text-blue-300" />}
+        icon={<BookOpen className="w-5 h-5 text-zinc-400" />}
       />
-      
-      {/* Filters Bar */}
-      <div className="h-14 bg-gradient-to-r from-[#0f1420]/40 to-[#1a1e2e]/40 backdrop-blur-sm border-b border-blue-900/30 flex items-center px-4 space-x-3">
-        <button
-          onClick={() => setStatusFilter('all')}
-          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all border ${
-            statusFilter === 'all'
-              ? 'bg-blue-600/40 text-blue-200 border-blue-500/50 shadow-lg shadow-blue-500/20'
-              : 'text-gray-400 hover:bg-blue-900/20 hover:text-blue-300 border-transparent hover:border-blue-700/30'
-          }`}
-        >
-          Tout
-        </button>
-        <button
-          onClick={() => setStatusFilter('draft')}
-          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center space-x-2 border ${
-            statusFilter === 'draft'
-              ? 'bg-gray-500/40 text-gray-200 border-gray-500/50 shadow-lg shadow-gray-500/20'
-              : 'text-gray-400 hover:bg-gray-700/20 hover:text-gray-300 border-transparent hover:border-gray-700/30'
-          }`}
-        >
-          <FileText className="w-4 h-4" />
-          <span>Draft ({courses.filter(c => c.status === 'draft').length})</span>
-        </button>
-        <button
-          onClick={() => setStatusFilter('review')}
-          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center space-x-2 border ${
-            statusFilter === 'review'
-              ? 'bg-orange-500/40 text-orange-200 border-orange-500/50 shadow-lg shadow-orange-500/20'
-              : 'text-gray-400 hover:bg-orange-900/20 hover:text-orange-300 border-transparent hover:border-orange-700/30'
-          }`}
-        >
-          <AlertTriangle className="w-4 h-4" />
-          <span>Review ({courses.filter(c => c.status === 'review').length})</span>
-        </button>
-        <button
-          onClick={() => setStatusFilter('published')}
-          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center space-x-2 border ${
-            statusFilter === 'published'
-              ? 'bg-green-500/40 text-green-200 border-green-500/50 shadow-lg shadow-green-500/20'
-              : 'text-gray-400 hover:bg-green-900/20 hover:text-green-300 border-transparent hover:border-green-700/30'
-          }`}
-        >
-          <CheckCircle className="w-4 h-4" />
-          <span>Published ({courses.filter(c => c.status === 'published').length})</span>
-        </button>
 
-        {/* Spacer */}
-        <div className="flex-1" />
-
-        {/* Template filter */}
-        <select className="px-3 py-1.5 bg-[#0f1420]/60 border border-blue-800/30 rounded-lg text-sm text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/50 hover:bg-[#1a1e2e]/60 transition-colors">
-          <option value="">Tous les templates</option>
-          <option value="course">Course</option>
-          <option value="guide">Guide</option>
-          <option value="tutorial">Tutorial</option>
-        </select>
+      {/* Filters */}
+      <div className="h-12 border-b border-white/[0.06] flex items-center px-5 gap-2">
+        {([
+          { key: 'all', label: 'Tout' },
+          { key: 'draft', label: `Brouillons\u00a0(${courses.filter(c => c.status === 'draft').length})` },
+          { key: 'review', label: `Revue\u00a0(${courses.filter(c => c.status === 'review').length})` },
+          { key: 'published', label: `Publiés\u00a0(${courses.filter(c => c.status === 'published').length})` },
+        ] as const).map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setStatusFilter(key)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
+              statusFilter === key
+                ? 'bg-white/[0.08] text-zinc-200'
+                : 'text-zinc-600 hover:text-zinc-400 hover:bg-white/[0.04]'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
-      {/* Docs Grid */}
-      <div className="flex-1 overflow-y-auto p-6">
+      {/* Grid */}
+      <div className="flex-1 overflow-y-auto scrollable p-5">
         {courses.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-500">
-            <BookOpen className="w-12 h-12 mb-3 text-gray-300" />
-            <p>Aucun document trouvé</p>
+          <div className="flex flex-col items-center justify-center h-full gap-3">
+            <BookOpen className="w-10 h-10 text-zinc-800" strokeWidth={1.5} />
+            <p className="text-sm text-zinc-700">Aucun document trouvé</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {courses.map((course) => (
               <DocCard
                 key={course.id}
@@ -119,77 +82,63 @@ export function ProductionMode() {
   );
 }
 
-// DocCard - Carte pour un document
+// DocCard
 interface DocCardProps {
   course: Course;
   onClick: () => void;
 }
 
 function DocCard({ course, onClick }: DocCardProps) {
-  // const isDraft = course.status === 'draft';
-  const isReview = course.status === 'review';
   const isPublished = course.status === 'published';
+  const isReview = course.status === 'review';
 
   return (
     <div
       onClick={onClick}
-      className="cockpit-card rounded-xl p-5 hover:scale-[1.02] transition-all cursor-pointer group flex flex-col shadow-lg"
+      className="cockpit-card rounded-xl p-4 cursor-pointer group flex flex-col gap-3"
     >
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center space-x-2 flex-1">
-          <BookOpen className="w-5 h-5 text-blue-400 flex-shrink-0" />
-          <h3 className="font-semibold text-gray-100 line-clamp-2 group-hover:text-blue-300 transition-colors">
-            {course.title}
-          </h3>
-        </div>
+      <div className="flex items-start gap-3">
+        <BookOpen className="w-4 h-4 text-zinc-600 shrink-0 mt-0.5" strokeWidth={1.5} />
+        <h3 className="text-sm font-medium text-zinc-200 group-hover:text-zinc-100 transition-colors line-clamp-2 leading-snug">
+          {course.title}
+        </h3>
       </div>
 
-      <p className="text-sm text-gray-400 line-clamp-3 mb-4 leading-relaxed flex-1">
+      <p className="text-xs text-zinc-600 line-clamp-2 leading-relaxed">
         {course.description}
       </p>
 
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${
-            isPublished ? 'bg-green-900/40 text-green-300 border-green-600/40' :
-            isReview ? 'bg-orange-900/40 text-orange-300 border-orange-600/40' :
-            'bg-gray-800/40 text-gray-400 border-gray-600/40'
+      <div className="flex items-center justify-between mt-auto">
+        <span className={`px-2 py-0.5 rounded-md text-xs font-medium border ${
+          isPublished ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+          isReview ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+          'bg-white/[0.04] text-zinc-500 border-white/[0.06]'
+        }`}>
+          {course.status}
+        </span>
+
+        {course.qa_score !== undefined && (
+          <span className={`text-xs font-mono ${
+            course.qa_score >= 0.8 ? 'text-emerald-500' :
+            course.qa_score >= 0.6 ? 'text-amber-500' : 'text-red-500'
           }`}>
-            {course.status}
+            {(course.qa_score * 100).toFixed(0)}%
           </span>
-
-          {course.qa_score !== undefined && (
-            <div className="flex items-center space-x-1.5">
-              <span className="text-xs text-gray-500 font-medium">QA:</span>
-              <span className={`text-xs font-bold ${
-                course.qa_score >= 0.8 ? 'text-green-600' :
-                course.qa_score >= 0.6 ? 'text-orange-600' :
-                'text-red-600'
-              }`}>
-                {(course.qa_score * 100).toFixed(0)}%
-              </span>
-            </div>
-          )}
-        </div>
-
-        {course.topics && course.topics.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {course.topics.slice(0, 3).map((topic: string, idx: number) => (
-              <span
-                key={idx}
-                className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full font-medium"
-              >
-                {topic}
-              </span>
-            ))}
-            {course.topics.length > 3 && (
-              <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full">
-                +{course.topics.length - 3}
-              </span>
-            )}
-          </div>
         )}
       </div>
+
+      {course.topics && course.topics.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {course.topics.slice(0, 3).map((topic: string, idx: number) => (
+            <span key={idx} className="text-xs px-2 py-0.5 bg-sky-500/8 text-sky-500/70 rounded border border-sky-500/15">
+              {topic}
+            </span>
+          ))}
+          {course.topics.length > 3 && (
+            <span className="text-xs px-2 py-0.5 text-zinc-700">+{course.topics.length - 3}</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

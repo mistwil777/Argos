@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { Shield, AlertTriangle, CheckCircle, XCircle, TrendingUp, Activity } from 'lucide-react';
 import { usePendingDecisions, useMakeDecision } from '../../hooks/useApi';
+import { Preloader } from '../components/Preloader';
 
 interface HITLDecision {
   id: number;
@@ -65,27 +66,27 @@ export function ControleMode() {
   return (
     <div className="h-full flex flex-col">
       {/* Tabs */}
-      <div className="h-14 bg-white border-b border-gray-200 flex items-center px-4 space-x-1">
+      <div className="h-12 bg-zinc-950 border-b border-white/[0.06] flex items-center px-4 gap-1">
         <button
           onClick={() => setActiveTab('hitl')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 ${
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
             activeTab === 'hitl'
-              ? 'bg-purple-100 text-purple-700'
-              : 'text-gray-600 hover:bg-gray-100'
+              ? 'bg-sky-500/12 text-sky-400'
+              : 'text-zinc-600 hover:bg-white/[0.04] hover:text-zinc-400'
           }`}
         >
-          <Shield className="w-4 h-4" />
+          <Shield className="w-3.5 h-3.5" strokeWidth={activeTab === 'hitl' ? 2 : 1.5} />
           <span>HITL Queue ({pendingDecisions.length})</span>
         </button>
         <button
           onClick={() => setActiveTab('health')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 ${
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
             activeTab === 'health'
-              ? 'bg-green-100 text-green-700'
-              : 'text-gray-600 hover:bg-gray-100'
+              ? 'bg-emerald-500/10 text-emerald-400'
+              : 'text-zinc-600 hover:bg-white/[0.04] hover:text-zinc-400'
           }`}
         >
-          <Activity className="w-4 h-4" />
+          <Activity className="w-3.5 h-3.5" strokeWidth={activeTab === 'health' ? 2 : 1.5} />
           <span>Health Monitor</span>
         </button>
       </div>
@@ -107,6 +108,9 @@ export function ControleMode() {
           <HealthMonitor />
         )}
       </div>
+
+      {/* Loading Animation */}
+      {makeDecisionMutation.isPending && <Preloader message="Décision HITL en cours" />}
     </div>
   );
 }
@@ -132,9 +136,9 @@ function HITLQueue({ decisions, onSelect, selectedDecision, comment, setComment,
       {/* Liste des décisions */}
       <div className="flex-1 overflow-y-auto p-4 space-y-2">
         {decisions.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-500">
-            <Shield className="w-12 h-12 mb-3 text-gray-300" />
-            <p>Aucune décision en attente</p>
+          <div className="flex flex-col items-center justify-center h-full gap-2">
+            <Shield className="w-8 h-8 text-zinc-800" strokeWidth={1.5} />
+            <p className="text-xs text-zinc-700">Aucune décision en attente</p>
           </div>
         ) : (
           decisions.map((decision) => (
@@ -144,31 +148,31 @@ function HITLQueue({ decisions, onSelect, selectedDecision, comment, setComment,
                 setSelectedId(decision.id);
                 onSelect(decision);
               }}
-              className={`p-4 bg-white rounded-lg border cursor-pointer transition-all ${
+              className={`cockpit-card rounded-xl p-4 cursor-pointer transition-all ${
                 selectedId === decision.id
-                  ? 'border-purple-400 shadow-md'
-                  : 'border-gray-200 hover:border-purple-200'
+                  ? 'border border-sky-500/40'
+                  : 'hover:border-sky-500/20'
               }`}
             >
               <div className="flex items-start justify-between mb-2">
-                <h3 className="font-medium text-gray-900 flex-1">{decision.item_title}</h3>
-                <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium ml-2">
+                <h3 className="text-sm font-medium text-zinc-200 flex-1 leading-snug">{decision.item_title}</h3>
+                <span className="px-2 py-0.5 bg-sky-500/10 text-sky-400 border border-sky-500/20 rounded text-xs font-medium ml-2 shrink-0">
                   {decision.decision_type}
                 </span>
               </div>
-              
-              <p className="text-sm text-gray-600 mb-2">{decision.ai_suggestion}</p>
-              
-              <div className="flex items-center justify-between text-xs text-gray-500">
-                <span className={`flex items-center space-x-1 ${
-                  decision.confidence >= 0.7 ? 'text-green-600' :
-                  decision.confidence >= 0.5 ? 'text-orange-600' :
-                  'text-red-600'
+
+              <p className="text-xs text-zinc-600 mb-2 leading-relaxed">{decision.ai_suggestion}</p>
+
+              <div className="flex items-center justify-between text-xs">
+                <span className={`flex items-center gap-1 ${
+                  decision.confidence >= 0.7 ? 'text-emerald-500' :
+                  decision.confidence >= 0.5 ? 'text-amber-500' :
+                  'text-red-500'
                 }`}>
                   <TrendingUp className="w-3 h-3" />
-                  <span>Confiance: {(decision.confidence * 100).toFixed(0)}%</span>
+                  <span className="font-mono">{(decision.confidence * 100).toFixed(0)}%</span>
                 </span>
-                <span>{new Date(decision.created_at).toLocaleDateString('fr-FR')}</span>
+                <span className="text-zinc-700 font-mono">{new Date(decision.created_at).toLocaleDateString('fr-FR')}</span>
               </div>
             </div>
           ))
@@ -177,71 +181,71 @@ function HITLQueue({ decisions, onSelect, selectedDecision, comment, setComment,
 
       {/* Panneau de décision */}
       {selected && (
-        <div className="w-96 bg-white border-l border-gray-200 p-6 flex flex-col">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Décision HITL</h2>
-          
-          <div className="flex-1 space-y-6">
+        <div className="w-[360px] bg-zinc-950 border-l border-white/[0.06] p-5 flex flex-col shrink-0">
+          <h2 className="text-sm font-semibold text-zinc-200 mb-5">Décision HITL</h2>
+
+          <div className="flex-1 flex flex-col gap-4 overflow-y-auto scrollable">
             <div>
-              <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Item</h3>
-              <p className="text-sm text-gray-900 font-medium">{selected.item_title}</p>
-              <button className="text-xs text-blue-600 hover:text-blue-700 underline mt-1">
+              <h3 className="text-[10px] font-semibold text-zinc-700 uppercase tracking-wider mb-1.5">Item</h3>
+              <p className="text-xs font-medium text-zinc-300">{selected.item_title}</p>
+              <button className="text-xs text-sky-500 hover:text-sky-400 underline mt-1 transition-colors">
                 Voir l'item complet
               </button>
             </div>
 
             <div>
-              <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Suggestion IA</h3>
-              <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
-                <p className="text-sm text-purple-900">{selected.ai_suggestion}</p>
+              <h3 className="text-[10px] font-semibold text-zinc-700 uppercase tracking-wider mb-1.5">Suggestion IA</h3>
+              <div className="p-3 bg-white/[0.04] border border-white/[0.06] rounded-lg">
+                <p className="text-xs text-zinc-300 leading-relaxed">{selected.ai_suggestion}</p>
               </div>
             </div>
 
             <div>
-              <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Confiance</h3>
-              <div className="flex items-center space-x-3">
+              <h3 className="text-[10px] font-semibold text-zinc-700 uppercase tracking-wider mb-1.5">Confiance</h3>
+              <div className="flex items-center gap-3">
                 <div className="flex-1">
-                  <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="w-full bg-white/[0.08] rounded-full h-1.5">
                     <div
-                      className={`h-2 rounded-full ${
-                        selected.confidence >= 0.7 ? 'bg-green-600' :
-                        selected.confidence >= 0.5 ? 'bg-orange-600' :
-                        'bg-red-600'
+                      className={`h-1.5 rounded-full transition-all ${
+                        selected.confidence >= 0.7 ? 'bg-emerald-500' :
+                        selected.confidence >= 0.5 ? 'bg-amber-500' :
+                        'bg-red-500'
                       }`}
                       style={{ width: `${selected.confidence * 100}%` }}
                     />
                   </div>
                 </div>
-                <span className="text-sm font-medium text-gray-900">
+                <span className="text-xs font-mono text-zinc-300">
                   {(selected.confidence * 100).toFixed(0)}%
                 </span>
               </div>
             </div>
 
             <div>
-              <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Votre décision</h3>
+              <h3 className="text-[10px] font-semibold text-zinc-700 uppercase tracking-wider mb-1.5">Votre décision</h3>
               <textarea
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
                 placeholder="Commentaire ou ajustement..."
                 rows={4}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                className="w-full px-3 py-2 bg-white/[0.04] border border-white/[0.08] rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-sky-500/50 text-sm text-zinc-300 placeholder-zinc-700"
               />
             </div>
           </div>
 
-          <div className="space-y-2 mt-6">
-            <button 
+          <div className="flex flex-col gap-2 mt-5">
+            <button
               onClick={onApprove}
               disabled={isProcessing}
-              className="w-full px-4 py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2"
+              className="w-full cockpit-btn cockpit-btn-success"
             >
               <CheckCircle className="w-4 h-4" />
               <span>{isProcessing ? 'Approbation...' : 'Approuver'}</span>
             </button>
-            <button 
+            <button
               onClick={onReject}
               disabled={isProcessing}
-              className="w-full px-4 py-2.5 bg-red-50 text-red-700 rounded-lg font-medium hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2"
+              className="w-full cockpit-btn cockpit-btn-danger"
             >
               <XCircle className="w-4 h-4" />
               <span>{isProcessing ? 'Rejet...' : 'Rejeter'}</span>
@@ -266,79 +270,79 @@ function HealthMonitor() {
   };
 
   return (
-    <div className="h-full overflow-y-auto p-6 space-y-6">
+    <div className="h-full overflow-y-auto scrollable p-5 flex flex-col gap-4">
       {/* Status cards */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+      <div className="grid grid-cols-3 gap-3">
+        <div className="cockpit-card rounded-xl p-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-gray-600">Sources actives</span>
-            <CheckCircle className="w-5 h-5 text-green-500" />
+            <span className="text-xs text-zinc-600">Sources actives</span>
+            <CheckCircle className="w-4 h-4 text-emerald-500" strokeWidth={1.5} />
           </div>
-          <p className="text-2xl font-bold text-gray-900">{metrics.sources_ok}</p>
+          <p className="text-2xl font-bold text-zinc-200 font-mono">{metrics.sources_ok}</p>
         </div>
 
-        <div className="bg-white rounded-lg border border-red-200 p-4">
+        <div className="cockpit-card rounded-xl p-4 border border-red-500/20">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-gray-600">Sources en erreur</span>
-            <AlertTriangle className="w-5 h-5 text-red-500" />
+            <span className="text-xs text-zinc-600">Sources en erreur</span>
+            <AlertTriangle className="w-4 h-4 text-red-500" strokeWidth={1.5} />
           </div>
-          <p className="text-2xl font-bold text-red-600">{metrics.sources_error}</p>
+          <p className="text-2xl font-bold text-red-400 font-mono">{metrics.sources_error}</p>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="cockpit-card rounded-xl p-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-gray-600">Jobs actifs</span>
-            <Activity className="w-5 h-5 text-blue-500" />
+            <span className="text-xs text-zinc-600">Jobs actifs</span>
+            <Activity className="w-4 h-4 text-sky-500" strokeWidth={1.5} />
           </div>
-          <p className="text-2xl font-bold text-gray-900">{metrics.active_jobs}</p>
+          <p className="text-2xl font-bold text-zinc-200 font-mono">{metrics.active_jobs}</p>
         </div>
       </div>
 
       {/* Performance metrics */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Performances</h3>
-        <div className="space-y-4">
+      <div className="cockpit-card rounded-xl p-5">
+        <h3 className="text-xs font-semibold text-zinc-600 uppercase tracking-wider mb-4">Performances</h3>
+        <div className="flex flex-col gap-4">
           <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-gray-600">Temps moyen de classification</span>
-              <span className="text-sm font-medium text-gray-900">{metrics.avg_classification_time}s</span>
+              <span className="text-xs text-zinc-600">Temps moyen de classification</span>
+              <span className="text-xs font-mono text-zinc-300">{metrics.avg_classification_time}s</span>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div className="bg-blue-600 h-2 rounded-full" style={{ width: '70%' }} />
+            <div className="w-full bg-white/[0.08] rounded-full h-1.5">
+              <div className="bg-sky-500 h-1.5 rounded-full" style={{ width: '70%' }} />
             </div>
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-gray-600">Temps moyen de génération</span>
-              <span className="text-sm font-medium text-gray-900">{metrics.avg_generation_time}s</span>
+              <span className="text-xs text-zinc-600">Temps moyen de génération</span>
+              <span className="text-xs font-mono text-zinc-300">{metrics.avg_generation_time}s</span>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div className="bg-purple-600 h-2 rounded-full" style={{ width: '85%' }} />
+            <div className="w-full bg-white/[0.08] rounded-full h-1.5">
+              <div className="bg-indigo-500 h-1.5 rounded-full" style={{ width: '85%' }} />
             </div>
           </div>
         </div>
       </div>
 
       {/* Cost tracking */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Coûts</h3>
+      <div className="cockpit-card rounded-xl p-5">
+        <h3 className="text-xs font-semibold text-zinc-600 uppercase tracking-wider mb-3">Coûts</h3>
         <div className="flex items-center justify-between">
-          <span className="text-sm text-gray-600">Total aujourd'hui</span>
-          <span className="text-2xl font-bold text-gray-900">${metrics.total_cost_today.toFixed(2)}</span>
+          <span className="text-xs text-zinc-600">Total aujourd'hui</span>
+          <span className="text-xl font-bold text-zinc-200 font-mono">${metrics.total_cost_today.toFixed(2)}</span>
         </div>
       </div>
 
       {/* Recent errors */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Erreurs récentes</h3>
-        <div className="space-y-3">
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-            <div className="flex items-start space-x-3">
-              <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-sm font-medium text-red-900">Source ArXiv RSS indisponible</p>
-                <p className="text-xs text-red-700 mt-1">Il y a 2 heures</p>
+      <div className="cockpit-card rounded-xl p-5">
+        <h3 className="text-xs font-semibold text-zinc-600 uppercase tracking-wider mb-3">Erreurs récentes</h3>
+        <div className="flex flex-col gap-2">
+          <div className="p-3 bg-red-500/8 border border-red-500/15 rounded-lg">
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" strokeWidth={1.5} />
+              <div>
+                <p className="text-xs font-medium text-red-400">Source ArXiv RSS indisponible</p>
+                <p className="text-xs text-zinc-700 mt-0.5">Il y a 2 heures</p>
               </div>
             </div>
           </div>

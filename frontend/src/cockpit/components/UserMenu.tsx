@@ -73,14 +73,14 @@ Support: support@entreprise.com`;
       {/* User Button */}
       <button 
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center space-x-2 px-3 py-1.5 hover:bg-blue-900/20 rounded-lg transition-all border border-transparent hover:border-blue-700/30"
+        className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-white/[0.04] rounded-lg transition-all border border-transparent hover:border-white/[0.08]"
       >
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center text-white text-xs font-bold border border-blue-400/30 shadow-lg">
+        <div className="w-7 h-7 rounded-full bg-white/[0.08] border border-white/[0.12] flex items-center justify-center text-zinc-300 text-xs font-semibold">
           U
         </div>
-        <span className="text-sm font-medium text-gray-200">User</span>
+        <span className="text-xs font-medium text-zinc-500">User</span>
         <svg 
-          className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          className={`w-3.5 h-3.5 text-zinc-700 transition-transform ${isOpen ? 'rotate-180' : ''}`}
           fill="none" 
           viewBox="0 0 24 24" 
           stroke="currentColor"
@@ -91,65 +91,65 @@ Support: support@entreprise.com`;
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-64 bg-[#0f1420] border border-blue-900/40 rounded-xl shadow-2xl shadow-black/50 overflow-hidden animate-scaleIn z-50">
+        <div className="absolute right-0 mt-2 w-56 bg-zinc-900 border border-white/[0.08] rounded-xl shadow-2xl shadow-black/50 overflow-hidden z-50">
           {/* User Info */}
-          <div className="px-4 py-3 bg-gradient-to-r from-blue-950/40 to-transparent border-b border-blue-900/30">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center text-white font-bold border border-blue-400/30">
+          <div className="px-4 py-3 border-b border-white/[0.06]">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-white/[0.08] border border-white/[0.12] flex items-center justify-center text-zinc-300 text-sm font-semibold">
                 U
               </div>
               <div>
-                <p className="text-sm font-semibold text-gray-100">User</p>
-                <p className="text-xs text-gray-400">user@entreprise.com</p>
+                <p className="text-sm font-semibold text-zinc-200">User</p>
+                <p className="text-xs text-zinc-600">user@entreprise.com</p>
               </div>
             </div>
           </div>
 
           {/* Menu Items */}
-          <div className="py-2">
+          <div className="py-1.5">
             <button 
               onClick={handleProfile}
-              className="w-full px-4 py-2.5 flex items-center space-x-3 hover:bg-blue-900/20 transition-colors text-gray-300 hover:text-blue-300 group"
+              className="w-full px-4 py-2 flex items-center gap-3 hover:bg-white/[0.04] transition-colors text-zinc-500 hover:text-zinc-200"
             >
-              <User className="w-4 h-4" />
-              <span className="text-sm font-medium">Mon profil</span>
+              <User className="w-3.5 h-3.5" strokeWidth={1.5} />
+              <span className="text-xs font-medium">Mon profil</span>
             </button>
             
             <button 
               onClick={handleSettings}
-              className="w-full px-4 py-2.5 flex items-center space-x-3 hover:bg-blue-900/20 transition-colors text-gray-300 hover:text-blue-300 group"
+              className="w-full px-4 py-2 flex items-center gap-3 hover:bg-white/[0.04] transition-colors text-zinc-500 hover:text-zinc-200"
             >
-              <Settings className="w-4 h-4" />
-              <span className="text-sm font-medium">Paramètres</span>
+              <Settings className="w-3.5 h-3.5" strokeWidth={1.5} />
+              <span className="text-xs font-medium">Paramètres</span>
             </button>
 
             <button 
               onClick={toggleTheme}
-              className="w-full px-4 py-2.5 flex items-center space-x-3 hover:bg-blue-900/20 transition-colors text-gray-300 hover:text-blue-300 group"
+              className="w-full px-4 py-2 flex items-center gap-3 hover:bg-white/[0.04] transition-colors text-zinc-500 hover:text-zinc-200"
             >
-              {theme === 'dark' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-              <span className="text-sm font-medium">
+              {theme === 'dark' ? <Moon className="w-3.5 h-3.5" strokeWidth={1.5} /> : <Sun className="w-3.5 h-3.5" strokeWidth={1.5} />}
+              <span className="text-xs font-medium">
                 {theme === 'dark' ? 'Mode sombre' : 'Mode clair'}
               </span>
             </button>
 
             <button 
               onClick={handleHelp}
-              className="w-full px-4 py-2.5 flex items-center space-x-3 hover:bg-blue-900/20 transition-colors text-gray-300 hover:text-blue-300 group"
+              className="w-full px-4 py-2 flex items-center gap-3 hover:bg-white/[0.04] transition-colors text-zinc-500 hover:text-zinc-200"
             >
-              <HelpCircle className="w-4 h-4" />
-              <span className="text-sm font-medium">Aide & Support</span>
+              <HelpCircle className="w-3.5 h-3.5" strokeWidth={1.5} />
+              <span className="text-xs font-medium">Aide & Support</span>
             </button>
           </div>
 
           {/* Logout */}
-          <div className="border-t border-blue-900/30 py-2">
+          <div className="border-t border-white/[0.06] py-1.5">
             <button 
               onClick={handleLogout}
-              className="w-full px-4 py-2.5 flex items-center space-x-3 hover:bg-red-900/20 transition-colors text-gray-300 hover:text-red-400 group"
+              className="w-full px-4 py-2 flex items-center gap-3 hover:bg-red-500/8 transition-colors text-zinc-500 hover:text-red-400"
             >
-              <LogOut className="w-4 h-4" />
-              <span className="text-sm font-medium">Déconnexion</span>
+              <LogOut className="w-3.5 h-3.5" strokeWidth={1.5} />
+              <span className="text-xs font-medium">Déconnexion</span>
             </button>
           </div>
         </div>
