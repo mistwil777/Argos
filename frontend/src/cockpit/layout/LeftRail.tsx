@@ -1,6 +1,6 @@
 // LeftRail - Navigation par modes
 import { useCockpit, type CockpitMode } from '../context/CockpitContext';
-import { FileText, BookOpen, MessageSquare, Shield, Command } from 'lucide-react';
+import { FileText, BookOpen, MessageSquare, Shield } from 'lucide-react';
 
 interface ModeConfig {
   id: CockpitMode;
@@ -15,11 +15,9 @@ const MODES: ModeConfig[] = [
   { id: 'controle', icon: Shield, label: 'Contrôle' },
 ];
 
-interface LeftRailProps {
-  onOpenCommandPalette: () => void;
-}
+interface LeftRailProps {}
 
-export function LeftRail({ onOpenCommandPalette }: LeftRailProps) {
+export function LeftRail({}: LeftRailProps) {
   const { activeMode, setActiveMode } = useCockpit();
 
   return (
@@ -56,18 +54,6 @@ export function LeftRail({ onOpenCommandPalette }: LeftRailProps) {
       })}
 
       <div className="flex-1" />
-
-      {/* Command Palette */}
-      <button
-        onClick={onOpenCommandPalette}
-        className="group relative w-10 h-10 rounded-xl flex items-center justify-center text-zinc-600 hover:text-zinc-300 hover:bg-white/[0.05] transition-all duration-200"
-        title="Palette de commandes (⌘K)"
-      >
-        <Command className="w-[18px] h-[18px]" strokeWidth={1.5} />
-        <div className="absolute left-12 px-2.5 py-1.5 bg-zinc-800 border border-white/[0.08] text-zinc-200 text-xs rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity duration-150 z-50 shadow-xl">
-          ⌘K
-        </div>
-      </button>
     </div>
   );
 }

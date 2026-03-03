@@ -1,8 +1,7 @@
 // DocInspector - Panneau de détails pour un document
 import { useState } from 'react';
 import { useCourse, usePublishCourse, useDeleteCourse, useModifyCourse } from '../../../hooks/useApi';
-import { Check, Archive, RefreshCw, AlertTriangle, TrendingUp, Eye, EyeOff, Sparkles } from 'lucide-react';
-import { ContentModal } from '../ContentModal';
+import { Check, Archive, RefreshCw, AlertTriangle, TrendingUp, Sparkles, Tag, Clock, Layers } from 'lucide-react';
 import { Preloader } from '../Preloader';
 
 interface DocInspectorProps {
@@ -14,8 +13,6 @@ export function DocInspector({ docId }: DocInspectorProps) {
   const publishMutation = usePublishCourse();
   const deleteMutation = useDeleteCourse();
   const modifyMutation = useModifyCourse();
-  const [showContent, setShowContent] = useState(false);
-  const [showFullContent, setShowFullContent] = useState(false);
   const [improveInstruction, setImproveInstruction] = useState('');
 
   const handleImprove = () => {
@@ -71,48 +68,31 @@ export function DocInspector({ docId }: DocInspectorProps) {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto scrollable p-4 flex flex-col gap-5">
-        {/* Description */}
-        <div>
-          <h3 className="text-[10px] font-semibold text-zinc-700 uppercase tracking-wider mb-2">Description</h3>
-          <p className="text-xs text-zinc-400 leading-relaxed">{course.description}</p>
-        </div>
-
-        {/* Content Viewer Toggle */}
-        <div className="space-y-2">
-          <button
-            onClick={() => setShowContent(!showContent)}
-            className="cockpit-btn cockpit-btn-primary w-full"
-          >
-            {showContent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            <span>{showContent ? 'Masquer l\'aperçu' : 'Afficher l\'aperçu'}</span>
-          </button>
-          
-          {course.content && (
-            <button
-              onClick={() => setShowFullContent(true)}
-              className="cockpit-btn w-full"
-            >
-              <Eye className="w-4 h-4" />
-              <span>Ouvrir en grand</span>
-            </button>
-          )}
-          
-          {showContent && course.content && (
-            <div className="mt-3 p-3 bg-white/[0.03] rounded-lg border border-white/[0.06] max-h-48 overflow-y-auto scrollable">
-              <pre className="whitespace-pre-wrap text-xs text-zinc-400 leading-relaxed">
-                {course.content.substring(0, 500)}...
-              </pre>
+        {/* Métadonnées */}
+        <div className="flex flex-col gap-2">
+          <h3 className="text-[10px] font-semibold text-zinc-700 uppercase tracking-wider mb-1">Métadonnées</h3>
+          {course.topic && (
+            <div className="flex items-center gap-2 text-xs">
+              <Tag className="w-3.5 h-3.5 text-zinc-600 shrink-0" strokeWidth={1.5} />
+              <span className="text-zinc-400">{course.topic}</span>
             </div>
           )}
+          {course.level && (
+            <div className="flex items-center gap-2 text-xs">
+              <Layers className="w-3.5 h-3.5 text-zinc-600 shrink-0" strokeWidth={1.5} />
+              <span className="text-zinc-400">{course.level}</span>
+            </div>
+          )}
+          {course.duration && (
+            <div className="flex items-center gap-2 text-xs">
+              <Clock className="w-3.5 h-3.5 text-zinc-600 shrink-0" strokeWidth={1.5} />
+              <span className="text-zinc-400">{course.duration} min</span>
+            </div>
+          )}
+          {!course.topic && !course.level && !course.duration && (
+            <p className="text-xs text-zinc-700 italic">Aucune métadonnée disponible</p>
+          )}
         </div>
-
-        {/* Content Modal */}
-        <ContentModal 
-          isOpen={showFullContent}
-          onClose={() => setShowFullContent(false)}
-          title={course.title}
-          content={course.content || ''}
-        />
 
         {/* Améliorer avec IA */}
         <div>
@@ -136,7 +116,7 @@ export function DocInspector({ docId }: DocInspectorProps) {
 
         {/* QA Score */}
         {course.qa_score !== undefined && course.qa_score !== null && (() => {
-          const qaPercent = course.qa_score > 1 ? course.qa_score : course.qa_score * 100;
+          const qaPercent = course.qa_score * 10; // Backend stores 0-10 scale
           return (
             <div>
               <h3 className="text-[10px] font-semibold text-zinc-700 uppercase tracking-wider mb-2">Qualité (QA)</h3>

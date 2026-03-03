@@ -28,9 +28,8 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
   const commands: Command[] = [
     {
       id: 'mode-flux',
-      label: 'Ouvrir Flux (Items)',
-      description: 'Accéder aux items en attente',
-      icon: <FileText className="w-5 h-5" />,
+      label: 'Flux · Items',
+      icon: <FileText className="w-3.5 h-3.5" />,
       action: () => {
         setActiveMode('flux');
         onClose();
@@ -39,9 +38,8 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     },
     {
       id: 'mode-production',
-      label: 'Ouvrir Production (Docs)',
-      description: 'Accéder à la bibliothèque de documents',
-      icon: <BookOpen className="w-5 h-5" />,
+      label: 'Production · Docs',
+      icon: <BookOpen className="w-3.5 h-3.5" />,
       action: () => {
         setActiveMode('production');
         onClose();
@@ -50,9 +48,8 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     },
     {
       id: 'mode-assistant',
-      label: 'Ouvrir Assistant (RAG)',
-      description: 'Poser des questions sur vos documents',
-      icon: <MessageSquare className="w-5 h-5" />,
+      label: 'Assistant · RAG',
+      icon: <MessageSquare className="w-3.5 h-3.5" />,
       action: () => {
         setActiveMode('assistant');
         onClose();
@@ -61,9 +58,8 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     },
     {
       id: 'mode-controle',
-      label: 'Ouvrir Contrôle (HITL)',
-      description: 'Gérer les décisions HITL et monitoring',
-      icon: <Shield className="w-5 h-5" />,
+      label: 'Contrôle · HITL',
+      icon: <Shield className="w-3.5 h-3.5" />,
       action: () => {
         setActiveMode('controle');
         onClose();
@@ -73,8 +69,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     {
       id: 'classify-all',
       label: 'Classifier tous les items pending',
-      description: 'Lancer la classification en batch',
-      icon: <Sparkles className="w-5 h-5" />,
+      icon: <Sparkles className="w-3.5 h-3.5" />,
       action: () => {
         setShowClassifyInfo(true);
       },
@@ -83,8 +78,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     {
       id: 'reject-all-low',
       label: 'Rejeter tous les items Low importance',
-      description: 'Nettoyage des items peu importants',
-      icon: <XCircle className="w-5 h-5" />,
+      icon: <XCircle className="w-3.5 h-3.5" />,
       action: () => {
         setShowConfirmReject(true);
       },
@@ -198,20 +192,20 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
       />
 
       {/* Palette */}
-      <div className="fixed top-1/4 left-1/2 -translate-x-1/2 w-full max-w-xl z-50">
+      <div className="fixed top-[20%] left-1/2 -translate-x-1/2 w-full max-w-sm z-50">
         <div className="bg-zinc-900 border border-white/[0.08] rounded-xl shadow-2xl shadow-black/50 overflow-hidden">
           {/* Search Input */}
-          <div className="flex items-center px-4 py-3 border-b border-white/[0.06]">
-            <Search className="w-4 h-4 text-zinc-600 mr-3" strokeWidth={1.5} />
+          <div className="flex items-center px-3 py-2.5 border-b border-white/[0.06]">
+            <Search className="w-3.5 h-3.5 text-zinc-600 mr-2.5" strokeWidth={1.5} />
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Rechercher une commande..."
-              className="flex-1 outline-none bg-transparent text-sm text-zinc-200 placeholder-zinc-700"
+              placeholder="Commande..."
+              className="flex-1 outline-none bg-transparent text-xs text-zinc-200 placeholder-zinc-700"
               autoFocus
             />
-            <kbd className="px-2 py-0.5 text-xs font-semibold text-zinc-600 bg-white/[0.06] border border-white/[0.08] rounded">
+            <kbd className="px-1.5 py-0.5 text-[10px] font-semibold text-zinc-700 bg-white/[0.06] border border-white/[0.08] rounded">
               ⌘K
             </kbd>
           </div>
@@ -223,33 +217,28 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
                 Aucune commande trouvée
               </div>
             ) : (
-              <div className="py-1.5">
+              <div className="py-1">
                 {filteredCommands.map((command, index) => (
                   <button
                     key={command.id}
                     onClick={command.action}
-                    className={`w-full px-4 py-2.5 flex items-center gap-3 transition-colors ${
+                    className={`w-full px-3 py-2 flex items-center gap-2.5 transition-colors ${
                       index === selectedIndex
                         ? 'bg-sky-500/10'
                         : 'hover:bg-white/[0.04]'
                     }`}
                     onMouseEnter={() => setSelectedIndex(index)}
                   >
-                    <div className={`flex-shrink-0 ${
-                      index === selectedIndex ? 'text-sky-400' : 'text-zinc-700'
+                    <span className={`flex-shrink-0 ${
+                      index === selectedIndex ? 'text-sky-400' : 'text-zinc-600'
                     }`}>
                       {command.icon}
-                    </div>
-                    <div className="flex-1 text-left">
-                      <p className="text-sm font-medium text-zinc-200">{command.label}</p>
-                      {command.description && (
-                        <p className="text-xs text-zinc-600 mt-0.5">{command.description}</p>
-                      )}
-                    </div>
+                    </span>
+                    <span className={`flex-1 text-left text-xs font-medium ${
+                      index === selectedIndex ? 'text-zinc-100' : 'text-zinc-400'
+                    }`}>{command.label}</span>
                     {index === selectedIndex && (
-                      <kbd className="px-2 py-0.5 text-xs font-semibold text-zinc-600 bg-white/[0.06] border border-white/[0.08] rounded">
-                        ↵
-                      </kbd>
+                      <kbd className="px-1.5 py-0.5 text-[10px] font-semibold text-zinc-700 bg-white/[0.06] border border-white/[0.08] rounded">↵</kbd>
                     )}
                   </button>
                 ))}
