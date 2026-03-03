@@ -143,8 +143,8 @@ export const useUpdateCourseStatus = () => {
 export const useGenerateCourse = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ itemId, durationMinutes }: { itemId: number; durationMinutes?: number }) => 
-      coursesApi.generate(itemId, durationMinutes),
+    mutationFn: ({ itemId, durationMinutes, contentType }: { itemId: number; durationMinutes?: number; contentType?: string }) => 
+      coursesApi.generate(itemId, durationMinutes, contentType),
     onSuccess: () => {
       // Only invalidate, let React Query handle refetching naturally
       queryClient.invalidateQueries({ queryKey: ['courses'] });

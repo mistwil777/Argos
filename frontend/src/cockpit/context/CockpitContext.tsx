@@ -5,6 +5,23 @@ import type { ReactNode } from 'react';
 export type CockpitMode = 'flux' | 'production' | 'assistant' | 'sources';
 export type LayoutMode = 'focus' | 'split' | 'review';
 
+// Helpers for localStorage persistence
+const LS_WORKSPACE = 'cockpit_workspace';
+const LS_MODE = 'cockpit_mode';
+
+function loadWorkspaceId(): number | null {
+  try {
+    const v = localStorage.getItem(LS_WORKSPACE);
+    return v ? parseInt(v, 10) : null;
+  } catch { return null; }
+}
+function loadMode(): CockpitMode {
+  try {
+    const v = localStorage.getItem(LS_MODE) as CockpitMode;
+    return ['flux', 'production', 'assistant', 'sources'].includes(v) ? v : 'flux';
+  } catch { return 'flux'; }
+}
+
 interface CockpitState {
   // Mode actif
   activeMode: CockpitMode;
@@ -37,13 +54,26 @@ interface CockpitState {
 const CockpitContext = createContext<CockpitState | null>(null);
 
 export function CockpitProvider({ children }: { children: ReactNode }) {
-  const [activeMode, setActiveMode] = useState<CockpitMode>('flux');
+  const [activeMode, _setActiveMode] = useState<CockpitMode>(loadMode);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>('focus');
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState<number | null>(null);
+  const [activeWorkspaceId, _setActiveWorkspaceId] = useState<number | null>(loadWorkspaceId);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
   const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
   const [selectedSourceUrl, setSelectedSourceUrl] = useState<string | null>(null);
+
+  // Persisted setters
+  const setActiveMode = (mode: CockpitMode) => {
+    _setActiveMode(mode);
+    try { localStorage.setItem(LS_MODE, mode); } catch { /* ignore */ }
+  };
+  const setActiveWorkspaceId = (id: number | null) => {
+    _setActiveWorkspaceId(id);
+    try {
+      if (id !== null) localStorage.setItem(LS_WORKSPACE, String(id));
+      else localStorage.removeItem(LS_WORKSPACE);
+    } catch { /* ignore */ }
+  };
 
   const value: CockpitState = {
     activeMode,

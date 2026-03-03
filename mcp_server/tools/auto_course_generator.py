@@ -16,6 +16,68 @@ from mcp_server.services.pdf_generator import generate_pdf_background
 
 logger = logging.getLogger(__name__)
 
+# ─────────────────────────────────────────────────────────────
+# Content-type configuration — one entry per document type
+# ─────────────────────────────────────────────────────────────
+CONTENT_TYPE_CONFIG = {
+    "course": {
+        "label": "Cours pédagogique",
+        "system_prompt": (
+            "Tu es un expert pédagogique spécialisé en IA et technologies émergentes. "
+            "Tu crées des cours complets, structurés et professionnels en français "
+            "(5000+ mots) avec objectifs, prérequis, exemples de code et quiz."
+        ),
+        "prefix": (
+            "OBJECTIF : Créer un cours pédagogique complet (5000+ mots) avec "
+            "objectifs d'apprentissage, prérequis, exemples Python, quiz et glossaire."
+        ),
+    },
+    "guide": {
+        "label": "Guide pratique",
+        "system_prompt": (
+            "Tu es un expert technique. Tu rédiges des guides pratiques clairs, "
+            "orientés action, avec des étapes concrètes et des exemples réels."
+        ),
+        "prefix": (
+            "OBJECTIF : Créer un guide pratique (2000-3000 mots) étape par étape. "
+            "Chaque étape doit être actionnable, avec exemples concrets de code ou commandes."
+        ),
+    },
+    "article": {
+        "label": "Article de veille",
+        "system_prompt": (
+            "Tu es un journaliste tech expert en IA. Tu rédiges des articles de veille "
+            "percutants, en vulgarisant sans perdre en précision, avec analyse de tendances."
+        ),
+        "prefix": (
+            "OBJECTIF : Rédiger un article de veille technologique (1500-2000 mots) "
+            "accessible, avec contexte marché, implications pratiques et perspectives."
+        ),
+    },
+    "fiche": {
+        "label": "Fiche de synthèse",
+        "system_prompt": (
+            "Tu es un expert en synthèse documentaire. Tu crées des fiches claires, "
+            "concises et visuellement organisées avec titres, puces et tableaux."
+        ),
+        "prefix": (
+            "OBJECTIF : Créer une fiche de synthèse (800-1200 mots) avec définition, "
+            "points clés, cas d'usage, avantages/limites et ressources utiles."
+        ),
+    },
+    "cas_pratique": {
+        "label": "Cas pratique",
+        "system_prompt": (
+            "Tu es un formateur spécialisé. Tu conçois des cas pratiques immersifs "
+            "avec contexte réel, problématique, solution détaillée et code fonctionnel."
+        ),
+        "prefix": (
+            "OBJECTIF : Créer un cas pratique complet (3000+ mots) avec contexte métier, "
+            "problématique, démarche de résolution, implémentation commentée et résultats attendus."
+        ),
+    },
+}
+
 # Comprehensive French course generation prompt
 FRENCH_COURSE_PROMPT = """OBJECTIF : Créer un cours complet, pédagogique et professionnel en français sur le sujet mentionné, avec le même niveau de qualité que le cours "Vision par Ordinateur : Fondamentaux".
 
@@ -191,20 +253,25 @@ Génère maintenant le cours complet."""
 async def generate_course_from_item(
     item_id: int,
     duration_minutes: int = 180,
-    language: str = "fr"
+    language: str = "fr",
+    content_type: str = "course"
 ) -> Dict[str, Any]:
     """
-    Generate a high-quality pedagogical course from a classified item.
+    Generate a high-quality document from a classified item.
     
     Args:
         item_id: ID of the classified item
         duration_minutes: Target duration (default: 180 minutes)
-        language: Course language (default: "fr" for French)
+        language: Document language (default: "fr" for French)
+        content_type: Type of document — course|guide|article|fiche|cas_pratique
     
     Returns:
         Dict with course_id, tokens_used, cost, and other metadata
     """
-    logger.info(f"Generating course from item {item_id} in language '{language}'")
+    if content_type not in CONTENT_TYPE_CONFIG:
+        content_type = "course"
+    type_cfg = CONTENT_TYPE_CONFIG[content_type]
+    logger.info(f"Generating '{type_cfg['label']}' from item {item_id} in language '{language}'")
     
     try:
         db = DatabaseManager(settings.database_url)
@@ -216,7 +283,7 @@ async def generate_course_from_item(
                     SELECT 
                         id, title, url, summary, source_type,
                         classification_status, subject, importance,
-                        content, item_type
+                        content, item_type, workspace_id
                     FROM items
                     WHERE id = %s
                 """, (item_id,))
@@ -236,6 +303,7 @@ async def generate_course_from_item(
                     "importance": row[7],
                     "content": row[8],
                     "item_type": row[9],
+                    "workspace_id": row[10],
                     "reasoning": ""  # No reasoning column in DB
                 }
         
@@ -298,19 +366,32 @@ async def generate_course_from_item(
         
         logger.info(f"📝 Step 3/4: Generating course content with LLM...")
         
-        # 4. Build comprehensive French prompt with RAG context
-        prompt = FRENCH_COURSE_PROMPT.format(
-            title=item["title"],
-            url=item.get("url", "N/A"),
-            description=item.get("description", ""),
-            subject=item.get("subject", "Unknown"),
-            importance=item.get("importance", "Medium"),
-            duration_minutes=duration_minutes
-        )
-        
+        # 4. Build prompt based on content_type
+        if content_type == "course":
+            prompt = FRENCH_COURSE_PROMPT.format(
+                title=item["title"],
+                url=item.get("url", "N/A"),
+                description=item.get("description", ""),
+                subject=item.get("subject", "Unknown"),
+                importance=item.get("importance", "Medium"),
+                duration_minutes=duration_minutes
+            )
+        else:
+            prompt = f"""{type_cfg['prefix']}
+
+INFORMATIONS SOURCE :
+Titre : {item['title']}
+URL : {item.get('url', 'N/A')}
+Description : {item.get('description', '')}
+Sujet : {item.get('subject', 'Unknown')}
+Importance : {item.get('importance', 'Medium')}
+
+Rédige le document en français, de manière professionnelle et structurée, 
+avec des titres Markdown clairs (##, ###), des exemples concrets et des encadrés 💡."""
+
         # Add RAG context if available
         if rag_context:
-            prompt += f"\n\n**CONTEXTE ADDITIONNEL DEPUIS LA BASE DE CONNAISSANCES**:\n\n{rag_context}\n\nUtilise ces informations pour enrichir le cours avec des détails techniques précis."
+            prompt += f"\n\n**CONTEXTE ADDITIONNEL DEPUIS LA BASE DE CONNAISSANCES**:\n\n{rag_context}\n\nUtilise ces informations pour enrichir le contenu avec des détails techniques précis."
         
         # 5. Generate content using LLM provider
         # Determine model based on provider
@@ -333,7 +414,7 @@ async def generate_course_from_item(
         logger.info(f"🤖 Generating course using {settings.llm_provider} provider with model {model}")
         
         # Split prompt into system and user parts
-        system_prompt = "Tu es un expert pédagogique spécialisé en IA et technologies émergentes. Tu crées des cours complets, pédagogiques et professionnels en français avec le même niveau de qualité que le cours 'Vision par Ordinateur : Fondamentaux'. Tu utilises le contexte fourni pour enrichir le cours avec des informations techniques précises."
+        system_prompt = type_cfg["system_prompt"] + " Tu utilises le contexte fourni pour enrichir le contenu avec des informations techniques précises."
         
         # Generate with high token limit for comprehensive content
         content, usage = await llm_provider.generate(
@@ -366,6 +447,8 @@ async def generate_course_from_item(
                 # Generate course title from item title (remove generic template)
                 course_title = item["title"]
                 
+                workspace_id = item.get("workspace_id")
+
                 if existing_course:
                     # Update existing course
                     course_updated = True
@@ -378,7 +461,9 @@ async def generate_course_from_item(
                             estimated_duration_minutes = %s,
                             updated_at = NOW(),
                             status = %s,
-                            qa_score = %s
+                            qa_score = %s,
+                            workspace_id = %s,
+                            content_type = %s
                         WHERE id = %s
                         RETURNING id
                     """, (
@@ -386,29 +471,34 @@ async def generate_course_from_item(
                         item['subject'],
                         course_content,
                         duration_minutes,
-                        "draft",  # Reset to draft for review
-                        5.0,  # Reset QA score
+                        "draft",
+                        5.0,
+                        workspace_id,
+                        content_type,
                         existing_course[0]
                     ))
                     course_id = existing_course[0]
                 else:
                     # Insert new course
-                    logger.info(f"📝 Creating new course for item {item_id}")
+                    logger.info(f"📝 Creating new '{content_type}' for item {item_id} (workspace {workspace_id})")
                     cur.execute("""
                         INSERT INTO courses 
-                        (item_id, title, subject, level, content, estimated_duration_minutes, status, qa_score)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        (item_id, title, subject, level, content, estimated_duration_minutes,
+                         status, qa_score, workspace_id, content_type)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         RETURNING id
                     """, (
                         item_id,
                         course_title,
                         item['subject'],
-                        "intermediate",  # Default level
+                        "intermediate",
                         course_content,
                         duration_minutes,
-                        "draft",  # Start as draft for review
-                        5.0  # Initial QA score (0-10 scale)
-                        ))
+                        "draft",
+                        5.0,
+                        workspace_id,
+                        content_type,
+                    ))
                     course_id = cur.fetchone()[0]
                 
                 # Record decision for cost tracking

@@ -603,6 +603,7 @@ async def generate_course_from_item(request: Dict[str, Any]):
         
         duration_minutes = request.get("duration_minutes", 180)
         language = request.get("language", "fr")
+        content_type = request.get("content_type", "course")
         
         # Import here to avoid circular dependency
         from mcp_server.tools.auto_course_generator import generate_course_from_item
@@ -611,7 +612,8 @@ async def generate_course_from_item(request: Dict[str, Any]):
         result = await generate_course_from_item(
             item_id=item_id,
             duration_minutes=duration_minutes,
-            language=language
+            language=language,
+            content_type=content_type
         )
         
         if "error" in result:

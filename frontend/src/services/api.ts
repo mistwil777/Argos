@@ -97,7 +97,7 @@ export const coursesApi = {
     return data;
   },
   
-  generate: async (itemId: number, durationMinutes: number = 180): Promise<{ 
+  generate: async (itemId: number, durationMinutes: number = 180, contentType: string = 'course'): Promise<{ 
     course_id: number; 
     status: string; 
     tokens_used: number; 
@@ -109,7 +109,8 @@ export const coursesApi = {
   }> => {
     const { data } = await apiClient.post('/api/v1/courses/generate', { 
       item_id: itemId,
-      duration_minutes: durationMinutes
+      duration_minutes: durationMinutes,
+      content_type: contentType,
     });
     return data;
   },

@@ -30,7 +30,21 @@ export function TopBar() {
 
   return (
     <>
-      <div className="h-13 bg-zinc-950 border-b border-white/[0.06] flex items-center justify-between px-4 shrink-0" style={{ height: '52px' }}>
+      <div
+        className="flex items-center justify-between px-4 shrink-0 relative"
+        style={{
+          height: '52px',
+          background: activeWorkspace
+            ? `linear-gradient(135deg, ${workspaceColor}22 0%, #18181b 35%, #18181b 65%, ${workspaceColor}12 100%)`
+            : 'linear-gradient(180deg, #27272a 0%, #18181b 100%)',
+          borderBottom: activeWorkspace
+            ? `1px solid ${workspaceColor}40`
+            : '1px solid rgba(255,255,255,0.08)',
+          boxShadow: activeWorkspace
+            ? `0 1px 20px ${workspaceColor}15, 0 1px 0 ${workspaceColor}20`
+            : '0 1px 8px rgba(0,0,0,0.4)',
+        }}
+      >
         {/* Left: Brand + mode */}
         <div className="flex items-center gap-3">
           {/* App logo */}
