@@ -2,7 +2,7 @@
 import { createContext, useContext, useState } from 'react';
 import type { ReactNode } from 'react';
 
-export type CockpitMode = 'flux' | 'production' | 'assistant' | 'controle';
+export type CockpitMode = 'flux' | 'production' | 'assistant' | 'controle' | 'sources';
 export type LayoutMode = 'focus' | 'split' | 'review';
 
 interface CockpitState {

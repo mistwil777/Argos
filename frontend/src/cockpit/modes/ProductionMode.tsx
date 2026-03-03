@@ -1,6 +1,7 @@
 // ProductionMode - Mode Docs (bibliothèque de documents générés)
 import { useState } from 'react';
 import { useCourses, useCourse, usePublishCourse, useDeleteCourse, useModifyCourse } from '../../hooks/useApi';
+import { useCockpit } from '../context/CockpitContext';
 import {
   BookOpen, Clock, Tag, TrendingUp, Check, Archive,
   Sparkles, ChevronLeft, AlertTriangle, Calendar, Layers
@@ -271,11 +272,15 @@ function CourseReader({ courseId, onBack }: { courseId: number; onBack: () => vo
 export function ProductionMode() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'review' | 'published'>('all');
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
+  const { activeWorkspaceId } = useCockpit();
 
   const { data: coursesData, isLoading } = useCourses({
     status: statusFilter === 'all' ? undefined : statusFilter,
+    workspace_id: activeWorkspaceId ?? undefined,
   });
-  const { data: allCoursesData } = useCourses();
+  const { data: allCoursesData } = useCourses({
+    workspace_id: activeWorkspaceId ?? undefined,
+  });
 
   const courses = coursesData?.courses || [];
   const allCourses = allCoursesData?.courses || [];

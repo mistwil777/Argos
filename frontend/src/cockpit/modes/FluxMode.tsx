@@ -25,14 +25,17 @@ const ITEM_TYPE_FR: Record<string, string> = {
 };
 
 export function FluxMode() {
-  const { setSelectedItemId, setInspectorOpen } = useCockpit();
+  const { setSelectedItemId, setInspectorOpen, activeWorkspaceId } = useCockpit();
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'classified'>('all');
   
   const { data: itemsData, isLoading } = useItems({ 
-    status: statusFilter === 'all' ? undefined : statusFilter 
+    status: statusFilter === 'all' ? undefined : statusFilter,
+    workspace_id: activeWorkspaceId ?? undefined,
   });
-  // Separate query without filter for accurate tab counts
-  const { data: allItemsData } = useItems();
+  // Separate query without status filter for accurate tab counts
+  const { data: allItemsData } = useItems({
+    workspace_id: activeWorkspaceId ?? undefined,
+  });
 
   const items = itemsData?.items || [];
   const allItems = allItemsData?.items || [];

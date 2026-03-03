@@ -35,7 +35,7 @@ export const statsApi = {
 
 // Items API
 export const itemsApi = {
-  list: async (params?: { page?: number; limit?: number; status?: string; source?: string }): Promise<{ items: Item[]; total: number }> => {
+  list: async (params?: { page?: number; limit?: number; status?: string; source?: string; workspace_id?: number }): Promise<{ items: Item[]; total: number }> => {
     const { data } = await apiClient.get('/api/v1/items', { params });
     return data;
   },
@@ -62,7 +62,7 @@ export const itemsApi = {
 
 // Courses API
 export const coursesApi = {
-  list: async (params?: { page?: number; limit?: number; status?: string; topic?: string }): Promise<{ courses: Course[]; total: number }> => {
+  list: async (params?: { page?: number; limit?: number; status?: string; topic?: string; workspace_id?: number }): Promise<{ courses: Course[]; total: number }> => {
     const { data } = await apiClient.get('/api/v1/courses', { params });
     return data;
   },
@@ -165,6 +165,50 @@ export const ragApi = {
 
   clearHistory: async (): Promise<{ message: string; deleted: number }> => {
     const { data } = await apiClient.delete('/api/v1/rag/history');
+    return data;
+  },
+};
+
+// Sources API
+export interface Source {
+  id: number;
+  name: string;
+  url: string;
+  type: 'rss' | 'github' | 'api';
+  category: string;
+  description: string;
+  tags: string[];
+  active: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface SourceCreate {
+  name: string;
+  url: string;
+  type: 'rss' | 'github' | 'api';
+  category: string;
+  description?: string;
+  tags?: string[];
+  active?: boolean;
+  workspace_id?: number;
+}
+
+export const sourcesApi = {
+  list: async (params?: { type?: string; category?: string; active?: boolean; workspace_id?: number }): Promise<{ sources: Source[]; total: number }> => {
+    const { data } = await apiClient.get('/api/v1/sources', { params });
+    return data;
+  },
+  get: async (id: number): Promise<Source> => {
+    const { data } = await apiClient.get(`/api/v1/sources/${id}`);
+    return data;
+  },
+  create: async (payload: SourceCreate): Promise<{ id: number; message: string }> => {
+    const { data } = await apiClient.post('/api/v1/sources', payload);
+    return data;
+  },
+  toggle: async (id: number, active: boolean): Promise<{ message: string }> => {
+    const { data } = await apiClient.patch(`/api/v1/sources/${id}/toggle`, { active });
     return data;
   },
 };

@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { statsApi, itemsApi, coursesApi, ragApi, hitlApi, workspacesApi } from '../services/api';
-import type { WorkspaceCreate } from '../services/api';
+import { statsApi, itemsApi, coursesApi, ragApi, hitlApi, workspacesApi, sourcesApi } from '../services/api';
+import type { WorkspaceCreate, SourceCreate } from '../services/api';
 
 // Stats hooks
 export const useGlobalStats = () => {
@@ -290,6 +290,34 @@ export const useDeleteWorkspace = () => {
     mutationFn: (id: number) => workspacesApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workspaces'] });
+    },
+  });
+};
+
+// Sources hooks
+export const useSources = (params?: { type?: string; category?: string; active?: boolean; workspace_id?: number }) => {
+  return useQuery({
+    queryKey: ['sources', params],
+    queryFn: () => sourcesApi.list(params),
+  });
+};
+
+export const useCreateSource = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: SourceCreate) => sourcesApi.create(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sources'] });
+    },
+  });
+};
+
+export const useToggleSource = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, active }: { id: number; active: boolean }) => sourcesApi.toggle(id, active),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sources'] });
     },
   });
 };

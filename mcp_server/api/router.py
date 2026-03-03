@@ -185,6 +185,7 @@ async def get_costs_stats(period: str = Query(default="month", regex="^(week|mon
 async def list_items(
     status: str = Query(default="all", description="Filter by status: all, pending, classified"),
     source: str = Query(default="all", description="Filter by source"),
+    workspace_id: Optional[int] = Query(default=None, description="Filter by workspace ID"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0)
 ):
@@ -208,6 +209,10 @@ async def list_items(
                 if source != "all":
                     where_conditions.append("source_type = %s")
                     params.append(source)
+                
+                if workspace_id is not None:
+                    where_conditions.append("workspace_id = %s")
+                    params.append(workspace_id)
                 
                 where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
                 
@@ -351,6 +356,7 @@ async def delete_item(item_id: int):
 @api_router.get("/courses")
 async def list_courses(
     status: str = Query(default="all"),
+    workspace_id: Optional[int] = Query(default=None, description="Filter by workspace ID"),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0)
 ):
@@ -358,8 +364,18 @@ async def list_courses(
     try:
         with db.get_connection() as conn:
             with conn.cursor() as cur:
-                where_clause = "1=1" if status == "all" else "status = %s"
-                params = [] if status == "all" else [status]
+                where_conditions = []
+                params = []
+                
+                if status != "all":
+                    where_conditions.append("status = %s")
+                    params.append(status)
+                
+                if workspace_id is not None:
+                    where_conditions.append("workspace_id = %s")
+                    params.append(workspace_id)
+                
+                where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
                 
                 query = f"""
                     SELECT 
@@ -1079,6 +1095,7 @@ async def list_sources(
     type: Optional[str] = Query(None, description="Filter by source type (rss, github, api)"),
     category: Optional[str] = Query(None, description="Filter by category"),
     active: Optional[bool] = Query(None, description="Filter by active status"),
+    workspace_id: Optional[int] = Query(None, description="Filter by workspace ID"),
     limit: int = Query(100, ge=1, le=500)
 ):
     """List all data sources with optional filters."""
@@ -1100,6 +1117,10 @@ async def list_sources(
                 if active is not None:
                     conditions.append("active = %s")
                     params.append(active)
+                
+                if workspace_id is not None:
+                    conditions.append("workspace_id = %s")
+                    params.append(workspace_id)
                 
                 where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
                 
@@ -1189,8 +1210,8 @@ async def create_source(source: Dict[str, Any]):
         with db.get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO sources (name, url, type, category, description, tags, active)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO sources (name, url, type, category, description, tags, active, workspace_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                 """, (
                     source["name"],
@@ -1199,7 +1220,8 @@ async def create_source(source: Dict[str, Any]):
                     source["category"],
                     source.get("description", ""),
                     source.get("tags", []),
-                    source.get("active", True)
+                    source.get("active", True),
+                    source.get("workspace_id", 1)
                 ))
                 
                 source_id = cur.fetchone()[0]

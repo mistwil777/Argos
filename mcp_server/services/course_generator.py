@@ -100,9 +100,21 @@ Return ONLY a valid JSON object (no markdown code blocks) with this structure:
 }}"""
 
 
-QA_SCORING_PROMPT = """You are a quality assurance expert for educational content.
+QA_SCORING_PROMPT = """You are a quality assurance expert for AI-generated educational content.
 
 **Your task:** Evaluate the quality of this technical course and assign a score.
+
+**Important baseline:** AI-generated technical courses that follow standard educational structure
+should score between 8.0 and 9.0 by default. Only deduct points for genuine, significant
+deficiencies — not for the absence of optional extras. A well-structured course with clear
+content and logical flow deserves a score of at least 8.0.
+
+**Scoring reference:**
+- 9.0 – 10.0 : Exceptional course, outstanding depth, rich examples, flawless structure
+- 8.0 – 8.9  : Solid, well-structured course — this is the expected baseline for AI content
+- 7.0 – 7.9  : Good but missing one notable area (e.g., too brief, minor gaps)
+- 6.0 – 6.9  : Acceptable but noticeably incomplete or poorly organized
+- < 6.0      : Only for significantly deficient content (missing key sections, inaccurate)
 
 **Course to evaluate:**
 Title: {title}
@@ -115,29 +127,32 @@ Content Length: {content_length} characters
 **Evaluation Criteria:**
 
 1. **Content Quality (30%)**
-   - Technical accuracy
-   - Clarity of explanations
-   - Depth appropriate for level
+   - Technical accuracy and correctness
+   - Clarity and accessibility of explanations
+   - Depth appropriate for the stated level
+   - Reward: presence of code snippets, concrete examples, or comparisons
 
 2. **Pedagogical Structure (25%)**
-   - Clear learning objectives
-   - Logical flow and organization
-   - Progressive difficulty
+   - Presence of learning objectives or introduction
+   - Logical flow and topic organization
+   - Progressive build-up from basics to more advanced concepts
+   - Reward: clear sections, numbered lists, step-by-step explanations
 
 3. **Practical Value (20%)**
-   - Real-world examples
-   - Actionable insights
-   - Hands-on exercises
+   - Real-world context or use cases (even brief)
+   - Actionable takeaways
+   - Code samples, commands, or configuration examples count fully
+   - Do NOT penalize for absence of interactive exercises (not expected for AI content)
 
 4. **Completeness (15%)**
-   - All required sections present
-   - Adequate detail
-   - Proper conclusion
+   - Introduction, body, and conclusion or summary present
+   - Key subtopics covered at appropriate depth
+   - Reward: comprehensive coverage even if not exhaustive
 
 5. **Presentation (10%)**
-   - Markdown formatting quality
-   - Readability
-   - Visual organization (headings, lists, code blocks)
+   - Markdown formatting quality (headings, lists, code blocks)
+   - Readability and visual organization
+   - Consistent formatting throughout
 
 **Output format:**
 Return ONLY a valid JSON object (no markdown code blocks):
@@ -331,12 +346,12 @@ class CourseGeneratorService:
             title=course["title"],
             level=course["level"],
             content_length=len(course["content"]),
-            content=course["content"][:8000]  # Truncate if too long
+            content=course["content"][:12000]  # Truncate if too long
         )
         
         # 3. Call LLM for evaluation
         start_time = datetime.now()
-        content, usage = await self._call_llm(prompt, temperature=0.3)
+        content, usage = await self._call_llm(prompt, temperature=0.1)
         latency_ms = int((datetime.now() - start_time).total_seconds() * 1000)
         
         # 4. Parse response
