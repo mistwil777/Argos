@@ -1,6 +1,6 @@
 // CommandPalette - Palette de commandes (⌘K)
 import { useEffect, useState } from 'react';
-import { Search, FileText, BookOpen, MessageSquare, Shield, Sparkles, XCircle } from 'lucide-react';
+import { Search, FileText, BookOpen, MessageSquare, Sparkles, XCircle } from 'lucide-react';
 import { useCockpit } from '../context/CockpitContext';
 
 interface Command {
@@ -55,16 +55,6 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
         onClose();
       },
       keywords: ['assistant', 'rag', 'chat', 'questions'],
-    },
-    {
-      id: 'mode-controle',
-      label: 'Contrôle · HITL',
-      icon: <Shield className="w-3.5 h-3.5" />,
-      action: () => {
-        setActiveMode('controle');
-        onClose();
-      },
-      keywords: ['controle', 'hitl', 'monitoring', 'health'],
     },
     {
       id: 'classify-all',

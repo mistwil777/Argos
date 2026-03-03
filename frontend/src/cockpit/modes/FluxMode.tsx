@@ -2,9 +2,14 @@
 import { useState } from 'react';
 import { useItems, useClassifyBatch, useDeleteItem, useBatchAssignWorkspace, useWorkspaces } from '../../hooks/useApi';
 import { useCockpit } from '../context/CockpitContext';
-import { AlertCircle, Sparkles, FileText, Trash2, FolderInput, CheckSquare } from 'lucide-react';
+import { AlertCircle, Sparkles, FileText, Trash2, FolderInput, CheckSquare, ExternalLink } from 'lucide-react';
 import { CockpitHeader } from '../components/CockpitHeader';
 import type { Item } from '../../types';
+
+function sourceDomain(url?: string | null): string | null {
+  if (!url) return null;
+  try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return null; }
+}
 
 const IMPORTANCE_FR: Record<string, string> = {
   High: 'Élevé',
@@ -25,7 +30,7 @@ const ITEM_TYPE_FR: Record<string, string> = {
 };
 
 export function FluxMode() {
-  const { setSelectedItemId, setInspectorOpen, activeWorkspaceId } = useCockpit();
+  const { setSelectedItemId, setInspectorOpen, activeWorkspaceId, setActiveMode, setSelectedSourceUrl } = useCockpit();
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'classified'>('all');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showWorkspacePicker, setShowWorkspacePicker] = useState(false);
@@ -209,6 +214,10 @@ export function FluxMode() {
                 selected={selectedIds.has(item.id)}
                 onSelect={(e) => toggleOne(item.id, e)}
                 onClick={() => handleItemClick(item)}
+                onSourceClick={(url, _e) => {
+                  setSelectedSourceUrl(url);
+                  setActiveMode('sources');
+                }}
               />
             ))}
           </div>
@@ -224,10 +233,12 @@ interface ItemCardProps {
   selected: boolean;
   onSelect: (e: React.MouseEvent) => void;
   onClick: () => void;
+  onSourceClick: (sourceUrl: string, e: React.MouseEvent) => void;
 }
 
-function ItemCard({ item, selected, onSelect, onClick }: ItemCardProps) {
+function ItemCard({ item, selected, onSelect, onClick, onSourceClick }: ItemCardProps) {
   const isPending = item.classification_status === 'pending';
+  const domain = sourceDomain(item.source_url);
 
   return (
     <div
@@ -277,6 +288,16 @@ function ItemCard({ item, selected, onSelect, onClick }: ItemCardProps) {
             <span className="px-2 py-0.5 bg-white/[0.04] text-zinc-500 rounded border border-white/[0.06] text-xs">
               {ITEM_TYPE_FR[item.item_type] || item.item_type}
             </span>
+          )}
+          {domain && (
+            <button
+              onClick={(e) => { e.stopPropagation(); item.source_url && onSourceClick(item.source_url, e); }}
+              className="flex items-center gap-1 px-2 py-0.5 bg-emerald-500/8 text-emerald-500/70 rounded border border-emerald-500/15 text-xs hover:bg-emerald-500/15 hover:text-emerald-400 transition-all"
+              title="Voir la source"
+            >
+              <ExternalLink className="w-2.5 h-2.5" />
+              {domain}
+            </button>
           )}
         </div>
         <span className="text-xs text-zinc-700 font-mono">

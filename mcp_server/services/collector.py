@@ -407,13 +407,30 @@ class CollectorService:
                     duplicates += 1
                     continue
                 
-                # Insert into database
+                # Look up workspace_id from source matching source_url
+                workspace_id = item.get("workspace_id")
+                if workspace_id is None:
+                    try:
+                        with self.db.get_connection() as conn:
+                            with conn.cursor() as cur:
+                                cur.execute(
+                                    "SELECT workspace_id FROM sources WHERE url = %s LIMIT 1",
+                                    (item["source_url"],)
+                                )
+                                src_row = cur.fetchone()
+                                if src_row:
+                                    workspace_id = src_row[0]
+                    except Exception:
+                        pass
+
+                # Insert into database with ON CONFLICT (url) DO NOTHING for dedup
                 query = """
                     INSERT INTO items (
                         source_type, source_url, url, title, summary,
-                        author, published_at
+                        author, published_at, workspace_id
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (url) DO NOTHING
                     RETURNING id
                 """
                 
@@ -428,10 +445,16 @@ class CollectorService:
                                 item["title"],
                                 item["summary"],
                                 item.get("author"),
-                                item.get("published_at")
+                                item.get("published_at"),
+                                workspace_id,
                             )
                         )
-                        item_id = cur.fetchone()[0]
+                        row = cur.fetchone()
+                        item_id = row[0] if row else None
+                        if item_id is None:
+                            # Duplicate silently skipped by ON CONFLICT
+                            duplicates += 1
+                            continue
                 
                 logger.info(f"Inserted item {item_id}: {item['title'][:50]}...")
                 inserted += 1

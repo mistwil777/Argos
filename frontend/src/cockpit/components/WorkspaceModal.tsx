@@ -47,9 +47,12 @@ export function WorkspaceModal({ isOpen, onClose }: WorkspaceModalProps) {
     createMutation.mutate(
       { name: form.name, description: form.description, domain: form.domain, color: form.color, icon: 'layers' },
       {
-        onSuccess: () => {
+        onSuccess: (newWs: any) => {
+          // Auto-select the newly created workspace
+          if (newWs?.id) setActiveWorkspaceId(newWs.id);
           setForm({ name: '', description: '', domain: 'general', color: '#0ea5e9' });
           setShowCreate(false);
+          onClose();
         },
       }
     );

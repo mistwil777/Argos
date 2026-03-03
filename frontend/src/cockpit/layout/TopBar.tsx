@@ -1,7 +1,7 @@
 // TopBar - Barre supérieure
 import { useState } from 'react';
 import { useGlobalStats, useWorkspaces } from '../../hooks/useApi';
-import { Bell, DollarSign, PanelRightOpen, PanelRightClose, ChevronDown, Zap, FileText, BookOpen, MessageSquare, Shield, Rss } from 'lucide-react';
+import { Bell, DollarSign, PanelRightOpen, PanelRightClose, ChevronDown, Zap, FileText, BookOpen, MessageSquare, Rss } from 'lucide-react';
 import { UserMenu } from '../components/UserMenu';
 import { WorkspaceModal } from '../components/WorkspaceModal';
 import { useCockpit, type CockpitMode } from '../context/CockpitContext';
@@ -10,7 +10,6 @@ const MODE_META: Record<CockpitMode, { label: string; icon: React.ElementType; c
   flux:       { label: 'Flux',       icon: FileText,      color: 'text-zinc-400' },
   production: { label: 'Contenus',   icon: BookOpen,      color: 'text-indigo-400' },
   assistant:  { label: 'Chat RAG',   icon: MessageSquare, color: 'text-sky-400' },
-  controle:   { label: 'Contrôle',   icon: Shield,        color: 'text-amber-400' },
   sources:    { label: 'Sources',    icon: Rss,           color: 'text-emerald-400' },
 };
 
@@ -71,20 +70,26 @@ export function TopBar() {
             onClick={() => setWorkspaceModalOpen(true)}
             className="flex items-center gap-2 px-3 py-1.5 rounded-xl border-2 transition-all hover:brightness-110"
             style={{
-              borderColor: `${workspaceColor}60`,
-              backgroundColor: `${workspaceColor}18`,
+              borderColor: activeWorkspace ? `${workspaceColor}60` : '#3f3f46',
+              backgroundColor: activeWorkspace ? `${workspaceColor}18` : '#27272a',
             }}
           >
-            <div
-              className="w-5 h-5 rounded-lg flex items-center justify-center text-[11px] font-bold text-white shrink-0"
-              style={{ backgroundColor: workspaceColor }}
-            >
-              {workspaceName.charAt(0).toUpperCase()}
-            </div>
-            <span className="text-sm font-semibold max-w-[150px] truncate" style={{ color: workspaceColor }}>
-              {workspaceName}
-            </span>
-            <ChevronDown className="w-3.5 h-3.5 shrink-0" style={{ color: `${workspaceColor}90` }} />
+            {activeWorkspace ? (
+              <>
+                <div
+                  className="w-5 h-5 rounded-lg flex items-center justify-center text-[11px] font-bold text-white shrink-0"
+                  style={{ backgroundColor: workspaceColor }}
+                >
+                  {workspaceName.charAt(0).toUpperCase()}
+                </div>
+                <span className="text-sm font-semibold max-w-[150px] truncate" style={{ color: workspaceColor }}>
+                  {workspaceName}
+                </span>
+              </>
+            ) : (
+              <span className="text-xs font-medium text-zinc-500">⊕ Créer un espace</span>
+            )}
+            <ChevronDown className="w-3.5 h-3.5 shrink-0" style={{ color: activeWorkspace ? `${workspaceColor}90` : '#71717a' }} />
           </button>
 
           {hasSelection && (

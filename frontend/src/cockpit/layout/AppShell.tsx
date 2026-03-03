@@ -4,9 +4,21 @@ import { LeftRail } from './LeftRail';
 import { TopBar } from './TopBar';
 import { CockpitCanvas } from './CockpitCanvas';
 import { Inspector } from './Inspector';
-import { BottomTray } from './BottomTray';
 import { CommandPalette } from '../components/CommandPalette';
 import { useCockpit } from '../context/CockpitContext';
+import { useWorkspaces } from '../../hooks/useApi';
+
+// Auto-selects the first available workspace on initial load
+function WorkspaceAutoInit() {
+  const { activeWorkspaceId, setActiveWorkspaceId } = useCockpit();
+  const { data: workspaces = [] } = useWorkspaces();
+  useEffect(() => {
+    if (activeWorkspaceId === null && workspaces.length > 0) {
+      setActiveWorkspaceId(workspaces[0].id);
+    }
+  }, [activeWorkspaceId, workspaces, setActiveWorkspaceId]);
+  return null;
+}
 
 export function AppShell() {
   const { inspectorOpen } = useCockpit();
@@ -25,7 +37,7 @@ export function AppShell() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-zinc-950">
-      {/* Grain noise — fixed overlay, no scroll repaint */}
+      {/* Grain noise */}
       <div
         className="fixed inset-0 z-[998] pointer-events-none"
         style={{
@@ -34,6 +46,7 @@ export function AppShell() {
         }}
       />
 
+      <WorkspaceAutoInit />
       <LeftRail />
 
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -43,8 +56,6 @@ export function AppShell() {
           <CockpitCanvas />
           {inspectorOpen && <Inspector />}
         </div>
-
-        <BottomTray />
       </div>
 
       <CommandPalette

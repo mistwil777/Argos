@@ -1,7 +1,7 @@
 // LeftRail - Navigation par modes
 import { useCockpit, type CockpitMode } from '../context/CockpitContext';
 import { useWorkspaces } from '../../hooks/useApi';
-import { FileText, BookOpen, MessageSquare, Shield, Rss } from 'lucide-react';
+import { FileText, BookOpen, MessageSquare, Rss } from 'lucide-react';
 
 interface ModeConfig {
   id: CockpitMode;
@@ -13,7 +13,6 @@ const MODES: ModeConfig[] = [
   { id: 'flux', icon: FileText, label: 'Flux' },
   { id: 'production', icon: BookOpen, label: 'Contenu' },
   { id: 'assistant', icon: MessageSquare, label: 'Chat RAG' },
-  { id: 'controle', icon: Shield, label: 'Contrôle' },
   { id: 'sources', icon: Rss, label: 'Sources' },
 ];
 

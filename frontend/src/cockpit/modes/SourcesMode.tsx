@@ -1,5 +1,5 @@
 // SourcesMode - Gestion des sources de données
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSources, useCreateSource, useToggleSource } from '../../hooks/useApi';
 import { useCockpit } from '../context/CockpitContext';
 import { CockpitHeader } from '../components/CockpitHeader';
@@ -176,15 +176,26 @@ function AddSourcePanel({
 }
 
 // ─── SourceCard ─────────────────────────────────────────────────────────────────
-function SourceCard({ source }: { source: any }) {
+function SourceCard({ source, highlighted }: { source: any; highlighted?: boolean }) {
   const toggleMutation = useToggleSource();
   const Cfg = TYPE_CONFIG[(source.type as SourceType) ?? 'api'];
   const Icon = Cfg.icon;
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll when highlighted on mount
+  useEffect(() => {
+    if (highlighted && cardRef.current) {
+      cardRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [highlighted]);
 
   return (
     <div
+      ref={cardRef}
       className={`flex items-start gap-4 p-4 rounded-xl border transition-all ${
-        source.active
+        highlighted
+          ? 'bg-emerald-500/[0.06] border-emerald-500/40 ring-1 ring-emerald-500/30'
+          : source.active
           ? 'bg-white/[0.02] border-white/[0.06]'
           : 'bg-white/[0.01] border-white/[0.03] opacity-50'
       }`}
@@ -232,10 +243,23 @@ function SourceCard({ source }: { source: any }) {
 
 // ─── SourcesMode ────────────────────────────────────────────────────────────────
 export function SourcesMode() {
-  const { activeWorkspaceId } = useCockpit();
+  const { activeWorkspaceId, selectedSourceUrl, setSelectedSourceUrl } = useCockpit();
   const [showAdd, setShowAdd] = useState(false);
   const [typeFilter, setTypeFilter] = useState<'all' | SourceType>('all');
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
+
+  // Clear selected source URL when leaving this mode or on unmount
+  useEffect(() => {
+    return () => setSelectedSourceUrl(null);
+  }, []);
+
+  // When navigating to a specific source, switch filter to 'all' to ensure it's visible
+  useEffect(() => {
+    if (selectedSourceUrl) {
+      setTypeFilter('all');
+      setActiveFilter('all');
+    }
+  }, [selectedSourceUrl]);
 
   // Fetch all sources without active param → stable order; filter client-side
   const { data, isLoading } = useSources({
@@ -363,7 +387,11 @@ export function SourcesMode() {
         ) : (
           <div className="space-y-2">
             {sources.map((source: any) => (
-              <SourceCard key={source.id} source={source} />
+              <SourceCard
+                key={source.id}
+                source={source}
+                highlighted={selectedSourceUrl ? source.url === selectedSourceUrl : false}
+              />
             ))}
           </div>
         )}

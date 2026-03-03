@@ -365,9 +365,6 @@ async def delete_workspace(workspace_id: int, force: bool = Query(default=False)
     """
     Delete a workspace (soft delete by default, force=true for hard delete)
     """
-    # Prevent deletion of default workspace
-    if workspace_id == 1:
-        raise HTTPException(status_code=400, detail="Cannot delete default workspace")
     
     try:
         with db.get_connection() as conn:

@@ -2,7 +2,7 @@
 import { createContext, useContext, useState } from 'react';
 import type { ReactNode } from 'react';
 
-export type CockpitMode = 'flux' | 'production' | 'assistant' | 'controle' | 'sources';
+export type CockpitMode = 'flux' | 'production' | 'assistant' | 'sources';
 export type LayoutMode = 'focus' | 'split' | 'review';
 
 interface CockpitState {
@@ -15,8 +15,8 @@ interface CockpitState {
   setLayoutMode: (layout: LayoutMode) => void;
   
   // Workspace actif
-  activeWorkspaceId: number;
-  setActiveWorkspaceId: (id: number) => void;
+  activeWorkspaceId: number | null;
+  setActiveWorkspaceId: (id: number | null) => void;
   
   // Inspector
   inspectorOpen: boolean;
@@ -28,6 +28,10 @@ interface CockpitState {
   
   selectedDocId: number | null;
   setSelectedDocId: (id: number | null) => void;
+
+  // Navigation source
+  selectedSourceUrl: string | null;
+  setSelectedSourceUrl: (url: string | null) => void;
 }
 
 const CockpitContext = createContext<CockpitState | null>(null);
@@ -35,10 +39,11 @@ const CockpitContext = createContext<CockpitState | null>(null);
 export function CockpitProvider({ children }: { children: ReactNode }) {
   const [activeMode, setActiveMode] = useState<CockpitMode>('flux');
   const [layoutMode, setLayoutMode] = useState<LayoutMode>('focus');
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState(1); // Default: Général
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<number | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
   const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
+  const [selectedSourceUrl, setSelectedSourceUrl] = useState<string | null>(null);
 
   const value: CockpitState = {
     activeMode,
@@ -53,6 +58,8 @@ export function CockpitProvider({ children }: { children: ReactNode }) {
     setSelectedItemId,
     selectedDocId,
     setSelectedDocId,
+    selectedSourceUrl,
+    setSelectedSourceUrl,
   };
 
   return (

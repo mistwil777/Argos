@@ -4,11 +4,16 @@ import { useCourses, useCourse, usePublishCourse, useDeleteCourse, useModifyCour
 import { useCockpit } from '../context/CockpitContext';
 import {
   BookOpen, Clock, Tag, TrendingUp, Check, Archive,
-  Sparkles, ChevronLeft, AlertTriangle, Calendar, Layers, Trash2
+  Sparkles, ChevronLeft, AlertTriangle, Calendar, Layers, Trash2, ExternalLink
 } from 'lucide-react';
 import { CockpitHeader } from '../components/CockpitHeader';
 import { Preloader } from '../components/Preloader';
 import ReactMarkdown from 'react-markdown';
+
+function sourceDomain(url?: string | null): string | null {
+  if (!url) return null;
+  try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return null; }
+}
 
 // ─── QA helpers ────────────────────────────────────────────────────────────────
 function qaPercent(score: number | null | undefined): number {
@@ -273,7 +278,7 @@ export function ProductionMode() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'review' | 'published'>('all');
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const { activeWorkspaceId } = useCockpit();
+  const { activeWorkspaceId, setActiveMode, setSelectedSourceUrl } = useCockpit();
   const deleteMutation = useDeleteCourse();
 
   const toggleOne = (id: number, e: React.MouseEvent) => {
@@ -472,6 +477,16 @@ export function ProductionMode() {
                       <span className="flex items-center gap-1">
                         <Clock className="w-3 h-3" strokeWidth={1.5} />{course.duration} min
                       </span>
+                    )}
+                    {sourceDomain(course.source_url) && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setSelectedSourceUrl(course.source_url); setActiveMode('sources'); }}
+                        className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/8 text-emerald-500/70 border border-emerald-500/15 hover:bg-emerald-500/15 hover:text-emerald-400 transition-all text-[10px]"
+                        title="Voir la source"
+                      >
+                        <ExternalLink className="w-2.5 h-2.5" />
+                        {sourceDomain(course.source_url)}
+                      </button>
                     )}
                   </div>
                 </div>

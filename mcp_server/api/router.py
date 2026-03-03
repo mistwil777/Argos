@@ -258,6 +258,42 @@ async def list_items(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@api_router.post("/items")
+async def create_item(data: Dict[str, Any]):
+    """Ingest a single item (from n8n or external sources). Deduplicates by URL."""
+    required = ['url', 'title', 'workspace_id']
+    missing = [f for f in required if not data.get(f)]
+    if missing:
+        raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO items (
+                        title, summary, url, source_type, source_url,
+                        workspace_id, published_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (url) DO NOTHING
+                    RETURNING id
+                """, (
+                    data['title'],
+                    data.get('summary') or data.get('description') or '',
+                    data['url'],
+                    data.get('source_type', 'rss'),
+                    data.get('source_url'),
+                    data['workspace_id'],
+                    data.get('published_at'),
+                ))
+                row = cur.fetchone()
+                conn.commit()
+                if row:
+                    return {"id": row[0], "created": True}
+                return {"id": None, "created": False, "reason": "duplicate"}
+    except Exception as e:
+        logger.error(f"Error creating item: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @api_router.patch("/items/batch/workspace")
 async def batch_assign_workspace(data: Dict[str, Any]):
     """Assign / move a batch of items to a workspace."""
@@ -402,12 +438,14 @@ async def list_courses(
                 
                 query = f"""
                     SELECT 
-                        id, title, subject, level,
-                        estimated_duration_minutes, status, qa_score,
-                        created_at, published_at
-                    FROM courses
+                        c.id, c.title, c.subject, c.level,
+                        c.estimated_duration_minutes, c.status, c.qa_score,
+                        c.created_at, c.published_at,
+                        i.source_url, i.source_type, i.url as item_url
+                    FROM courses c
+                    LEFT JOIN items i ON i.id = c.item_id
                     WHERE {where_clause}
-                    ORDER BY created_at DESC
+                    ORDER BY c.created_at DESC
                     LIMIT %s OFFSET %s
                 """
                 
@@ -425,11 +463,14 @@ async def list_courses(
                         "status": row[5],
                         "qa_score": float(row[6]) if row[6] else None,
                         "created_at": row[7].isoformat() if row[7] else None,
-                        "published_at": row[8].isoformat() if row[8] else None
+                        "published_at": row[8].isoformat() if row[8] else None,
+                        "source_url": row[9],
+                        "source_type": row[10],
+                        "item_url": row[11],
                     })
                 
                 # Get total count
-                count_query = f"SELECT COUNT(*) FROM courses WHERE {where_clause}"
+                count_query = f"SELECT COUNT(*) FROM courses c WHERE {where_clause}"
                 cur.execute(count_query, params[:-2])  # Exclude limit and offset
                 total = cur.fetchone()[0]
                 
