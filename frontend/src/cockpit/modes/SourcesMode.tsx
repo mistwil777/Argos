@@ -1,12 +1,12 @@
 // SourcesMode - Gestion des sources de données
 import { useState, useEffect, useRef } from 'react';
-import { useSources, useCreateSource, useToggleSource, useCollectSource, useCollectWorkspace } from '../../hooks/useApi';
+import { useSources, useCreateSource, useToggleSource, useCollectSource, useCollectWorkspace, useUpdateSource, useDeleteSource } from '../../hooks/useApi';
 import { useCockpit } from '../context/CockpitContext';
 import { CockpitHeader } from '../components/CockpitHeader';
 import type { SourceCreate } from '../../services/api';
 import {
   Rss, Github, Zap, Globe, Plus, ToggleLeft, ToggleRight,
-  AlertCircle, X, Check, Loader2, RefreshCw,
+  AlertCircle, X, Check, Loader2, RefreshCw, Pencil, Trash2, Save,
 } from 'lucide-react';
 
 const TYPE_CONFIG = {
@@ -192,9 +192,21 @@ function AddSourcePanel({
 function SourceCard({ source, highlighted }: { source: any; highlighted?: boolean }) {
   const toggleMutation = useToggleSource();
   const collectMutation = useCollectSource();
+  const updateMutation = useUpdateSource();
+  const deleteMutation = useDeleteSource();
   const Cfg = TYPE_CONFIG[(source.type as SourceType) ?? 'api'];
   const Icon = Cfg.icon;
   const cardRef = useRef<HTMLDivElement>(null);
+
+  const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: source.name,
+    url: source.url,
+    category: source.category || '',
+    description: source.description || '',
+    type: source.type,
+  });
 
   // Auto-scroll when highlighted on mount
   useEffect(() => {
@@ -203,10 +215,21 @@ function SourceCard({ source, highlighted }: { source: any; highlighted?: boolea
     }
   }, [highlighted]);
 
+  const handleSave = () => {
+    updateMutation.mutate(
+      { id: source.id, payload: editForm },
+      { onSuccess: () => setEditing(false) }
+    );
+  };
+
+  const handleDelete = () => {
+    deleteMutation.mutate(source.id);
+  };
+
   return (
     <div
       ref={cardRef}
-      className={`flex items-start gap-4 p-4 rounded-xl border transition-all ${
+      className={`rounded-xl border transition-all ${
         highlighted
           ? 'bg-emerald-500/[0.06] border-emerald-500/40 ring-1 ring-emerald-500/30'
           : source.active
@@ -214,70 +237,182 @@ function SourceCard({ source, highlighted }: { source: any; highlighted?: boolea
           : 'bg-white/[0.01] border-white/[0.03] opacity-50'
       }`}
     >
-      {/* Type badge */}
-      <div className={`mt-0.5 shrink-0 flex items-center justify-center w-8 h-8 rounded-lg border ${Cfg.bg}`}>
-        <Icon className={`w-4 h-4 ${Cfg.color}`} strokeWidth={1.5} />
-      </div>
+      {/* Main row */}
+      <div className="flex items-start gap-4 p-4">
+        {/* Type badge */}
+        <div className={`mt-0.5 shrink-0 flex items-center justify-center w-8 h-8 rounded-lg border ${Cfg.bg}`}>
+          <Icon className={`w-4 h-4 ${Cfg.color}`} strokeWidth={1.5} />
+        </div>
 
-      {/* Info */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-0.5">
-          <span className="text-sm font-medium text-zinc-200 truncate">{source.name}</span>
-          <span className={`shrink-0 px-1.5 py-0.5 rounded-md text-[10px] font-medium border ${Cfg.bg} ${Cfg.color}`}>
-            {Cfg.label}
-          </span>
-          {source.category && (
-            <span className="shrink-0 px-1.5 py-0.5 rounded-md text-[10px] bg-zinc-900 border border-white/[0.06] text-zinc-500">
-              {source.category}
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className="text-sm font-medium text-zinc-200 truncate">{source.name}</span>
+            <span className={`shrink-0 px-1.5 py-0.5 rounded-md text-[10px] font-medium border ${Cfg.bg} ${Cfg.color}`}>
+              {Cfg.label}
             </span>
+            {source.category && (
+              <span className="shrink-0 px-1.5 py-0.5 rounded-md text-[10px] bg-zinc-900 border border-white/[0.06] text-zinc-500">
+                {source.category}
+              </span>
+            )}
+          </div>
+          <p className="text-[11px] text-zinc-600 break-all leading-relaxed">{source.url}</p>
+          {source.description && (
+            <p className="text-[11px] text-zinc-600 mt-1 leading-relaxed">{source.description}</p>
+          )}
+          {/* Collect result feedback */}
+          {collectMutation.isSuccess && (
+            <p className="text-[10px] text-emerald-500 mt-1">
+              +{(collectMutation.data as any)?.inserted ?? 0} nouveau(x) · {(collectMutation.data as any)?.duplicates ?? 0} doublon(s)
+            </p>
+          )}
+          {collectMutation.isError && (
+            <p className="text-[10px] text-red-400 mt-1">Erreur de collecte</p>
           )}
         </div>
-        <p className="text-[11px] text-zinc-600 break-all leading-relaxed">{source.url}</p>
-        {source.description && (
-          <p className="text-[11px] text-zinc-600 mt-1 leading-relaxed">{source.description}</p>
-        )}
-        {/* Collect result feedback */}
-        {collectMutation.isSuccess && (
-          <p className="text-[10px] text-emerald-500 mt-1">
-            +{(collectMutation.data as any)?.inserted ?? 0} nouveau(x) · {(collectMutation.data as any)?.duplicates ?? 0} doublon(s)
-          </p>
-        )}
-        {collectMutation.isError && (
-          <p className="text-[10px] text-red-400 mt-1">Erreur de collecte</p>
-        )}
+
+        {/* Actions */}
+        <div className="shrink-0 flex items-center gap-1.5 mt-0.5">
+          {/* Collect */}
+          <button
+            onClick={() => collectMutation.mutate(source.id)}
+            disabled={collectMutation.isPending || !source.active}
+            title="Collecter maintenant"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20 hover:bg-sky-500/20 disabled:opacity-40 transition-all"
+          >
+            {collectMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+            Collecter
+          </button>
+
+          {/* Edit */}
+          <button
+            onClick={() => { setEditing(v => !v); setConfirmDelete(false); }}
+            title="Modifier"
+            className={`p-1.5 rounded-lg transition-colors ${
+              editing ? 'bg-amber-500/15 text-amber-400' : 'text-zinc-600 hover:text-zinc-200 hover:bg-white/[0.06]'
+            }`}
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Delete */}
+          <button
+            onClick={() => { setConfirmDelete(v => !v); setEditing(false); }}
+            title="Supprimer"
+            className={`p-1.5 rounded-lg transition-colors ${
+              confirmDelete ? 'bg-red-500/15 text-red-400' : 'text-zinc-600 hover:text-red-400 hover:bg-red-500/[0.08]'
+            }`}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Toggle */}
+          <button
+            onClick={() => toggleMutation.mutate({ id: source.id, active: !source.active })}
+            disabled={toggleMutation.isPending}
+            title={source.active ? 'Désactiver' : 'Activer'}
+            className="text-zinc-600 hover:text-zinc-300 transition-colors"
+          >
+            {source.active ? <ToggleRight className="w-5 h-5 text-sky-500" /> : <ToggleLeft className="w-5 h-5" />}
+          </button>
+        </div>
       </div>
 
-      {/* Actions */}
-      <div className="shrink-0 flex items-center gap-1.5 mt-0.5">
-        {/* Collect button */}
-        <button
-          onClick={() => collectMutation.mutate(source.id)}
-          disabled={collectMutation.isPending || !source.active}
-          title="Collecter maintenant"
-          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20 hover:bg-sky-500/20 disabled:opacity-40 transition-all"
-        >
-          {collectMutation.isPending ? (
-            <Loader2 className="w-3 h-3 animate-spin" />
-          ) : (
-            <RefreshCw className="w-3 h-3" />
-          )}
-          Collecter
-        </button>
+      {/* Delete confirm bar */}
+      {confirmDelete && (
+        <div className="px-4 pb-3 flex items-center gap-3">
+          <p className="text-xs text-red-400 flex-1">Supprimer définitivement « {source.name} » ?</p>
+          <button
+            onClick={handleDelete}
+            disabled={deleteMutation.isPending}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/15 text-red-400 border border-red-500/25 hover:bg-red-500/25 transition-all disabled:opacity-50"
+          >
+            {deleteMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+            Confirmer
+          </button>
+          <button onClick={() => setConfirmDelete(false)} className="px-3 py-1.5 rounded-lg text-xs text-zinc-600 hover:text-zinc-300 hover:bg-white/[0.05] transition-all">
+            Annuler
+          </button>
+        </div>
+      )}
 
-        {/* Toggle */}
-        <button
-          onClick={() => toggleMutation.mutate({ id: source.id, active: !source.active })}
-          disabled={toggleMutation.isPending}
-          title={source.active ? 'Désactiver' : 'Activer'}
-          className="text-zinc-600 hover:text-zinc-300 transition-colors"
-        >
-          {source.active ? (
-            <ToggleRight className="w-5 h-5 text-sky-500" />
-          ) : (
-            <ToggleLeft className="w-5 h-5" />
-          )}
-        </button>
-      </div>
+      {/* Inline edit form */}
+      {editing && (
+        <div className="px-4 pb-4 border-t border-white/[0.06] pt-3 flex flex-col gap-2">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[10px] text-zinc-600 uppercase tracking-wider mb-1">Nom</label>
+              <input
+                value={editForm.name}
+                onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                className="w-full bg-zinc-900 border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 placeholder-zinc-700 focus:outline-none focus:border-sky-500/50"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] text-zinc-600 uppercase tracking-wider mb-1">Catégorie</label>
+              <input
+                value={editForm.category}
+                onChange={e => setEditForm(f => ({ ...f, category: e.target.value }))}
+                className="w-full bg-zinc-900 border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 placeholder-zinc-700 focus:outline-none focus:border-sky-500/50"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-[10px] text-zinc-600 uppercase tracking-wider mb-1">URL</label>
+            <input
+              value={editForm.url}
+              onChange={e => setEditForm(f => ({ ...f, url: e.target.value }))}
+              className="w-full bg-zinc-900 border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 placeholder-zinc-700 focus:outline-none focus:border-sky-500/50"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] text-zinc-600 uppercase tracking-wider mb-1">Description</label>
+            <input
+              value={editForm.description}
+              onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
+              placeholder="Optionnelle…"
+              className="w-full bg-zinc-900 border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 placeholder-zinc-700 focus:outline-none focus:border-sky-500/50"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] text-zinc-600 uppercase tracking-wider mb-1">Type</label>
+            <div className="flex gap-1.5">
+              {(Object.keys(TYPE_CONFIG) as SourceType[]).map(t => {
+                const C = TYPE_CONFIG[t];
+                const CI = C.icon;
+                const active = editForm.type === t;
+                return (
+                  <button
+                    key={t}
+                    onClick={() => setEditForm(f => ({ ...f, type: t }))}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium border transition-all ${
+                      active ? `${C.bg} ${C.color}` : 'bg-zinc-900 border-white/[0.06] text-zinc-600 hover:text-zinc-400'
+                    }`}
+                  >
+                    <CI className="w-3 h-3" strokeWidth={1.5} />
+                    {C.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 mt-1">
+            <button
+              onClick={handleSave}
+              disabled={updateMutation.isPending || !editForm.name.trim() || !editForm.url.trim()}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-sky-500 text-white hover:bg-sky-400 disabled:opacity-40 transition-all"
+            >
+              {updateMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+              Enregistrer
+            </button>
+            <button onClick={() => setEditing(false)} className="px-3 py-1.5 rounded-lg text-xs text-zinc-600 hover:text-zinc-300 hover:bg-white/[0.05] transition-all">
+              Annuler
+            </button>
+            {updateMutation.isError && <span className="text-[10px] text-red-400">Erreur — réessayez</span>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -200,6 +200,14 @@ export interface SourceCreate {
   workspace_id?: number;
 }
 
+export interface SourceUpdate {
+  name?: string;
+  url?: string;
+  type?: 'rss' | 'github' | 'api' | 'website';
+  category?: string;
+  description?: string;
+}
+
 export const sourcesApi = {
   list: async (params?: { type?: string; category?: string; active?: boolean; workspace_id?: number }): Promise<{ sources: Source[]; total: number }> => {
     const { data } = await apiClient.get('/api/v1/sources', { params });
@@ -223,6 +231,14 @@ export const sourcesApi = {
   },
   collectWorkspace: async (workspaceId: number): Promise<{ message: string; fetched: number; inserted: number; duplicates: number; errors: number }> => {
     const { data } = await apiClient.post(`/api/v1/workspaces/${workspaceId}/collect`);
+    return data;
+  },
+  update: async (id: number, payload: SourceUpdate): Promise<{ message: string }> => {
+    const { data } = await apiClient.put(`/api/v1/sources/${id}`, payload);
+    return data;
+  },
+  delete: async (id: number): Promise<{ message: string }> => {
+    const { data } = await apiClient.delete(`/api/v1/sources/${id}`);
     return data;
   },
 };

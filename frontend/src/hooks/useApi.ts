@@ -357,3 +357,24 @@ export const useCollectWorkspace = () => {
     },
   });
 };
+
+export const useUpdateSource = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: import('../services/api').SourceUpdate }) =>
+      sourcesApi.update(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sources'] });
+    },
+  });
+};
+
+export const useDeleteSource = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => sourcesApi.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sources'] });
+    },
+  });
+};

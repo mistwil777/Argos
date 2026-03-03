@@ -1335,6 +1335,35 @@ async def toggle_source(source_id: int, data: Dict[str, Any]):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@api_router.put("/sources/{source_id}")
+async def update_source(source_id: int, data: Dict[str, Any]):
+    """Update a data source's fields."""
+    try:
+        allowed = ['name', 'url', 'type', 'category', 'description', 'tags']
+        updates = {k: v for k, v in data.items() if k in allowed}
+        if not updates:
+            raise HTTPException(status_code=400, detail="No valid fields to update")
+        if 'type' in updates and updates['type'] not in ['rss', 'github', 'api', 'website']:
+            raise HTTPException(status_code=400, detail="Invalid type")
+        set_clause = ', '.join(f"{k} = %s" for k in updates)
+        params = list(updates.values()) + [source_id]
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"UPDATE sources SET {set_clause}, updated_at = CURRENT_TIMESTAMP WHERE id = %s RETURNING id",
+                    params
+                )
+                if not cur.fetchone():
+                    raise HTTPException(status_code=404, detail="Source not found")
+                conn.commit()
+        return {"message": "Source updated successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating source {source_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @api_router.delete("/sources/{source_id}")
 async def delete_source(source_id: int):
     """Delete a data source."""
