@@ -33,10 +33,11 @@ export const useCostsStats = (period: string = 'month') => {
 };
 
 // Items hooks
-export const useItems = (params?: any) => {
+export const useItems = (params?: any, options?: { enabled?: boolean }) => {
   return useQuery({
     queryKey: ['items', params],
     queryFn: () => itemsApi.list(params),
+    enabled: options?.enabled ?? true,
   });
 };
 
@@ -92,11 +93,12 @@ export const useBatchAssignWorkspace = () => {
 };
 
 // Courses hooks
-export const useCourses = (params?: any) => {
+export const useCourses = (params?: any, options?: { enabled?: boolean }) => {
   return useQuery({
     queryKey: ['courses', params],
     queryFn: () => coursesApi.list(params),
-    staleTime: 10000, // Consider data fresh for 10s
+    staleTime: 10000,
+    enabled: options?.enabled ?? true,
   });
 };
 
@@ -306,10 +308,11 @@ export const useDeleteWorkspace = () => {
 };
 
 // Sources hooks
-export const useSources = (params?: { type?: string; category?: string; active?: boolean; workspace_id?: number }) => {
+export const useSources = (params?: { type?: string; category?: string; active?: boolean; workspace_id?: number }, options?: { enabled?: boolean }) => {
   return useQuery({
     queryKey: ['sources', params],
     queryFn: () => sourcesApi.list(params),
+    enabled: options?.enabled ?? true,
   });
 };
 

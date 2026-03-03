@@ -35,11 +35,16 @@ export function FluxMode() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showWorkspacePicker, setShowWorkspacePicker] = useState(false);
 
-  const { data: itemsData, isLoading } = useItems({
-    status: statusFilter === 'all' ? undefined : statusFilter,
-    workspace_id: activeWorkspaceId ?? undefined,
-  });
-  const { data: allItemsData } = useItems({ workspace_id: activeWorkspaceId ?? undefined });
+  const wsReady = activeWorkspaceId !== null;
+
+  const { data: itemsData, isLoading } = useItems(
+    { status: statusFilter === 'all' ? undefined : statusFilter, workspace_id: activeWorkspaceId ?? undefined },
+    { enabled: wsReady }
+  );
+  const { data: allItemsData } = useItems(
+    { workspace_id: activeWorkspaceId ?? undefined },
+    { enabled: wsReady }
+  );
   const { data: workspaces = [] } = useWorkspaces();
 
   const classifyBatch = useClassifyBatch();

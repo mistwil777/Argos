@@ -291,11 +291,13 @@ export function SourcesMode() {
     }
   }, [selectedSourceUrl]);
 
-  // Fetch all sources without active param → stable order; filter client-side
-  const { data, isLoading } = useSources({
-    workspace_id: activeWorkspaceId ?? undefined,
-    type: typeFilter === 'all' ? undefined : typeFilter,
-  });
+  const wsReady = activeWorkspaceId !== null;
+
+  // Only fetch when a workspace is selected — never show cross-workspace data
+  const { data, isLoading } = useSources(
+    { workspace_id: activeWorkspaceId ?? undefined, type: typeFilter === 'all' ? undefined : typeFilter },
+    { enabled: wsReady }
+  );
 
   // Stable sort by id (never reorders on toggle)
   const allSources: any[] = [...(data?.sources || [])].sort((a, b) => a.id - b.id);

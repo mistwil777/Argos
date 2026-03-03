@@ -1270,7 +1270,12 @@ async def create_source(source: Dict[str, Any]):
         # Validate type
         if source["type"] not in ["rss", "github", "api", "website"]:
             raise HTTPException(status_code=400, detail="Invalid type. Must be rss, github, api, or website")
-        
+
+        # workspace_id is required — no silent default
+        workspace_id = source.get("workspace_id")
+        if not workspace_id:
+            raise HTTPException(status_code=400, detail="workspace_id is required to create a source")
+
         with db.get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
@@ -1285,7 +1290,7 @@ async def create_source(source: Dict[str, Any]):
                     source.get("description", ""),
                     source.get("tags", []),
                     source.get("active", True),
-                    source.get("workspace_id", 1)
+                    workspace_id
                 ))
                 
                 source_id = cur.fetchone()[0]

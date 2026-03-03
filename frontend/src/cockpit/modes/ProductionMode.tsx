@@ -291,13 +291,16 @@ export function ProductionMode() {
     setSelectedIds(new Set());
   };
 
-  const { data: coursesData, isLoading } = useCourses({
-    status: statusFilter === 'all' ? undefined : statusFilter,
-    workspace_id: activeWorkspaceId ?? undefined,
-  });
-  const { data: allCoursesData } = useCourses({
-    workspace_id: activeWorkspaceId ?? undefined,
-  });
+  const wsReady = activeWorkspaceId !== null;
+
+  const { data: coursesData, isLoading } = useCourses(
+    { status: statusFilter === 'all' ? undefined : statusFilter, workspace_id: activeWorkspaceId ?? undefined },
+    { enabled: wsReady }
+  );
+  const { data: allCoursesData } = useCourses(
+    { workspace_id: activeWorkspaceId ?? undefined },
+    { enabled: wsReady }
+  );
 
   const courses = coursesData?.courses || [];
   const allCourses = allCoursesData?.courses || [];
