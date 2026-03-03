@@ -194,19 +194,19 @@ export interface WorkspaceCreate {
 
 export const workspacesApi = {
   list: async (): Promise<WorkspaceResponse[]> => {
-    const { data } = await apiClient.get('/workspaces');
+    const { data } = await apiClient.get('/api/v1/workspaces');
     return data;
   },
   create: async (payload: WorkspaceCreate): Promise<WorkspaceResponse> => {
-    const { data } = await apiClient.post('/workspaces', payload);
+    const { data } = await apiClient.post('/api/v1/workspaces', payload);
     return data;
   },
   update: async (id: number, payload: Partial<WorkspaceCreate>): Promise<WorkspaceResponse> => {
-    const { data } = await apiClient.patch(`/workspaces/${id}`, payload);
+    const { data } = await apiClient.patch(`/api/v1/workspaces/${id}`, payload);
     return data;
   },
   delete: async (id: number): Promise<void> => {
-    await apiClient.delete(`/workspaces/${id}`);
+    await apiClient.delete(`/api/v1/workspaces/${id}`);
   },
 };
 

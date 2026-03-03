@@ -355,7 +355,7 @@ export function ProductionMode() {
   return (
     <div className="h-full flex flex-col">
       <CockpitHeader
-        title="Production"
+        title="Contenu"
         subtitle="Gérez vos cours et documents générés"
         icon={<BookOpen className="w-5 h-5 text-zinc-400" />}
       />

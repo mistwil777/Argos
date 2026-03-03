@@ -6,6 +6,24 @@ import { AlertCircle, Sparkles, FileText } from 'lucide-react';
 import { CockpitHeader } from '../components/CockpitHeader';
 import type { Item } from '../../types';
 
+const IMPORTANCE_FR: Record<string, string> = {
+  High: 'Élevé',
+  Medium: 'Moyen',
+  Low: 'Faible',
+  Critical: 'Critique',
+};
+
+const ITEM_TYPE_FR: Record<string, string> = {
+  innovation: 'Innovation',
+  tutorial: 'Tutoriel',
+  tool: 'Outil',
+  research: 'Recherche',
+  comparison: 'Comparaison',
+  news: 'Actualité',
+  release: 'Release',
+  article: 'Article',
+};
+
 export function FluxMode() {
   const { setSelectedItemId, setInspectorOpen } = useCockpit();
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'classified'>('all');
@@ -121,7 +139,7 @@ function ItemCard({ item, onClick }: ItemCardProps) {
             item.importance === 'Medium' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
             'bg-white/[0.05] text-zinc-500 border-white/[0.08]'
           }`}>
-            {item.importance}
+            {IMPORTANCE_FR[item.importance] || item.importance}
           </span>
         )}
       </div>
@@ -136,7 +154,7 @@ function ItemCard({ item, onClick }: ItemCardProps) {
         <div className="flex items-center gap-2">
           {item.item_type && (
             <span className="px-2 py-0.5 bg-white/[0.04] text-zinc-500 rounded border border-white/[0.06] text-xs">
-              {item.item_type}
+              {ITEM_TYPE_FR[item.item_type] || item.item_type}
             </span>
           )}
         </div>

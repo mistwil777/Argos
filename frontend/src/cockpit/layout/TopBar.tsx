@@ -1,7 +1,7 @@
 // TopBar - Barre supérieure
 import { useState } from 'react';
 import { useGlobalStats, useWorkspaces } from '../../hooks/useApi';
-import { Bell, DollarSign, PanelRightOpen, PanelRightClose, ChevronDown, Layers } from 'lucide-react';
+import { Bell, DollarSign, PanelRightOpen, PanelRightClose, ChevronDown } from 'lucide-react';
 import { UserMenu } from '../components/UserMenu';
 import { WorkspaceModal } from '../components/WorkspaceModal';
 import { useCockpit } from '../context/CockpitContext';
@@ -38,15 +38,25 @@ export function TopBar() {
 
         {/* Right */}
         <div className="flex items-center gap-1.5">
-          {/* Workspace Selector */}
+          {/* Workspace Selector - prominent */}
           <button
             onClick={() => setWorkspaceModalOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06] hover:border-white/[0.1] transition-all"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl border-2 transition-all hover:brightness-110"
+            style={{
+              borderColor: `${workspaceColor}60`,
+              backgroundColor: `${workspaceColor}18`,
+            }}
           >
-            <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: workspaceColor }} />
-            <Layers className="w-3 h-3 text-zinc-600" strokeWidth={1.5} />
-            <span className="text-xs font-medium text-zinc-400 max-w-[120px] truncate">{workspaceName}</span>
-            <ChevronDown className="w-3 h-3 text-zinc-700" />
+            <div
+              className="w-5 h-5 rounded-lg flex items-center justify-center text-[11px] font-bold text-white shrink-0"
+              style={{ backgroundColor: workspaceColor }}
+            >
+              {workspaceName.charAt(0).toUpperCase()}
+            </div>
+            <span className="text-sm font-semibold max-w-[150px] truncate" style={{ color: workspaceColor }}>
+              {workspaceName}
+            </span>
+            <ChevronDown className="w-3.5 h-3.5 shrink-0" style={{ color: `${workspaceColor}90` }} />
           </button>
 
           {hasSelection && (

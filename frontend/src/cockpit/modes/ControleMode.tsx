@@ -63,6 +63,18 @@ export function ControleMode() {
     });
   };
 
+  const handleBatchApprove = (ids: number[]) => {
+    ids.forEach(id => {
+      makeDecisionMutation.mutate({ type: 'classification', id, decision: 'approve:batch' });
+    });
+  };
+
+  const handleBatchReject = (ids: number[]) => {
+    ids.forEach(id => {
+      makeDecisionMutation.mutate({ type: 'classification', id, decision: 'reject:batch' });
+    });
+  };
+
   return (
     <div className="h-full flex flex-col">
       {/* Tabs */}
@@ -102,6 +114,8 @@ export function ControleMode() {
             setComment={setComment}
             onApprove={handleApprove}
             onReject={handleReject}
+            onBatchApprove={handleBatchApprove}
+            onBatchReject={handleBatchReject}
             isProcessing={makeDecisionMutation.isPending}
           />
         ) : (
@@ -124,59 +138,132 @@ interface HITLQueueProps {
   setComment: (comment: string) => void;
   onApprove: () => void;
   onReject: () => void;
+  onBatchApprove: (ids: number[]) => void;
+  onBatchReject: (ids: number[]) => void;
   isProcessing: boolean;
 }
 
-function HITLQueue({ decisions, onSelect, selectedDecision, comment, setComment, onApprove, onReject, isProcessing }: HITLQueueProps) {
+function HITLQueue({ decisions, onSelect, selectedDecision, comment, setComment, onApprove, onReject, onBatchApprove, onBatchReject, isProcessing }: HITLQueueProps) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [batchIds, setBatchIds] = useState<Set<number>>(new Set());
   const selected = selectedId ? decisions.find(d => d.id === selectedId) : selectedDecision;
+
+  const allChecked = decisions.length > 0 && batchIds.size === decisions.length;
+  const someChecked = batchIds.size > 0;
+
+  const toggleBatch = (id: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setBatchIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (allChecked) setBatchIds(new Set());
+    else setBatchIds(new Set(decisions.map(d => d.id)));
+  };
 
   return (
     <div className="h-full flex">
       {/* Liste des décisions */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2">
-        {decisions.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full gap-2">
-            <Shield className="w-8 h-8 text-zinc-800" strokeWidth={1.5} />
-            <p className="text-xs text-zinc-700">Aucune décision en attente</p>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Batch toolbar */}
+        {decisions.length > 0 && (
+          <div className="h-10 border-b border-white/[0.06] flex items-center px-4 gap-3 shrink-0">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={allChecked}
+                onChange={toggleAll}
+                className="w-3.5 h-3.5 accent-sky-500 cursor-pointer"
+              />
+              <span className="text-xs text-zinc-600">
+                {someChecked ? `${batchIds.size} sélectionné${batchIds.size > 1 ? 's' : ''}` : 'Tout sélect.'}
+              </span>
+            </label>
+            {someChecked && (
+              <>
+                <div className="flex-1" />
+                <button
+                  onClick={() => { onBatchApprove([...batchIds]); setBatchIds(new Set()); }}
+                  disabled={isProcessing}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/15 transition-all disabled:opacity-50"
+                >
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  Approuver ({batchIds.size})
+                </button>
+                <button
+                  onClick={() => { onBatchReject([...batchIds]); setBatchIds(new Set()); }}
+                  disabled={isProcessing}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/15 transition-all disabled:opacity-50"
+                >
+                  <XCircle className="w-3.5 h-3.5" />
+                  Rejeter ({batchIds.size})
+                </button>
+              </>
+            )}
           </div>
-        ) : (
-          decisions.map((decision) => (
-            <div
-              key={decision.id}
-              onClick={() => {
-                setSelectedId(decision.id);
-                onSelect(decision);
-              }}
-              className={`cockpit-card rounded-xl p-4 cursor-pointer transition-all ${
-                selectedId === decision.id
-                  ? 'border border-sky-500/40'
-                  : 'hover:border-sky-500/20'
-              }`}
-            >
-              <div className="flex items-start justify-between mb-2">
-                <h3 className="text-sm font-medium text-zinc-200 flex-1 leading-snug">{decision.item_title}</h3>
-                <span className="px-2 py-0.5 bg-sky-500/10 text-sky-400 border border-sky-500/20 rounded text-xs font-medium ml-2 shrink-0">
-                  {decision.decision_type}
-                </span>
-              </div>
-
-              <p className="text-xs text-zinc-600 mb-2 leading-relaxed">{decision.ai_suggestion}</p>
-
-              <div className="flex items-center justify-between text-xs">
-                <span className={`flex items-center gap-1 ${
-                  decision.confidence >= 0.7 ? 'text-emerald-500' :
-                  decision.confidence >= 0.5 ? 'text-amber-500' :
-                  'text-red-500'
-                }`}>
-                  <TrendingUp className="w-3 h-3" />
-                  <span className="font-mono">{(decision.confidence * 100).toFixed(0)}%</span>
-                </span>
-                <span className="text-zinc-700 font-mono">{new Date(decision.created_at).toLocaleDateString('fr-FR')}</span>
-              </div>
-            </div>
-          ))
         )}
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {decisions.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full gap-2">
+              <Shield className="w-8 h-8 text-zinc-800" strokeWidth={1.5} />
+              <p className="text-xs text-zinc-700">Aucune décision en attente</p>
+            </div>
+          ) : (
+            decisions.map((decision) => (
+              <div
+                key={decision.id}
+                onClick={() => {
+                  setSelectedId(decision.id);
+                  onSelect(decision);
+                }}
+                className={`cockpit-card rounded-xl p-4 cursor-pointer transition-all ${
+                  batchIds.has(decision.id)
+                    ? 'border border-sky-500/50 bg-sky-500/[0.04]'
+                    : selectedId === decision.id
+                    ? 'border border-sky-500/30'
+                    : 'hover:border-sky-500/20'
+                }`}
+              >
+                <div className="flex items-start gap-3 mb-2">
+                  <div onClick={(e) => toggleBatch(decision.id, e)} className="mt-0.5 shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={batchIds.has(decision.id)}
+                      onChange={() => {}}
+                      className="w-3.5 h-3.5 accent-sky-500 cursor-pointer"
+                    />
+                  </div>
+                  <div className="flex items-start justify-between flex-1 gap-2">
+                    <h3 className="text-sm font-medium text-zinc-200 flex-1 leading-snug">{decision.item_title}</h3>
+                    <span className="px-2 py-0.5 bg-sky-500/10 text-sky-400 border border-sky-500/20 rounded text-xs font-medium shrink-0">
+                      {decision.decision_type}
+                    </span>
+                  </div>
+                </div>
+
+                <p className="text-xs text-zinc-600 mb-2 leading-relaxed pl-6">{decision.ai_suggestion}</p>
+
+                <div className="flex items-center justify-between text-xs pl-6">
+                  <span className={`flex items-center gap-1 ${
+                    decision.confidence >= 0.7 ? 'text-emerald-500' :
+                    decision.confidence >= 0.5 ? 'text-amber-500' :
+                    'text-red-500'
+                  }`}>
+                    <TrendingUp className="w-3 h-3" />
+                    <span className="font-mono">{(decision.confidence * 100).toFixed(0)}%</span>
+                  </span>
+                  <span className="text-zinc-700 font-mono">{new Date(decision.created_at).toLocaleDateString('fr-FR')}</span>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
 
       {/* Panneau de décision */}

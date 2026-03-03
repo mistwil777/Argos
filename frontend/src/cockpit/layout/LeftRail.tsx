@@ -1,5 +1,6 @@
 // LeftRail - Navigation par modes
 import { useCockpit, type CockpitMode } from '../context/CockpitContext';
+import { useWorkspaces } from '../../hooks/useApi';
 import { FileText, BookOpen, MessageSquare, Shield } from 'lucide-react';
 
 interface ModeConfig {
@@ -10,15 +11,19 @@ interface ModeConfig {
 
 const MODES: ModeConfig[] = [
   { id: 'flux', icon: FileText, label: 'Flux' },
-  { id: 'production', icon: BookOpen, label: 'Production' },
-  { id: 'assistant', icon: MessageSquare, label: 'Assistant' },
+  { id: 'production', icon: BookOpen, label: 'Contenu' },
+  { id: 'assistant', icon: MessageSquare, label: 'Chat RAG' },
   { id: 'controle', icon: Shield, label: 'Contrôle' },
 ];
 
 interface LeftRailProps {}
 
 export function LeftRail({}: LeftRailProps) {
-  const { activeMode, setActiveMode } = useCockpit();
+  const { activeMode, setActiveMode, activeWorkspaceId } = useCockpit();
+  const { data: workspaces = [] } = useWorkspaces();
+  const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId);
+  const wsColor = activeWorkspace?.color || '#71717a';
+  const wsInitial = activeWorkspace?.name?.charAt(0)?.toUpperCase() || '·';
 
   return (
     <div className="w-14 bg-zinc-950 border-r border-white/[0.06] flex flex-col items-center py-4 gap-1 shrink-0">
@@ -54,6 +59,18 @@ export function LeftRail({}: LeftRailProps) {
       })}
 
       <div className="flex-1" />
+
+      {/* Workspace indicator */}
+      <button
+        title={activeWorkspace?.name || 'Espace de travail'}
+        className="group relative w-8 h-8 rounded-xl flex items-center justify-center text-white text-[11px] font-bold transition-all duration-200 hover:scale-110 mb-2"
+        style={{ backgroundColor: wsColor }}
+      >
+        {wsInitial}
+        <div className="absolute left-10 px-2.5 py-1.5 bg-zinc-800 border border-white/[0.08] text-zinc-200 text-xs rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity duration-150 z-50 shadow-xl">
+          {activeWorkspace?.name || 'Général'}
+        </div>
+      </button>
     </div>
   );
 }

@@ -38,7 +38,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     },
     {
       id: 'mode-production',
-      label: 'Production · Docs',
+      label: 'Contenu · Docs',
       icon: <BookOpen className="w-3.5 h-3.5" />,
       action: () => {
         setActiveMode('production');
@@ -48,7 +48,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     },
     {
       id: 'mode-assistant',
-      label: 'Assistant · RAG',
+      label: 'Chat RAG',
       icon: <MessageSquare className="w-3.5 h-3.5" />,
       action: () => {
         setActiveMode('assistant');
