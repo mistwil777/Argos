@@ -465,6 +465,146 @@ class CollectorService:
         
         return inserted, duplicates
     
+    def fetch_website_page(self, source_url: str, workspace_id: Optional[int] = None) -> List[Dict]:
+        """
+        Fetch a single web page, extract title + main text content as one item.
+        Uses stdlib html.parser — no extra dependency.
+        """
+        from html.parser import HTMLParser
+
+        class _HTMLExtractor(HTMLParser):
+            """Minimal extractor: title + visible text, skips script/style/nav."""
+            _SKIP = {'script', 'style', 'nav', 'header', 'footer', 'aside', 'noscript'}
+
+            def __init__(self):
+                super().__init__()
+                self.title: str = ''
+                self._chunks: list = []
+                self._in_title = False
+                self._skip_depth = 0
+
+            def handle_starttag(self, tag, attrs):
+                if tag == 'title':
+                    self._in_title = True
+                if tag in self._SKIP:
+                    self._skip_depth += 1
+
+            def handle_endtag(self, tag):
+                if tag == 'title':
+                    self._in_title = False
+                if tag in self._SKIP:
+                    self._skip_depth = max(0, self._skip_depth - 1)
+
+            def handle_data(self, data):
+                stripped = data.strip()
+                if not stripped:
+                    return
+                if self._in_title:
+                    self.title = stripped
+                elif self._skip_depth == 0:
+                    self._chunks.append(stripped)
+
+        try:
+            resp = requests.get(
+                source_url,
+                headers={'User-Agent': 'Mozilla/5.0 (compatible; VeilleBot/1.0)'},
+                timeout=20
+            )
+            resp.raise_for_status()
+            resp.encoding = resp.apparent_encoding or 'utf-8'
+
+            extractor = _HTMLExtractor()
+            extractor.feed(resp.text)
+
+            title = extractor.title.strip() or source_url
+            full_text = ' '.join(extractor._chunks)
+            summary = self._extract_summary(full_text, max_length=1500) if full_text else ''
+
+            logger.info(f"Fetched website page: {title[:60]}…")
+            self.stats["fetched"] += 1
+
+            return [{
+                "source_type": "website",
+                "source_url": source_url,
+                "url": source_url,
+                "title": title,
+                "summary": summary,
+                "author": None,
+                "published_at": None,
+                "workspace_id": workspace_id,
+            }]
+        except Exception as e:
+            logger.error(f"Failed to fetch website {source_url}: {e}")
+            self.stats["errors"] += 1
+            return []
+
+    def fetch_from_db_sources(self, workspace_id: Optional[int] = None) -> Dict:
+        """
+        Fetch items from all *active* sources stored in the database.
+        Dispatches by source type: rss → feedparser, website → scraper, github → GitHub API.
+
+        Args:
+            workspace_id: If provided, only fetch sources belonging to this workspace.
+
+        Returns:
+            Stats dict {fetched, inserted, duplicates, errors}.
+        """
+        stats = {"fetched": 0, "inserted": 0, "duplicates": 0, "errors": 0}
+
+        # Read active sources from DB
+        try:
+            with self.db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    query = "SELECT id, name, url, type, workspace_id FROM sources WHERE active = true"
+                    params: list = []
+                    if workspace_id is not None:
+                        query += " AND workspace_id = %s"
+                        params.append(workspace_id)
+                    cur.execute(query, params)
+                    db_sources = cur.fetchall()
+        except Exception as e:
+            logger.error(f"Failed to read sources from DB: {e}")
+            return stats
+
+        for src_id, src_name, src_url, src_type, src_wid in db_sources:
+            wid = workspace_id or src_wid
+            items: List[Dict] = []
+            try:
+                if src_type == 'rss':
+                    config = {"url": src_url, "name": src_name or src_url, "enabled": True}
+                    items = self.fetch_rss_feed(config)
+                    for item in items:
+                        item['workspace_id'] = wid
+                        item['source_url'] = src_url
+                elif src_type == 'website':
+                    items = self.fetch_website_page(src_url, workspace_id=wid)
+                elif src_type == 'github':
+                    config = {"type": "github", "url": src_url, "name": src_name or src_url, "enabled": True}
+                    items = self.fetch_github_repos(config)
+                    for item in items:
+                        item['workspace_id'] = wid
+                        item['source_url'] = src_url
+                else:
+                    logger.info(f"Source {src_id} type '{src_type}' not supported for DB collect, skipping")
+                    continue
+            except Exception as e:
+                logger.error(f"Error fetching source {src_id} ({src_url}): {e}")
+                stats["errors"] += 1
+                continue
+
+            stats["fetched"] += len(items)
+            if items:
+                inserted, dupes = self.insert_items(items)
+                stats["inserted"] += inserted
+                stats["duplicates"] += dupes
+
+        logger.info(
+            f"DB collect complete: {stats['fetched']} fetched, "
+            f"{stats['inserted']} inserted, {stats['duplicates']} duplicates, "
+            f"{stats['errors']} errors"
+        )
+        return stats
+
     def fetch_all_rss(self) -> int:
         """
         Fetch all enabled RSS feeds.

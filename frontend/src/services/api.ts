@@ -179,7 +179,7 @@ export interface Source {
   id: number;
   name: string;
   url: string;
-  type: 'rss' | 'github' | 'api';
+  type: 'rss' | 'github' | 'api' | 'website';
   category: string;
   description: string;
   tags: string[];
@@ -191,7 +191,7 @@ export interface Source {
 export interface SourceCreate {
   name: string;
   url: string;
-  type: 'rss' | 'github' | 'api';
+  type: 'rss' | 'github' | 'api' | 'website';
   category: string;
   description?: string;
   tags?: string[];
@@ -214,6 +214,14 @@ export const sourcesApi = {
   },
   toggle: async (id: number, active: boolean): Promise<{ message: string }> => {
     const { data } = await apiClient.patch(`/api/v1/sources/${id}/toggle`, { active });
+    return data;
+  },
+  collect: async (id: number): Promise<{ message: string; fetched: number; inserted: number; duplicates: number }> => {
+    const { data } = await apiClient.post(`/api/v1/sources/${id}/collect`);
+    return data;
+  },
+  collectWorkspace: async (workspaceId: number): Promise<{ message: string; fetched: number; inserted: number; duplicates: number; errors: number }> => {
+    const { data } = await apiClient.post(`/api/v1/workspaces/${workspaceId}/collect`);
     return data;
   },
 };

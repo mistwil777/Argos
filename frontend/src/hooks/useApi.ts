@@ -332,3 +332,25 @@ export const useToggleSource = () => {
     },
   });
 };
+
+export const useCollectSource = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => sourcesApi.collect(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['items'] });
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
+    },
+  });
+};
+
+export const useCollectWorkspace = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (workspaceId: number) => sourcesApi.collectWorkspace(workspaceId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['items'] });
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
+    },
+  });
+};

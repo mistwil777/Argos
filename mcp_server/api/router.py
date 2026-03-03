@@ -1268,8 +1268,8 @@ async def create_source(source: Dict[str, Any]):
                 raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
         
         # Validate type
-        if source["type"] not in ["rss", "github", "api"]:
-            raise HTTPException(status_code=400, detail="Invalid type. Must be rss, github, or api")
+        if source["type"] not in ["rss", "github", "api", "website"]:
+            raise HTTPException(status_code=400, detail="Invalid type. Must be rss, github, api, or website")
         
         with db.get_connection() as conn:
             with conn.cursor() as cur:
@@ -1351,4 +1351,73 @@ async def delete_source(source_id: int):
         raise
     except Exception as e:
         logger.error(f"Error deleting source: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/sources/{source_id}/collect")
+async def collect_from_source(source_id: int):
+    """Manually trigger content collection for a specific source."""
+    try:
+        # Load source from DB
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, name, url, type, workspace_id FROM sources WHERE id = %s",
+                    (source_id,)
+                )
+                row = cur.fetchone()
+                if not row:
+                    raise HTTPException(status_code=404, detail="Source not found")
+                src_id, src_name, src_url, src_type, src_wid = row
+
+        from mcp_server.services.collector import CollectorService
+        collector = CollectorService(db_manager=db)
+
+        items: list = []
+        if src_type == 'rss':
+            config = {"url": src_url, "name": src_name or src_url, "enabled": True}
+            items = collector.fetch_rss_feed(config)
+            for item in items:
+                item['workspace_id'] = src_wid
+                item['source_url'] = src_url
+        elif src_type == 'website':
+            items = collector.fetch_website_page(src_url, workspace_id=src_wid)
+        elif src_type == 'github':
+            config = {"type": "github", "url": src_url, "name": src_name or src_url, "enabled": True}
+            items = collector.fetch_github_repos(config)
+            for item in items:
+                item['workspace_id'] = src_wid
+                item['source_url'] = src_url
+        else:
+            return {"message": f"Type '{src_type}' not supported for manual collection", "fetched": 0, "inserted": 0, "duplicates": 0}
+
+        inserted, duplicates = collector.insert_items(items)
+        return {
+            "message": "Collection terminée",
+            "source_id": source_id,
+            "fetched": len(items),
+            "inserted": inserted,
+            "duplicates": duplicates,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error collecting source {source_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/workspaces/{workspace_id}/collect")
+async def collect_workspace_sources(workspace_id: int):
+    """Trigger collection for ALL active sources of a workspace."""
+    try:
+        from mcp_server.services.collector import CollectorService
+        collector = CollectorService(db_manager=db)
+        stats = collector.fetch_from_db_sources(workspace_id=workspace_id)
+        return {
+            "message": "Collection complète",
+            "workspace_id": workspace_id,
+            **stats,
+        }
+    except Exception as e:
+        logger.error(f"Error collecting workspace {workspace_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))

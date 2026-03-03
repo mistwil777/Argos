@@ -1,18 +1,19 @@
 // SourcesMode - Gestion des sources de données
 import { useState, useEffect, useRef } from 'react';
-import { useSources, useCreateSource, useToggleSource } from '../../hooks/useApi';
+import { useSources, useCreateSource, useToggleSource, useCollectSource, useCollectWorkspace } from '../../hooks/useApi';
 import { useCockpit } from '../context/CockpitContext';
 import { CockpitHeader } from '../components/CockpitHeader';
 import type { SourceCreate } from '../../services/api';
 import {
-  Rss, Github, Zap, Plus, ToggleLeft, ToggleRight,
-  AlertCircle, X, Check, Loader2,
+  Rss, Github, Zap, Globe, Plus, ToggleLeft, ToggleRight,
+  AlertCircle, X, Check, Loader2, RefreshCw,
 } from 'lucide-react';
 
 const TYPE_CONFIG = {
-  rss:    { label: 'RSS',    icon: Rss,    color: 'text-orange-400',  bg: 'bg-orange-500/10 border-orange-500/20' },
-  github: { label: 'GitHub', icon: Github, color: 'text-purple-400',  bg: 'bg-purple-500/10 border-purple-500/20' },
-  api:    { label: 'API',    icon: Zap,    color: 'text-sky-400',     bg: 'bg-sky-500/10    border-sky-500/20'    },
+  rss:     { label: 'RSS',     icon: Rss,    color: 'text-orange-400',  bg: 'bg-orange-500/10 border-orange-500/20' },
+  github:  { label: 'GitHub',  icon: Github, color: 'text-purple-400',  bg: 'bg-purple-500/10 border-purple-500/20' },
+  api:     { label: 'API',     icon: Zap,    color: 'text-sky-400',     bg: 'bg-sky-500/10    border-sky-500/20'    },
+  website: { label: 'Website', icon: Globe,  color: 'text-teal-400',    bg: 'bg-teal-500/10   border-teal-500/20'   },
 } as const;
 
 type SourceType = keyof typeof TYPE_CONFIG;
@@ -178,6 +179,7 @@ function AddSourcePanel({
 // ─── SourceCard ─────────────────────────────────────────────────────────────────
 function SourceCard({ source, highlighted }: { source: any; highlighted?: boolean }) {
   const toggleMutation = useToggleSource();
+  const collectMutation = useCollectSource();
   const Cfg = TYPE_CONFIG[(source.type as SourceType) ?? 'api'];
   const Icon = Cfg.icon;
   const cardRef = useRef<HTMLDivElement>(null);
@@ -222,21 +224,48 @@ function SourceCard({ source, highlighted }: { source: any; highlighted?: boolea
         {source.description && (
           <p className="text-[11px] text-zinc-600 mt-1 leading-relaxed">{source.description}</p>
         )}
+        {/* Collect result feedback */}
+        {collectMutation.isSuccess && (
+          <p className="text-[10px] text-emerald-500 mt-1">
+            +{(collectMutation.data as any)?.inserted ?? 0} nouveau(x) · {(collectMutation.data as any)?.duplicates ?? 0} doublon(s)
+          </p>
+        )}
+        {collectMutation.isError && (
+          <p className="text-[10px] text-red-400 mt-1">Erreur de collecte</p>
+        )}
       </div>
 
-      {/* Toggle */}
-      <button
-        onClick={() => toggleMutation.mutate({ id: source.id, active: !source.active })}
-        disabled={toggleMutation.isPending}
-        title={source.active ? 'Désactiver' : 'Activer'}
-        className="shrink-0 text-zinc-600 hover:text-zinc-300 transition-colors mt-0.5"
-      >
-        {source.active ? (
-          <ToggleRight className="w-5 h-5 text-sky-500" />
-        ) : (
-          <ToggleLeft className="w-5 h-5" />
-        )}
-      </button>
+      {/* Actions */}
+      <div className="shrink-0 flex items-center gap-1.5 mt-0.5">
+        {/* Collect button */}
+        <button
+          onClick={() => collectMutation.mutate(source.id)}
+          disabled={collectMutation.isPending || !source.active}
+          title="Collecter maintenant"
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20 hover:bg-sky-500/20 disabled:opacity-40 transition-all"
+        >
+          {collectMutation.isPending ? (
+            <Loader2 className="w-3 h-3 animate-spin" />
+          ) : (
+            <RefreshCw className="w-3 h-3" />
+          )}
+          Collecter
+        </button>
+
+        {/* Toggle */}
+        <button
+          onClick={() => toggleMutation.mutate({ id: source.id, active: !source.active })}
+          disabled={toggleMutation.isPending}
+          title={source.active ? 'Désactiver' : 'Activer'}
+          className="text-zinc-600 hover:text-zinc-300 transition-colors"
+        >
+          {source.active ? (
+            <ToggleRight className="w-5 h-5 text-sky-500" />
+          ) : (
+            <ToggleLeft className="w-5 h-5" />
+          )}
+        </button>
+      </div>
     </div>
   );
 }
@@ -247,6 +276,7 @@ export function SourcesMode() {
   const [showAdd, setShowAdd] = useState(false);
   const [typeFilter, setTypeFilter] = useState<'all' | SourceType>('all');
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const collectWorkspaceMutation = useCollectWorkspace();
 
   // Clear selected source URL when leaving this mode or on unmount
   useEffect(() => {
@@ -304,6 +334,7 @@ export function SourcesMode() {
           { key: 'rss', label: 'RSS' },
           { key: 'github', label: 'GitHub' },
           { key: 'api', label: 'API' },
+          { key: 'website', label: 'Website' },
         ] as const).map(({ key, label }) => (
           <button
             key={key}
@@ -345,6 +376,22 @@ export function SourcesMode() {
         ))}
 
         <div className="flex-1" />
+        {/* Tout collecter */}
+        {activeWorkspaceId && activeSources.length > 0 && (
+          <button
+            onClick={() => collectWorkspaceMutation.mutate(activeWorkspaceId)}
+            disabled={collectWorkspaceMutation.isPending}
+            title="Collecter toutes les sources actives"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/[0.08] border border-transparent hover:border-emerald-500/20 transition-all disabled:opacity-40"
+          >
+            {collectWorkspaceMutation.isPending ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="w-3.5 h-3.5" />
+            )}
+            {collectWorkspaceMutation.isPending ? 'Collecte…' : 'Tout collecter'}
+          </button>
+        )}
         <button
           onClick={() => setShowAdd((v) => !v)}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
