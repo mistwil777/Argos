@@ -10,7 +10,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 
 import feedparser
 import requests
@@ -468,13 +468,21 @@ class CollectorService:
     
     def fetch_website_page(self, source_url: str, workspace_id: Optional[int] = None) -> List[Dict]:
         """
-        Fetch a single web page, extract title + main text content as one item.
+        Fetch web page(s) and extract title + text content as items.
+
+        Crawl mode  (URL ends with '/'):
+            Discovers and fetches ALL pages whose URL starts with source_url.
+            Follows internal <a href> links found on each page, up to MAX_PAGES.
+
+        Single mode (URL does NOT end with '/'):
+            Fetches only that one page (previous behaviour).
+
         Uses stdlib html.parser — no extra dependency.
         """
         from html.parser import HTMLParser
 
         class _HTMLExtractor(HTMLParser):
-            """Minimal extractor: title + visible text, skips script/style/nav."""
+            """Minimal extractor: title + visible text + hrefs, skips script/style/nav."""
             _SKIP = {'script', 'style', 'nav', 'header', 'footer', 'aside', 'noscript'}
 
             def __init__(self):
@@ -483,12 +491,17 @@ class CollectorService:
                 self._chunks: list = []
                 self._in_title = False
                 self._skip_depth = 0
+                self.links: list = []
 
             def handle_starttag(self, tag, attrs):
                 if tag == 'title':
                     self._in_title = True
                 if tag in self._SKIP:
                     self._skip_depth += 1
+                if tag == 'a':
+                    href = dict(attrs).get('href', '')
+                    if href:
+                        self.links.append(href)
 
             def handle_endtag(self, tag):
                 if tag == 'title':
@@ -505,42 +518,85 @@ class CollectorService:
                 elif self._skip_depth == 0:
                     self._chunks.append(stripped)
 
-        try:
-            import urllib3
-            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+        def _fetch_single(url: str) -> _HTMLExtractor:
             resp = requests.get(
-                source_url,
+                url,
                 headers={'User-Agent': 'Mozilla/5.0 (compatible; VeilleBot/1.0)'},
                 timeout=20,
-                verify=False  # Docker SSL cert store may be incomplete
+                verify=False,
             )
             resp.raise_for_status()
             resp.encoding = resp.apparent_encoding or 'utf-8'
+            ext = _HTMLExtractor()
+            ext.feed(resp.text)
+            return ext
 
-            extractor = _HTMLExtractor()
-            extractor.feed(resp.text)
-
-            title = extractor.title.strip() or source_url
-            full_text = ' '.join(extractor._chunks)
-            summary = self._extract_summary(full_text, max_length=1500) if full_text else ''
-
-            logger.info(f"Fetched website page: {title[:60]}…")
-            self.stats["fetched"] += 1
-
-            return [{
+        def _make_item(url: str, title: str, summary: str) -> Dict:
+            return {
                 "source_type": "website",
                 "source_url": source_url,
-                "url": source_url,
+                "url": url,
                 "title": title,
                 "summary": summary,
                 "author": None,
                 "published_at": None,
                 "workspace_id": workspace_id,
-            }]
-        except Exception as e:
-            logger.error(f"Failed to fetch website {source_url}: {e}")
-            self.stats["errors"] += 1
-            return []
+            }
+
+        crawl_mode = source_url.endswith('/')
+        items: List[Dict] = []
+
+        # ── Single page ─────────────────────────────────────────────────────────
+        if not crawl_mode:
+            try:
+                ext = _fetch_single(source_url)
+                title = ext.title.strip() or source_url
+                summary = self._extract_summary(' '.join(ext._chunks), 1500)
+                logger.info(f"Fetched website page: {title[:60]}…")
+                self.stats["fetched"] += 1
+                items.append(_make_item(source_url, title, summary))
+            except Exception as e:
+                logger.error(f"Failed to fetch website {source_url}: {e}")
+                self.stats["errors"] += 1
+            return items
+
+        # ── Crawl mode: spider all sub-pages under base URL ──────────────────────
+        MAX_PAGES = 100
+        visited: set = set()
+        queue: List[str] = [source_url]
+
+        while queue and len(visited) < MAX_PAGES:
+            url = queue.pop(0)
+            if url in visited:
+                continue
+            visited.add(url)
+            try:
+                ext = _fetch_single(url)
+                title = ext.title.strip() or url
+                summary = self._extract_summary(' '.join(ext._chunks), 1500)
+                logger.info(f"Crawled [{len(visited)}/{MAX_PAGES}]: {title[:60]}…")
+                self.stats["fetched"] += 1
+                items.append(_make_item(url, title, summary))
+
+                # Enqueue new internal links
+                for href in ext.links:
+                    abs_url = urljoin(url, href).split('#')[0]  # strip fragment
+                    if (
+                        abs_url not in visited
+                        and abs_url not in queue
+                        and abs_url.startswith(source_url)
+                        and len(visited) + len(queue) < MAX_PAGES
+                    ):
+                        queue.append(abs_url)
+            except Exception as e:
+                logger.error(f"Failed to crawl {url}: {e}")
+                self.stats["errors"] += 1
+
+        logger.info(f"Crawl complete for {source_url}: {len(items)} pages collected")
+        return items
 
     def fetch_from_db_sources(self, workspace_id: Optional[int] = None) -> Dict:
         """
