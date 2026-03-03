@@ -1,14 +1,22 @@
 // TopBar - Barre supérieure
 import { useState } from 'react';
 import { useGlobalStats, useWorkspaces } from '../../hooks/useApi';
-import { Bell, DollarSign, PanelRightOpen, PanelRightClose, ChevronDown } from 'lucide-react';
+import { Bell, DollarSign, PanelRightOpen, PanelRightClose, ChevronDown, Zap, FileText, BookOpen, MessageSquare, Shield, Rss } from 'lucide-react';
 import { UserMenu } from '../components/UserMenu';
 import { WorkspaceModal } from '../components/WorkspaceModal';
-import { useCockpit } from '../context/CockpitContext';
+import { useCockpit, type CockpitMode } from '../context/CockpitContext';
+
+const MODE_META: Record<CockpitMode, { label: string; icon: React.ElementType; color: string }> = {
+  flux:       { label: 'Flux',       icon: FileText,      color: 'text-zinc-400' },
+  production: { label: 'Contenus',   icon: BookOpen,      color: 'text-indigo-400' },
+  assistant:  { label: 'Chat RAG',   icon: MessageSquare, color: 'text-sky-400' },
+  controle:   { label: 'Contrôle',   icon: Shield,        color: 'text-amber-400' },
+  sources:    { label: 'Sources',    icon: Rss,           color: 'text-emerald-400' },
+};
 
 export function TopBar() {
   const { data: stats } = useGlobalStats();
-  const { inspectorOpen, setInspectorOpen, selectedItemId, selectedDocId, activeWorkspaceId } = useCockpit();
+  const { inspectorOpen, setInspectorOpen, selectedItemId, selectedDocId, activeWorkspaceId, activeMode } = useCockpit();
   const { data: workspaces = [] } = useWorkspaces();
   const [workspaceModalOpen, setWorkspaceModalOpen] = useState(false);
 
@@ -18,12 +26,32 @@ export function TopBar() {
   const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId);
   const workspaceName = activeWorkspace?.name || 'Général';
   const workspaceColor = activeWorkspace?.color || '#71717a';
+  const modeMeta = MODE_META[activeMode];
+  const ModeIcon = modeMeta.icon;
 
   return (
     <>
-      <div className="h-12 bg-zinc-950 border-b border-white/[0.06] flex items-center justify-between px-4 shrink-0">
-        {/* Left: Quick stats */}
+      <div className="h-13 bg-zinc-950 border-b border-white/[0.06] flex items-center justify-between px-4 shrink-0" style={{ height: '52px' }}>
+        {/* Left: Brand + mode */}
         <div className="flex items-center gap-3">
+          {/* App logo */}
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20">
+              <Zap className="w-3.5 h-3.5 text-white" strokeWidth={2.5} />
+            </div>
+            <span className="text-sm font-bold text-zinc-100 tracking-tight select-none">Veille IA</span>
+          </div>
+
+          {/* Separator */}
+          <div className="w-px h-4 bg-white/[0.08]" />
+
+          {/* Current mode pill */}
+          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/[0.06] ${modeMeta.color}`}>
+            <ModeIcon className="w-3.5 h-3.5" strokeWidth={1.75} />
+            <span className="text-xs font-medium">{modeMeta.label}</span>
+          </div>
+
+          {/* Alerts */}
           {pendingCount > 0 && (
             <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-medium">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400 cockpit-indicator-active" />

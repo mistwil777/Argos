@@ -1,13 +1,15 @@
 // ControleMode - Mode HITL + Monitoring (décisions humaines + health)
 import { useState } from 'react';
-import { Shield, AlertTriangle, CheckCircle, XCircle, TrendingUp, Activity } from 'lucide-react';
+import { Shield, AlertTriangle, CheckCircle, XCircle, TrendingUp, Activity, ExternalLink } from 'lucide-react';
 import { usePendingDecisions, useMakeDecision } from '../../hooks/useApi';
 import { Preloader } from '../components/Preloader';
+import { useCockpit } from '../context/CockpitContext';
 
 interface HITLDecision {
   id: number;
   item_id: number;
   item_title: string;
+  item_url?: string;
   decision_type: 'classification' | 'rejection' | 'generation';
   ai_suggestion: string;
   confidence: number;
@@ -22,11 +24,14 @@ export function ControleMode() {
   const { data: pendingData } = usePendingDecisions();
   const makeDecisionMutation = useMakeDecision();
 
+  const { setActiveMode, setSelectedItemId, setInspectorOpen } = useCockpit();
+
   // Convert items to HITLDecision format
   const pendingDecisions: HITLDecision[] = pendingData?.items.map((item: any) => ({
     id: item.id,
     item_id: item.id,
     item_title: item.title || 'Sans titre',
+    item_url: item.url,
     decision_type: 'classification',
     ai_suggestion: item.importance ? `${item.importance} importance - ${item.classification || 'Classifié'}` : 'En attente de classification',
     confidence: item.confidence_score ?? 0,
@@ -117,6 +122,11 @@ export function ControleMode() {
             onBatchApprove={handleBatchApprove}
             onBatchReject={handleBatchReject}
             isProcessing={makeDecisionMutation.isPending}
+            onViewItem={(decision) => {
+              setActiveMode('flux');
+              setSelectedItemId(decision.item_id);
+              setInspectorOpen(true);
+            }}
           />
         ) : (
           <HealthMonitor />
@@ -141,9 +151,10 @@ interface HITLQueueProps {
   onBatchApprove: (ids: number[]) => void;
   onBatchReject: (ids: number[]) => void;
   isProcessing: boolean;
+  onViewItem: (decision: HITLDecision) => void;
 }
 
-function HITLQueue({ decisions, onSelect, selectedDecision, comment, setComment, onApprove, onReject, onBatchApprove, onBatchReject, isProcessing }: HITLQueueProps) {
+function HITLQueue({ decisions, onSelect, selectedDecision, comment, setComment, onApprove, onReject, onBatchApprove, onBatchReject, isProcessing, onViewItem }: HITLQueueProps) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [batchIds, setBatchIds] = useState<Set<number>>(new Set());
   const selected = selectedId ? decisions.find(d => d.id === selectedId) : selectedDecision;
@@ -253,10 +264,10 @@ function HITLQueue({ decisions, onSelect, selectedDecision, comment, setComment,
                   <span className={`flex items-center gap-1 ${
                     decision.confidence >= 0.7 ? 'text-emerald-500' :
                     decision.confidence >= 0.5 ? 'text-amber-500' :
-                    'text-red-500'
+                    decision.confidence > 0 ? 'text-red-500' : 'text-zinc-700'
                   }`}>
                     <TrendingUp className="w-3 h-3" />
-                    <span className="font-mono">{(decision.confidence * 100).toFixed(0)}%</span>
+                    <span className="font-mono">{decision.confidence > 0 ? `${(decision.confidence * 100).toFixed(0)}%` : 'N/A'}</span>
                   </span>
                   <span className="text-zinc-700 font-mono">{new Date(decision.created_at).toLocaleDateString('fr-FR')}</span>
                 </div>
@@ -275,9 +286,28 @@ function HITLQueue({ decisions, onSelect, selectedDecision, comment, setComment,
             <div>
               <h3 className="text-[10px] font-semibold text-zinc-700 uppercase tracking-wider mb-1.5">Item</h3>
               <p className="text-xs font-medium text-zinc-300">{selected.item_title}</p>
-              <button className="text-xs text-sky-500 hover:text-sky-400 underline mt-1 transition-colors">
-                Voir l'item complet
-              </button>
+              <div className="flex items-center gap-2 mt-1.5">
+                <button
+                  onClick={() => onViewItem(selected)}
+                  className="flex items-center gap-1 text-xs text-sky-500 hover:text-sky-400 transition-colors"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  Voir dans Flux
+                </button>
+                {selected.item_url && (
+                  <>
+                    <span className="text-zinc-800">·</span>
+                    <a
+                      href={selected.item_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+                    >
+                      Source originale
+                    </a>
+                  </>
+                )}
+              </div>
             </div>
 
             <div>

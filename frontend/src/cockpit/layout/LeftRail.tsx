@@ -28,11 +28,6 @@ export function LeftRail({}: LeftRailProps) {
 
   return (
     <div className="w-14 bg-zinc-950 border-r border-white/[0.06] flex flex-col items-center py-4 gap-1 shrink-0">
-      {/* Logo */}
-      <div className="mb-5 w-8 h-8 rounded-xl bg-sky-500 flex items-center justify-center font-bold text-white text-xs tracking-tight select-none">
-        VO
-      </div>
-
       {/* Mode Icons */}
       {MODES.map((mode) => {
         const Icon = mode.icon;
