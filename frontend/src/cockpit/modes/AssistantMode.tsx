@@ -70,7 +70,7 @@ export function AssistantMode() {
                 <Sparkles className="w-5 h-5 text-zinc-600" strokeWidth={1.5} />
               </div>
               <div className="text-center">
-                <h2 className="text-sm font-medium text-zinc-400 mb-1">Assistant RAG</h2>
+                <h2 className="text-sm font-medium text-zinc-400 mb-1">Chat RAG</h2>
                 <p className="text-xs text-zinc-700 max-w-sm leading-relaxed">
                   Posez des questions sur vos documents. L'assistant utilise la recherche sémantique
                   pour vous fournir les réponses les plus pertinentes.

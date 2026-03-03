@@ -4,7 +4,7 @@ import { useCourses, useCourse, usePublishCourse, useDeleteCourse, useModifyCour
 import { useCockpit } from '../context/CockpitContext';
 import {
   BookOpen, Clock, Tag, TrendingUp, Check, Archive,
-  Sparkles, ChevronLeft, AlertTriangle, Calendar, Layers
+  Sparkles, ChevronLeft, AlertTriangle, Calendar, Layers, Trash2
 } from 'lucide-react';
 import { CockpitHeader } from '../components/CockpitHeader';
 import { Preloader } from '../components/Preloader';
@@ -272,7 +272,19 @@ function CourseReader({ courseId, onBack }: { courseId: number; onBack: () => vo
 export function ProductionMode() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'review' | 'published'>('all');
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const { activeWorkspaceId } = useCockpit();
+  const deleteMutation = useDeleteCourse();
+
+  const toggleOne = (id: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  };
+
+  const handleBatchDelete = () => {
+    [...selectedIds].forEach(id => deleteMutation.mutate(id));
+    setSelectedIds(new Set());
+  };
 
   const { data: coursesData, isLoading } = useCourses({
     status: statusFilter === 'all' ? undefined : statusFilter,
@@ -366,6 +378,18 @@ export function ProductionMode() {
       />
 
       <div className="h-12 border-b border-white/[0.06] flex items-center px-5 gap-2">
+        {/* Select-all */}
+        <label className="flex items-center gap-2 cursor-pointer select-none mr-1">
+          <input
+            type="checkbox"
+            checked={courses.length > 0 && selectedIds.size === courses.length}
+            onChange={() => {
+              if (selectedIds.size === courses.length) setSelectedIds(new Set());
+              else setSelectedIds(new Set(courses.map((c: any) => c.id)));
+            }}
+            className="w-3.5 h-3.5 accent-sky-500 cursor-pointer"
+          />
+        </label>
         {([
           { key: 'all', label: 'Tout' },
           { key: 'draft',     label: `Brouillons\u00a0(${allCourses.filter((c: any) => c.status === 'draft').length})` },
@@ -384,6 +408,19 @@ export function ProductionMode() {
             {label}
           </button>
         ))}
+        <div className="flex-1" />
+        {selectedIds.size > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-zinc-500">{selectedIds.size} sélectionné{selectedIds.size > 1 ? 's' : ''}</span>
+            <button
+              onClick={handleBatchDelete}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-red-500/8 text-red-400 border border-red-500/15 hover:bg-red-500/12 transition-all"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Supprimer
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto scrollable p-5">
@@ -396,13 +433,24 @@ export function ProductionMode() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {courses.map((course: any) => {
               const pct = qaPercent(course.qa_score);
+              const isSelected = selectedIds.has(course.id);
               return (
                 <div
                   key={course.id}
                   onClick={() => setSelectedCourseId(course.id)}
-                  className="cockpit-card rounded-xl p-4 cursor-pointer group flex flex-col gap-3"
+                  className={`cockpit-card rounded-xl p-4 cursor-pointer group flex flex-col gap-3 transition-all ${
+                    isSelected ? 'ring-1 ring-sky-500/40 bg-sky-500/[0.04]' : ''
+                  }`}
                 >
                   <div className="flex items-start gap-3">
+                    <span onClick={(e) => toggleOne(course.id, e)} className="shrink-0 mt-0.5">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {}}
+                        className="w-3.5 h-3.5 accent-sky-500 cursor-pointer"
+                      />
+                    </span>
                     <BookOpen className="w-4 h-4 text-zinc-600 shrink-0 mt-0.5" strokeWidth={1.5} />
                     <h3 className="text-sm font-medium text-zinc-200 group-hover:text-zinc-100 transition-colors line-clamp-2 leading-snug">
                       {course.title}

@@ -80,6 +80,17 @@ export const useDeleteItem = () => {
   });
 };
 
+export const useBatchAssignWorkspace = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ itemIds, workspaceId }: { itemIds: number[]; workspaceId: number }) =>
+      itemsApi.batchAssignWorkspace(itemIds, workspaceId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['items'] });
+    },
+  });
+};
+
 // Courses hooks
 export const useCourses = (params?: any) => {
   return useQuery({

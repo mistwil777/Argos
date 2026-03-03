@@ -58,6 +58,11 @@ export const itemsApi = {
   delete: async (id: number): Promise<void> => {
     await apiClient.delete(`/api/v1/items/${id}`);
   },
+
+  batchAssignWorkspace: async (itemIds: number[], workspaceId: number): Promise<{ updated: number }> => {
+    const { data } = await apiClient.patch('/api/v1/items/batch/workspace', { item_ids: itemIds, workspace_id: workspaceId });
+    return data;
+  },
 };
 
 // Courses API

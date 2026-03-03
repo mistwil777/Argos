@@ -235,14 +235,25 @@ export function SourcesMode() {
   const { activeWorkspaceId } = useCockpit();
   const [showAdd, setShowAdd] = useState(false);
   const [typeFilter, setTypeFilter] = useState<'all' | SourceType>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
 
+  // Fetch all sources without active param → stable order; filter client-side
   const { data, isLoading } = useSources({
     workspace_id: activeWorkspaceId ?? undefined,
     type: typeFilter === 'all' ? undefined : typeFilter,
   });
 
-  const sources = data?.sources || [];
-  const activeSources = sources.filter((s: any) => s.active);
+  // Stable sort by id (never reorders on toggle)
+  const allSources: any[] = [...(data?.sources || [])].sort((a, b) => a.id - b.id);
+
+  // Client-side active filter
+  const sources = allSources.filter(s => {
+    if (activeFilter === 'active') return s.active;
+    if (activeFilter === 'inactive') return !s.active;
+    return true;
+  });
+
+  const activeSources = allSources.filter((s: any) => s.active);
 
   if (isLoading) {
     return (
@@ -257,12 +268,13 @@ export function SourcesMode() {
       {/* Header */}
       <CockpitHeader
         title="Sources de données"
-        subtitle={`${activeSources.length} sources actives · ${sources.length} au total`}
+        subtitle={`${activeSources.length} actives · ${allSources.length} au total`}
         icon={<Rss className="w-5 h-5 text-zinc-400" strokeWidth={1.5} />}
       />
 
       {/* Filters + Add button */}
       <div className="h-12 border-b border-white/[0.06] flex items-center px-5 gap-2">
+        {/* Type filter */}
         {([
           { key: 'all', label: 'Toutes' },
           { key: 'rss', label: 'RSS' },
@@ -281,6 +293,33 @@ export function SourcesMode() {
             {label}
           </button>
         ))}
+
+        {/* Separator */}
+        <div className="w-px h-4 bg-white/[0.08] mx-1" />
+
+        {/* Active status filter */}
+        {([
+          { key: 'all', label: 'Tous' },
+          { key: 'active', label: `Actives\u00a0(${activeSources.length})` },
+          { key: 'inactive', label: `Inactives\u00a0(${allSources.length - activeSources.length})` },
+        ] as const).map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setActiveFilter(key)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
+              activeFilter === key
+                ? key === 'active'
+                  ? 'bg-emerald-500/12 text-emerald-400'
+                  : key === 'inactive'
+                  ? 'bg-zinc-800 text-zinc-500'
+                  : 'bg-white/[0.08] text-zinc-200'
+                : 'text-zinc-600 hover:text-zinc-400 hover:bg-white/[0.04]'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+
         <div className="flex-1" />
         <button
           onClick={() => setShowAdd((v) => !v)}
@@ -308,14 +347,18 @@ export function SourcesMode() {
         {sources.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-3">
             <Rss className="w-10 h-10 text-zinc-800" strokeWidth={1.5} />
-            <p className="text-sm text-zinc-700">Aucune source configurée</p>
-            <button
-              onClick={() => setShowAdd(true)}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20 hover:bg-sky-500/15 transition-all"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Ajouter une première source
-            </button>
+            <p className="text-sm text-zinc-700">
+              {allSources.length === 0 ? 'Aucune source configurée' : 'Aucune source dans cette catégorie'}
+            </p>
+            {allSources.length === 0 && (
+              <button
+                onClick={() => setShowAdd(true)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20 hover:bg-sky-500/15 transition-all"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Ajouter une première source
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-2">

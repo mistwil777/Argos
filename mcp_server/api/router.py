@@ -220,7 +220,7 @@ async def list_items(
                     SELECT 
                         id, title, summary, url, source_type, source_url,
                         subject, importance, classification_status,
-                        published_at, created_at
+                        published_at, created_at, workspace_id
                     FROM items
                     WHERE {where_clause}
                     ORDER BY created_at DESC
@@ -243,7 +243,8 @@ async def list_items(
                         "importance": row[7],
                         "status": row[8],
                         "published_at": row[9].isoformat() if row[9] else None,
-                        "created_at": row[10].isoformat() if row[10] else None
+                        "created_at": row[10].isoformat() if row[10] else None,
+                        "workspace_id": row[11]
                     })
                 
                 # Get total count
@@ -254,6 +255,28 @@ async def list_items(
                 return {"items": items, "total": total}
     except Exception as e:
         logger.error(f"Error listing items: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.patch("/items/batch/workspace")
+async def batch_assign_workspace(data: Dict[str, Any]):
+    """Assign / move a batch of items to a workspace."""
+    item_ids = data.get("item_ids", [])
+    target_workspace_id = data.get("workspace_id")
+    if not item_ids or target_workspace_id is None:
+        raise HTTPException(status_code=400, detail="item_ids and workspace_id are required")
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE items SET workspace_id = %s WHERE id = ANY(%s::int[])",
+                    (target_workspace_id, item_ids)
+                )
+                updated = cur.rowcount
+                conn.commit()
+                return {"updated": updated, "workspace_id": target_workspace_id}
+    except Exception as e:
+        logger.error(f"Error batch-assigning workspace: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
