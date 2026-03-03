@@ -157,6 +157,10 @@ export function ItemInspector({ itemId }: ItemInspectorProps) {
               <BookOpen className="w-4 h-4" />
               <span>{generateMutation.isPending ? 'Génération...' : 'Générer document'}</span>
             </button>
+            <button onClick={handleClassify} disabled={classifyMutation.isPending} className="w-full cockpit-btn" style={{ background: 'rgba(99,102,241,0.08)', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.2)' }}>
+              <Sparkles className="w-3.5 h-3.5" />
+              <span className="text-[11px]">{classifyMutation.isPending ? 'Actualisation...' : 'Re-classifier (résumé FR)'}</span>
+            </button>
             <button onClick={handleDelete} disabled={deleteMutation.isPending} className="w-full cockpit-btn cockpit-btn-danger">
               <XCircle className="w-4 h-4" />
               <span>{deleteMutation.isPending ? 'Suppression...' : 'Supprimer'}</span>

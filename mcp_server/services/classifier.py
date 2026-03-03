@@ -426,13 +426,14 @@ class ClassifierService:
                 (classification["summary_fr"], item_id)
             )
             logger.info(f"Updated summary with French translation for item {item_id}")
-        
-        # TODO: Create items_topics table and enable this
-        # Link topics
-        # self.db.link_item_to_topics(
-        #     item_id=item_id,
-        #     topic_names=classification["topics"]
-        # )
+
+        # Store topics in keywords column
+        if classification.get("topics"):
+            self.db.execute_query(
+                "UPDATE items SET keywords = %s WHERE id = %s",
+                (classification["topics"], item_id)
+            )
+            logger.info(f"Stored {len(classification['topics'])} topics for item {item_id}")
         
         # Log decision for tracking (simplified - no HITL yet)
         # Skip logging to avoid schema mismatch

@@ -96,7 +96,7 @@ class DatabaseManager:
             SELECT 
                 id, title, summary, url, source_type, source_url,
                 importance, item_type, classification_status,
-                published_at, created_at, updated_at
+                published_at, created_at, updated_at, keywords as topics
             FROM items
             WHERE id = %s
         """

@@ -201,10 +201,6 @@ async def list_items(
                     where_conditions.append("classification_status = %s")
                     params.append(status)
                 
-                # ALWAYS filter out items that already have a course
-                # This prevents confusion and ensures clean knowledge base (GIGO principle)
-                # Items with courses should only appear in the Courses page
-                where_conditions.append("NOT EXISTS (SELECT 1 FROM courses WHERE courses.item_id = items.id)")
                 
                 if source != "all":
                     where_conditions.append("source_type = %s")
@@ -220,7 +216,8 @@ async def list_items(
                     SELECT 
                         id, title, summary, url, source_type, source_url,
                         subject, importance, classification_status,
-                        published_at, created_at, workspace_id
+                        published_at, created_at, workspace_id,
+                        keywords
                     FROM items
                     WHERE {where_clause}
                     ORDER BY created_at DESC
@@ -241,10 +238,12 @@ async def list_items(
                         "source_url": row[5],
                         "subject": row[6],
                         "importance": row[7],
-                        "status": row[8],
+                        "classification_status": row[8],
+                        "status": row[8],  # backward compat alias
                         "published_at": row[9].isoformat() if row[9] else None,
                         "created_at": row[10].isoformat() if row[10] else None,
-                        "workspace_id": row[11]
+                        "workspace_id": row[11],
+                        "topics": row[12] or []
                     })
                 
                 # Get total count
