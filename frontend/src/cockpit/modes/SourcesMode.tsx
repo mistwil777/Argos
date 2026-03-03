@@ -89,9 +89,21 @@ function AddSourcePanel({
           <input
             value={form.url}
             onChange={(e) => set('url', e.target.value)}
-            placeholder="https://..."
+            placeholder={form.type === 'website' ? 'https://example.com/docs/' : 'https://...'}
             className="w-full bg-zinc-900 border border-white/[0.08] rounded-lg px-3 py-2 text-xs text-zinc-200 placeholder-zinc-700 focus:outline-none focus:border-sky-500/50 transition-colors"
           />
+          {form.type === 'website' && (
+            <div className="mt-1.5 flex flex-col gap-0.5">
+              <p className="text-[10px] text-teal-500/70 flex items-center gap-1">
+                <span className="font-mono bg-teal-500/10 border border-teal-500/20 px-1 rounded">URL/</span>
+                Termine par <code className="font-mono">/</code> → crawl toutes les sous-pages
+              </p>
+              <p className="text-[10px] text-zinc-600 flex items-center gap-1">
+                <span className="font-mono bg-white/[0.04] border border-white/[0.06] px-1 rounded">URL</span>
+                Sans <code className="font-mono">/</code> → scrape uniquement cette page
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Type */}
