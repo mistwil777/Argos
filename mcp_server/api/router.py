@@ -431,7 +431,7 @@ async def list_courses(
                     params.append(status)
                 
                 if workspace_id is not None:
-                    where_conditions.append("workspace_id = %s")
+                    where_conditions.append("c.workspace_id = %s")
                     params.append(workspace_id)
                 
                 where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"

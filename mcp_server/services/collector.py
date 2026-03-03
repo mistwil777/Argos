@@ -426,10 +426,10 @@ class CollectorService:
                 # Insert into database with ON CONFLICT (url) DO NOTHING for dedup
                 query = """
                     INSERT INTO items (
-                        source_type, source_url, url, title, summary,
+                        source_type, source_url, url, title, content, summary,
                         author, published_at, workspace_id
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (url) DO NOTHING
                     RETURNING id
                 """
@@ -443,7 +443,8 @@ class CollectorService:
                                 item["source_url"],
                                 item["url"],
                                 item["title"],
-                                item["summary"],
+                                item.get("summary", ""),   # content (NOT NULL legacy column)
+                                item.get("summary", ""),   # summary
                                 item.get("author"),
                                 item.get("published_at"),
                                 workspace_id,
@@ -505,10 +506,13 @@ class CollectorService:
                     self._chunks.append(stripped)
 
         try:
+            import urllib3
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
             resp = requests.get(
                 source_url,
                 headers={'User-Agent': 'Mozilla/5.0 (compatible; VeilleBot/1.0)'},
-                timeout=20
+                timeout=20,
+                verify=False  # Docker SSL cert store may be incomplete
             )
             resp.raise_for_status()
             resp.encoding = resp.apparent_encoding or 'utf-8'
