@@ -2,7 +2,7 @@ import { Bell, User } from 'lucide-react';
 
 export const Header = () => {
   return (
-    <header className="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-6">
+    <header className="bg-white border-b border-gray-200 h-32 flex items-center justify-between px-6">
       <div className="flex-1">
         <h2 className="text-2xl font-semibold text-gray-900">
           {/* Page title will be set by individual pages */}

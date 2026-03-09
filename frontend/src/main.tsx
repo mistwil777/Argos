@@ -5,6 +5,12 @@ import './styles/animations.css'
 import './cockpit-theme.css'
 import { CockpitApp } from './cockpit/CockpitApp.tsx'
 
+// Apply saved theme before first paint to avoid flash
+try {
+  const prefs = JSON.parse(localStorage.getItem('userPrefs') || '{}');
+  document.documentElement.setAttribute('data-theme', prefs.theme || 'sombre');
+} catch { /* ignore */ }
+
 console.log('🚀 Main.tsx loaded');
 
 const rootElement = document.getElementById('root');

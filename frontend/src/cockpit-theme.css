@@ -831,3 +831,82 @@
 .badge-error   { background: rgba(239,68,68,0.12); color: #fca5a5; border: 1px solid rgba(239,68,68,0.2); }
 .badge-neutral { background: rgba(255,255,255,0.06); color: var(--text-2); border: 1px solid var(--border); }
 .badge-sky     { background: rgba(14,165,233,0.12); color: #7dd3fc; border: 1px solid rgba(14,165,233,0.2); }
+
+/* ================================================================
+   LIGHT MODE — html[data-theme="clair"]
+   ================================================================ */
+html[data-theme="clair"] {
+  color-scheme: light;
+  /* CSS variable overrides */
+  --surface-bg: #f8fafc;
+  --surface-1: #f1f5f9;
+  --surface-2: #e2e8f0;
+  --border: rgba(0,0,0,0.08);
+  --text-1: #0f172a;
+  --text-2: #334155;
+  --text-3: #94a3b8;
+  --button-bg: #e4e4e7;
+  --accent-dim: rgba(14,165,233,0.12);
+}
+
+/* Main surface backgrounds */
+html[data-theme="clair"] .bg-zinc-950 { background-color: #f4f6f9 !important; }
+html[data-theme="clair"] .bg-zinc-900 { background-color: #eef2f7 !important; }
+html[data-theme="clair"] .bg-zinc-800 { background-color: #e2e8f0 !important; }
+
+/* Opacity-based surfaces */
+html[data-theme="clair"] .bg-white\/\[0\.02\] { background-color: rgba(0,0,0,0.02) !important; }
+html[data-theme="clair"] .bg-white\/\[0\.03\] { background-color: rgba(0,0,0,0.03) !important; }
+html[data-theme="clair"] .bg-white\/\[0\.04\] { background-color: rgba(0,0,0,0.04) !important; }
+html[data-theme="clair"] .bg-white\/\[0\.05\] { background-color: rgba(0,0,0,0.05) !important; }
+html[data-theme="clair"] .bg-white\/\[0\.06\] { background-color: rgba(0,0,0,0.06) !important; }
+html[data-theme="clair"] .bg-white\/\[0\.08\] { background-color: rgba(0,0,0,0.08) !important; }
+
+/* Text colors — invert zinc scale for light mode */
+html[data-theme="clair"] .text-zinc-100 { color: #0f172a !important; }
+html[data-theme="clair"] .text-zinc-200 { color: #1e293b !important; }
+html[data-theme="clair"] .text-zinc-300 { color: #334155 !important; }
+html[data-theme="clair"] .text-zinc-400 { color: #475569 !important; }
+html[data-theme="clair"] .text-zinc-500 { color: #64748b !important; }
+html[data-theme="clair"] .text-zinc-600 { color: #6b7280 !important; }
+html[data-theme="clair"] .text-zinc-700 { color: #9ca3af !important; }
+html[data-theme="clair"] .text-zinc-800 { color: #d1d5db !important; }
+
+/* Border colors */
+html[data-theme="clair"] .border-white\/\[0\.06\] { border-color: rgba(0,0,0,0.08) !important; }
+html[data-theme="clair"] .border-white\/\[0\.08\] { border-color: rgba(0,0,0,0.10) !important; }
+html[data-theme="clair"] .border-white\/\[0\.12\] { border-color: rgba(0,0,0,0.14) !important; }
+
+/* Hover states */
+html[data-theme="clair"] .hover\:bg-white\/\[0\.04\]:hover { background-color: rgba(0,0,0,0.04) !important; }
+html[data-theme="clair"] .hover\:bg-white\/\[0\.05\]:hover { background-color: rgba(0,0,0,0.05) !important; }
+html[data-theme="clair"] .hover\:bg-white\/\[0\.06\]:hover { background-color: rgba(0,0,0,0.06) !important; }
+html[data-theme="clair"] .hover\:text-zinc-300:hover { color: #334155 !important; }
+html[data-theme="clair"] .hover\:text-zinc-200:hover { color: #1e293b !important; }
+
+/* Cockpit button light variant */
+html[data-theme="clair"] .cockpit-btn {
+  --button-color: #e4e4e7;
+  color: rgba(0,0,0,0.75) !important;
+  border-color: rgba(0,0,0,0.12) !important;
+  box-shadow:
+    inset 0px 1px 1px rgba(255,255,255,0.9),
+    0px 2px 4px rgba(0,0,0,0.08);
+}
+html[data-theme="clair"] .cockpit-btn:hover {
+  color: rgba(0,0,0,0.9) !important;
+  border-color: rgba(0,0,0,0.18) !important;
+  box-shadow: inset 0px 1px 1px rgba(255,255,255,0.9), 0px 4px 10px rgba(0,0,0,0.1);
+}
+
+/* Cockpit card light variant */
+html[data-theme="clair"] .cockpit-card {
+  background: #f1f5f9;
+  border-color: rgba(0,0,0,0.08);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
+}
+
+/* Scrollbar light */
+html[data-theme="clair"] ::-webkit-scrollbar-track { background: #f1f5f9; }
+html[data-theme="clair"] ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); }
+html[data-theme="clair"] ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.25); }

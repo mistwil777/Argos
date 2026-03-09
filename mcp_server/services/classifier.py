@@ -412,28 +412,35 @@ class ClassifierService:
         }
         importance_db = importance_map.get(classification["importance"].lower(), "Medium")
         
-        # Update item classification
+        # Update item classification (sets classification_status = 'classified')
         self.db.update_classification(
             item_id=item_id,
             importance=importance_db,
             item_type=classification["item_type"]
         )
         
-        # Update summary with French version if available
-        if "summary_fr" in classification and classification["summary_fr"]:
-            self.db.execute_query(
-                "UPDATE items SET summary = %s WHERE id = %s",
-                (classification["summary_fr"], item_id)
-            )
-            logger.info(f"Updated summary with French translation for item {item_id}")
-
-        # Store topics in keywords column
-        if classification.get("topics"):
-            self.db.execute_query(
-                "UPDATE items SET keywords = %s WHERE id = %s",
-                (classification["topics"], item_id)
-            )
-            logger.info(f"Stored {len(classification['topics'])} topics for item {item_id}")
+        # Update summary with French version and store topics/keywords
+        summary_fr = classification.get("summary_fr", "")
+        topics = classification.get("topics", [])
+        
+        try:
+            with self.db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    if summary_fr:
+                        cur.execute(
+                            "UPDATE items SET summary = %s WHERE id = %s",
+                            (summary_fr, item_id)
+                        )
+                        logger.info(f"Updated summary with French translation for item {item_id}")
+                    if topics:
+                        cur.execute(
+                            "UPDATE items SET keywords = %s WHERE id = %s",
+                            (topics, item_id)
+                        )
+                        logger.info(f"Stored {len(topics)} topics for item {item_id}")
+        except Exception as e:
+            logger.error(f"Failed to save summary_fr/topics for item {item_id}: {e}")
+            # Non-fatal: classification_status is already set to 'classified'
         
         # Log decision for tracking (simplified - no HITL yet)
         # Skip logging to avoid schema mismatch

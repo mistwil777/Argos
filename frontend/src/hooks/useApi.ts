@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { statsApi, itemsApi, coursesApi, ragApi, hitlApi, workspacesApi, sourcesApi } from '../services/api';
-import type { WorkspaceCreate, SourceCreate } from '../services/api';
+import type { WorkspaceCreate, MemberCreate, SourceCreate } from '../services/api';
 
 // Stats hooks
 export const useGlobalStats = () => {
@@ -303,6 +303,36 @@ export const useDeleteWorkspace = () => {
     mutationFn: (id: number) => workspacesApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workspaces'] });
+    },
+  });
+};
+
+export const useWorkspaceMembers = (workspaceId: number | null) => {
+  return useQuery({
+    queryKey: ['workspace-members', workspaceId],
+    queryFn: () => workspacesApi.listMembers(workspaceId!),
+    enabled: workspaceId !== null,
+  });
+};
+
+export const useAddMember = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ workspaceId, payload }: { workspaceId: number; payload: MemberCreate }) =>
+      workspacesApi.addMember(workspaceId, payload),
+    onSuccess: (_data, { workspaceId }) => {
+      queryClient.invalidateQueries({ queryKey: ['workspace-members', workspaceId] });
+    },
+  });
+};
+
+export const useRemoveMember = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ workspaceId, userIdentifier }: { workspaceId: number; userIdentifier: string }) =>
+      workspacesApi.removeMember(workspaceId, userIdentifier),
+    onSuccess: (_data, { workspaceId }) => {
+      queryClient.invalidateQueries({ queryKey: ['workspace-members', workspaceId] });
     },
   });
 };

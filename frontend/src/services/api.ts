@@ -8,6 +8,16 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 30000, // 30s for standard requests
+});
+
+// Separate client for long-running LLM operations (generation, classification)
+const llmClient = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: 600000, // 10 minutes
 });
 
 // Stats API
@@ -46,12 +56,12 @@ export const itemsApi = {
   },
   
   classify: async (id: number): Promise<Item> => {
-    const { data } = await apiClient.post(`/api/v1/items/${id}/classify`);
+    const { data } = await llmClient.post(`/api/v1/items/${id}/classify`);
     return data;
   },
   
   classifyBatch: async (ids: number[]): Promise<any> => {
-    const { data } = await apiClient.post('/api/v1/items/batch/classify', { item_ids: ids });
+    const { data } = await llmClient.post('/api/v1/items/batch/classify', { item_ids: ids });
     return data;
   },
   
@@ -107,7 +117,7 @@ export const coursesApi = {
     rag_sources_count?: number;
     updated?: boolean;
   }> => {
-    const { data } = await apiClient.post('/api/v1/courses/generate', { 
+    const { data } = await llmClient.post('/api/v1/courses/generate', { 
       item_id: itemId,
       duration_minutes: durationMinutes,
       content_type: contentType,
@@ -266,6 +276,27 @@ export interface WorkspaceCreate {
   color?: string;
 }
 
+export interface WorkspaceMember {
+  id: number;
+  workspace_id: number;
+  user_identifier: string;
+  role: 'owner' | 'admin' | 'editor' | 'viewer';
+  can_read: boolean;
+  can_write: boolean;
+  can_delete: boolean;
+  can_generate: boolean;
+  created_at: string;
+}
+
+export interface MemberCreate {
+  user_identifier: string;
+  role?: 'owner' | 'admin' | 'editor' | 'viewer';
+  can_read?: boolean;
+  can_write?: boolean;
+  can_delete?: boolean;
+  can_generate?: boolean;
+}
+
 export const workspacesApi = {
   list: async (): Promise<WorkspaceResponse[]> => {
     const { data } = await apiClient.get('/api/v1/workspaces');
@@ -281,6 +312,17 @@ export const workspacesApi = {
   },
   delete: async (id: number): Promise<void> => {
     await apiClient.delete(`/api/v1/workspaces/${id}`);
+  },
+  listMembers: async (workspaceId: number): Promise<WorkspaceMember[]> => {
+    const { data } = await apiClient.get(`/api/v1/workspaces/${workspaceId}/members`);
+    return data;
+  },
+  addMember: async (workspaceId: number, payload: MemberCreate): Promise<WorkspaceMember> => {
+    const { data } = await apiClient.post(`/api/v1/workspaces/${workspaceId}/members`, payload);
+    return data;
+  },
+  removeMember: async (workspaceId: number, userIdentifier: string): Promise<void> => {
+    await apiClient.delete(`/api/v1/workspaces/${workspaceId}/members/${encodeURIComponent(userIdentifier)}`);
   },
 };
 

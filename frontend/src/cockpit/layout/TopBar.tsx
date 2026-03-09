@@ -1,7 +1,7 @@
 // TopBar - Barre supérieure
 import { useState } from 'react';
 import { useGlobalStats, useWorkspaces } from '../../hooks/useApi';
-import { Bell, DollarSign, PanelRightOpen, PanelRightClose, ChevronDown, Zap, FileText, BookOpen, MessageSquare, Rss } from 'lucide-react';
+import { Bell, DollarSign, PanelRightOpen, PanelRightClose, ChevronDown, Zap, FileText, BookOpen, MessageSquare, Rss, Loader2 } from 'lucide-react';
 import { UserMenu } from '../components/UserMenu';
 import { WorkspaceModal } from '../components/WorkspaceModal';
 import { useCockpit, type CockpitMode } from '../context/CockpitContext';
@@ -15,7 +15,8 @@ const MODE_META: Record<CockpitMode, { label: string; icon: React.ElementType; c
 
 export function TopBar() {
   const { data: stats } = useGlobalStats();
-  const { inspectorOpen, setInspectorOpen, selectedItemId, selectedDocId, activeWorkspaceId, activeMode } = useCockpit();
+  const { inspectorOpen, setInspectorOpen, selectedItemId, selectedDocId, activeWorkspaceId, activeMode, activeGeneration, pendingGenerations } = useCockpit();
+  const totalQueued = pendingGenerations.length + (activeGeneration ? 1 : 0);
   const { data: workspaces = [] } = useWorkspaces();
   const [workspaceModalOpen, setWorkspaceModalOpen] = useState(false);
 
@@ -33,7 +34,7 @@ export function TopBar() {
       <div
         className="flex items-center justify-between px-4 shrink-0 relative"
         style={{
-          height: '52px',
+          height: '104px',
           background: activeWorkspace
             ? `linear-gradient(135deg, ${workspaceColor}22 0%, #18181b 35%, #18181b 65%, ${workspaceColor}12 100%)`
             : 'linear-gradient(180deg, #27272a 0%, #18181b 100%)',
@@ -64,7 +65,15 @@ export function TopBar() {
             <span className="text-xs font-medium">{modeMeta.label}</span>
           </div>
 
-          {/* Alerts */}
+          {/* Generation progress badge */}
+          {activeGeneration && (
+            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-medium">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              {activeGeneration.label}
+              {totalQueued > 1 && <span className="text-indigo-500">{pendingGenerations.length} restant{pendingGenerations.length > 1 ? 's' : ''}</span>}
+            </span>
+          )}
+          {/* Pending items alert */}
           {pendingCount > 0 && (
             <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-medium">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400 cockpit-indicator-active" />

@@ -32,6 +32,11 @@ export function UserMenu() {
   const [draft, setDraft] = useState<Record<string, string>>(prefs);
   const [saved, setSaved] = useState(false);
 
+  // Apply theme to document whenever it changes
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', prefs.theme);
+  }, [prefs.theme]);
+
   const openSettings = () => {
     setDraft({ ...prefs });
     setSaved(false);

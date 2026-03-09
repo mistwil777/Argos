@@ -4,7 +4,7 @@ REST API Router for AcademiaOps Web Interface
 Provides REST endpoints alongside the existing JSON-RPC interface.
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 from typing import Optional, Dict, Any
 import logging
 
@@ -23,6 +23,83 @@ api_router.include_router(workspaces_router)
 
 # Database instance
 db = DatabaseManager(settings.database_url)
+
+
+# ===========================================
+# Background: auto-collect + auto-classify
+# ===========================================
+
+async def _auto_collect_and_classify(source_id: int):
+    """Background task: collect items from a source then classify them all."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, name, url, type, workspace_id FROM sources WHERE id = %s AND active = TRUE",
+                    (source_id,)
+                )
+                row = cur.fetchone()
+                if not row:
+                    return
+                src_id, src_name, src_url, src_type, src_wid = row
+
+        from mcp_server.services.collector import CollectorService
+        collector = CollectorService(db_manager=db)
+
+        items = []
+        if src_type == 'rss':
+            config = {"url": src_url, "name": src_name or src_url, "enabled": True}
+            items = collector.fetch_rss_feed(config)
+            for i in items:
+                i.update({'workspace_id': src_wid, 'source_url': src_url})
+        elif src_type == 'website':
+            items = collector.fetch_website_page(src_url, workspace_id=src_wid)
+        elif src_type == 'github':
+            config = {"type": "github", "url": src_url, "name": src_name or src_url, "enabled": True}
+            items = collector.fetch_github_repos(config)
+            for i in items:
+                i.update({'workspace_id': src_wid, 'source_url': src_url})
+        else:
+            logger.warning(f"[auto-collect] source type '{src_type}' not supported")
+            return
+
+        inserted, duplicates = collector.insert_items(items)
+        logger.info(f"[auto-collect] source={source_id} fetched={len(items)} inserted={inserted} duplicates={duplicates}")
+
+        # Fetch all pending items from this source URL and classify them
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id FROM items WHERE source_url = %s AND classification_status = 'pending'",
+                    (src_url,)
+                )
+                pending_ids = [r[0] for r in cur.fetchall()]
+
+        if not pending_ids:
+            logger.info(f"[auto-classify] no pending items for source={source_id}")
+            return
+
+        from mcp_server.services.classifier import ClassifierService
+        llm_provider = create_llm_provider(
+            provider_type=settings.llm_provider,
+            openai_api_key=settings.openai_api_key,
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            aws_region=settings.aws_region,
+            model=settings.default_classification_model
+        )
+        classifier = ClassifierService(llm_provider=llm_provider, db_manager=db, temperature=0.5, max_tokens=800)
+
+        logger.info(f"[auto-classify] classifying {len(pending_ids)} items for source={source_id}")
+        for item_id in pending_ids:
+            try:
+                await classifier.classify_item(item_id)
+                logger.info(f"[auto-classify] item={item_id} classified")
+            except Exception as e:
+                logger.error(f"[auto-classify] item={item_id} failed: {e}")
+
+    except Exception as e:
+        logger.error(f"[auto-collect-classify] source={source_id} error={e}", exc_info=True)
 
 
 # ===========================================
@@ -330,20 +407,60 @@ async def get_item(item_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@api_router.post("/items/batch/classify")
+async def classify_items_batch(data: Dict[str, Any]):
+    """Classify multiple items using LLM."""
+    item_ids = data.get("item_ids", [])
+    if not item_ids:
+        raise HTTPException(status_code=400, detail="item_ids is required")
+    try:
+        from mcp_server.services.classifier import ClassifierService
+        from mcp_server.services.llm_provider import create_llm_provider
+
+        llm_provider = create_llm_provider(
+            provider_type=settings.llm_provider,
+            openai_api_key=settings.openai_api_key,
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            aws_region=settings.aws_region,
+            model=settings.default_classification_model
+        )
+        classifier = ClassifierService(
+            llm_provider=llm_provider,
+            db_manager=db,
+            temperature=0.5,
+            max_tokens=800
+        )
+
+        results = []
+        errors = []
+        for item_id in item_ids:
+            try:
+                result = await classifier.classify_item(item_id)
+                results.append({"item_id": item_id, "status": "classified", "topics": result.get("topics", [])})
+            except Exception as e:
+                logger.error(f"Failed to classify item {item_id}: {e}")
+                errors.append({"item_id": item_id, "error": str(e)})
+
+        return {"classified": len(results), "errors": len(errors), "results": results, "error_details": errors}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in batch classify: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Batch classification failed: {str(e)}")
+
+
 @api_router.post("/items/{item_id}/classify")
 async def classify_item(item_id: int):
     """Classify a single item using LLM."""
     try:
-        # Import the classifier service
         from mcp_server.services.classifier import ClassifierService
         from mcp_server.services.llm_provider import create_llm_provider
         
-        # Get item first
         item = db.get_item_by_id(item_id)
         if not item:
             raise HTTPException(status_code=404, detail="Item not found")
         
-        # Initialize LLM provider
         llm_provider = create_llm_provider(
             provider_type=settings.llm_provider,
             openai_api_key=settings.openai_api_key,
@@ -353,7 +470,6 @@ async def classify_item(item_id: int):
             model=settings.default_classification_model
         )
         
-        # Initialize classifier service
         classifier = ClassifierService(
             llm_provider=llm_provider,
             db_manager=db,
@@ -361,10 +477,9 @@ async def classify_item(item_id: int):
             max_tokens=800
         )
         
-        # Run classification
         result = await classifier.classify_item(item_id)
         
-        logger.info(f"Item {item_id} classified successfully: topics={result.get('topics')}, importance={result.get('importance')}")
+        logger.info(f"Item {item_id} classified: topics={result.get('topics')}, importance={result.get('importance')}")
         
         return {
             "message": "Item classified successfully",
@@ -372,7 +487,7 @@ async def classify_item(item_id: int):
             "topics": result.get("topics", []),
             "importance": result.get("importance"),
             "item_type": result.get("item_type"),
-            "reasoning": result.get("reasoning"),
+            "summary_fr": result.get("summary_fr", ""),
             "tokens_used": result.get("tokens_used", 0),
             "cost_usd": result.get("cost_usd", 0.0)
         }
@@ -381,11 +496,6 @@ async def classify_item(item_id: int):
     except Exception as e:
         logger.error(f"Error classifying item {item_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Classification failed: {str(e)}")
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error classifying item {item_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @api_router.delete("/items/{item_id}")
@@ -1259,7 +1369,7 @@ async def get_source(source_id: int):
 
 
 @api_router.post("/sources")
-async def create_source(source: Dict[str, Any]):
+async def create_source(source: Dict[str, Any], background_tasks: BackgroundTasks):
     """Create a new data source."""
     try:
         # Validate required fields
@@ -1296,7 +1406,10 @@ async def create_source(source: Dict[str, Any]):
                 
                 source_id = cur.fetchone()[0]
                 conn.commit()
-                
+
+                if source.get("active", True):
+                    background_tasks.add_task(_auto_collect_and_classify, source_id)
+
                 return {"id": source_id, "message": "Source created successfully"}
     except HTTPException:
         raise
@@ -1306,7 +1419,7 @@ async def create_source(source: Dict[str, Any]):
 
 
 @api_router.patch("/sources/{source_id}/toggle")
-async def toggle_source(source_id: int, data: Dict[str, Any]):
+async def toggle_source(source_id: int, data: Dict[str, Any], background_tasks: BackgroundTasks):
     """Toggle source active status."""
     try:
         active = data.get("active")
@@ -1326,7 +1439,10 @@ async def toggle_source(source_id: int, data: Dict[str, Any]):
                     raise HTTPException(status_code=404, detail="Source not found")
                 
                 conn.commit()
-                
+
+                if active:
+                    background_tasks.add_task(_auto_collect_and_classify, source_id)
+
                 return {"message": "Source updated successfully"}
     except HTTPException:
         raise

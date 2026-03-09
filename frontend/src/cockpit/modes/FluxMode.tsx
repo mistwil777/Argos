@@ -1,8 +1,8 @@
 // FluxMode - Mode Items (collecte, triage, classification)
 import { useState } from 'react';
-import { useItems, useClassifyBatch, useDeleteItem, useBatchAssignWorkspace, useWorkspaces } from '../../hooks/useApi';
+import { useItems, useDeleteItem, useClassifyBatch } from '../../hooks/useApi';
 import { useCockpit } from '../context/CockpitContext';
-import { AlertCircle, Sparkles, FileText, Trash2, FolderInput, CheckSquare, ExternalLink } from 'lucide-react';
+import { AlertCircle, FileText, Trash2, CheckSquare, ExternalLink, Sparkles } from 'lucide-react';
 import { CockpitHeader } from '../components/CockpitHeader';
 import type { Item } from '../../types';
 
@@ -33,7 +33,6 @@ export function FluxMode() {
   const { setSelectedItemId, setInspectorOpen, activeWorkspaceId, setActiveMode, setSelectedSourceUrl } = useCockpit();
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'classified'>('all');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [showWorkspacePicker, setShowWorkspacePicker] = useState(false);
 
   const wsReady = activeWorkspaceId !== null;
 
@@ -45,11 +44,8 @@ export function FluxMode() {
     { workspace_id: activeWorkspaceId ?? undefined },
     { enabled: wsReady }
   );
-  const { data: workspaces = [] } = useWorkspaces();
-
-  const classifyBatch = useClassifyBatch();
   const deleteItem = useDeleteItem();
-  const assignWorkspace = useBatchAssignWorkspace();
+  const classifyBatch = useClassifyBatch();
 
   const items = itemsData?.items || [];
   const allItems = allItemsData?.items || [];
@@ -76,20 +72,17 @@ export function FluxMode() {
     setInspectorOpen(true);
   };
 
-  const handleBatchClassify = () => {
-    classifyBatch.mutate([...selectedIds], { onSuccess: () => setSelectedIds(new Set()) });
-  };
-
   const handleBatchDelete = () => {
     [...selectedIds].forEach(id => deleteItem.mutate(id));
     setSelectedIds(new Set());
   };
 
-  const handleAssignWorkspace = (workspaceId: number) => {
-    assignWorkspace.mutate(
-      { itemIds: [...selectedIds], workspaceId },
-      { onSuccess: () => { setSelectedIds(new Set()); setShowWorkspacePicker(false); } }
+  const handleBatchClassify = () => {
+    const pendingSelected = [...selectedIds].filter(
+      id => items.find(i => i.id === id)?.classification_status === 'pending'
     );
+    if (pendingSelected.length > 0) classifyBatch.mutate(pendingSelected);
+    setSelectedIds(new Set());
   };
 
   if (isLoading) {
@@ -146,42 +139,17 @@ export function FluxMode() {
             <span className="text-xs text-zinc-500 mr-1">
               {selectedIds.size} sélectionné{selectedIds.size > 1 ? 's' : ''}
             </span>
-            <button
-              onClick={handleBatchClassify}
-              disabled={classifyBatch.isPending}
-              title="Classifier la sélection"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20 hover:bg-sky-500/15 transition-all disabled:opacity-50"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              Classifier
-            </button>
-            <div className="relative">
+            {[...selectedIds].some(id => items.find(i => i.id === id)?.classification_status === 'pending') && (
               <button
-                onClick={() => setShowWorkspacePicker(v => !v)}
-                title="Déplacer vers un espace"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-violet-500/10 text-violet-400 border border-violet-500/20 hover:bg-violet-500/15 transition-all"
+                onClick={handleBatchClassify}
+                disabled={classifyBatch.isPending}
+                title="Classifier la sélection"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-sky-500/8 text-sky-400 border border-sky-500/15 hover:bg-sky-500/12 transition-all disabled:opacity-50"
               >
-                <FolderInput className="w-3.5 h-3.5" />
-                Espace
+                <Sparkles className="w-3.5 h-3.5" />
+                {classifyBatch.isPending ? 'Classification…' : 'Classifier'}
               </button>
-              {showWorkspacePicker && (
-                <div className="absolute right-0 top-9 z-50 bg-zinc-900 border border-white/[0.08] rounded-xl shadow-2xl py-1 min-w-[180px]">
-                  {workspaces.map(ws => (
-                    <button
-                      key={ws.id}
-                      onClick={() => handleAssignWorkspace(ws.id)}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-300 hover:bg-white/[0.05] transition-colors"
-                    >
-                      <span
-                        className="w-2 h-2 rounded-full shrink-0"
-                        style={{ backgroundColor: ws.color }}
-                      />
-                      {ws.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            )}
             <button
               onClick={handleBatchDelete}
               title="Supprimer la sélection"
@@ -204,7 +172,7 @@ export function FluxMode() {
       </div>
 
       {/* Items List */}
-      <div className="flex-1 overflow-y-auto scrollable p-5" onClick={() => setShowWorkspacePicker(false)}>
+      <div className="flex-1 overflow-y-auto scrollable p-5">
         {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-3">
             <AlertCircle className="w-10 h-10 text-zinc-800" strokeWidth={1.5} />

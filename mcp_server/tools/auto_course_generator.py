@@ -437,11 +437,11 @@ avec des titres Markdown clairs (##, ###), des exemples concrets et des encadré
         course_updated = False
         with db.get_connection() as conn:
             with conn.cursor() as cur:
-                # Check if a course already exists for this item and level
+                # Check if a course already exists for this item, level AND content_type
                 cur.execute("""
                     SELECT id FROM courses 
-                    WHERE item_id = %s AND level = %s
-                """, (item_id, "intermediate"))
+                    WHERE item_id = %s AND level = %s AND content_type = %s
+                """, (item_id, "intermediate", content_type))
                 existing_course = cur.fetchone()
                 
                 # Generate course title from item title (remove generic template)
@@ -472,7 +472,7 @@ avec des titres Markdown clairs (##, ###), des exemples concrets et des encadré
                         course_content,
                         duration_minutes,
                         "draft",
-                        5.0,
+                        None,
                         workspace_id,
                         content_type,
                         existing_course[0]
@@ -495,7 +495,7 @@ avec des titres Markdown clairs (##, ###), des exemples concrets et des encadré
                         course_content,
                         duration_minutes,
                         "draft",
-                        5.0,
+                        None,
                         workspace_id,
                         content_type,
                     ))

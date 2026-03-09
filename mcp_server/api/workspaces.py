@@ -437,3 +437,127 @@ async def get_workspace_templates(workspace_id: int):
     except Exception as e:
         logger.error(f"Error getting templates for workspace {workspace_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================
+# Members / Permissions endpoints
+# ============================================================
+
+class MemberCreate(BaseModel):
+    user_identifier: str = Field(..., min_length=1, max_length=255)
+    role: str = Field(default="viewer", pattern=r"^(owner|admin|editor|viewer)$")
+    can_read: bool = True
+    can_write: bool = False
+    can_delete: bool = False
+    can_generate: bool = False
+
+
+class MemberResponse(BaseModel):
+    id: int
+    workspace_id: int
+    user_identifier: str
+    role: str
+    can_read: bool
+    can_write: bool
+    can_delete: bool
+    can_generate: bool
+    created_at: datetime
+
+
+@router.get("/{workspace_id}/members", response_model=List[MemberResponse])
+async def list_members(workspace_id: int):
+    """List workspace members (excluding the 'public' system entry)."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id FROM workspaces WHERE id = %s", (workspace_id,))
+                if not cur.fetchone():
+                    raise HTTPException(status_code=404, detail="Workspace not found")
+
+                cur.execute("""
+                    SELECT id, workspace_id, user_identifier, role,
+                           can_read, can_write, can_delete, can_generate, created_at
+                    FROM workspace_permissions
+                    WHERE workspace_id = %s AND user_identifier != 'public'
+                    ORDER BY created_at ASC
+                """, (workspace_id,))
+
+                return [
+                    {
+                        "id": r[0], "workspace_id": r[1], "user_identifier": r[2],
+                        "role": r[3], "can_read": r[4], "can_write": r[5],
+                        "can_delete": r[6], "can_generate": r[7], "created_at": r[8]
+                    }
+                    for r in cur.fetchall()
+                ]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error listing members for workspace {workspace_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{workspace_id}/members", response_model=MemberResponse, status_code=201)
+async def add_member(workspace_id: int, member: MemberCreate):
+    """Add a user to a workspace."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id FROM workspaces WHERE id = %s", (workspace_id,))
+                if not cur.fetchone():
+                    raise HTTPException(status_code=404, detail="Workspace not found")
+
+                cur.execute("""
+                    INSERT INTO workspace_permissions
+                        (workspace_id, user_identifier, role, can_read, can_write, can_delete, can_generate)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (workspace_id, user_identifier)
+                    DO UPDATE SET
+                        role = EXCLUDED.role,
+                        can_read = EXCLUDED.can_read,
+                        can_write = EXCLUDED.can_write,
+                        can_delete = EXCLUDED.can_delete,
+                        can_generate = EXCLUDED.can_generate
+                    RETURNING id, workspace_id, user_identifier, role,
+                              can_read, can_write, can_delete, can_generate, created_at
+                """, (
+                    workspace_id, member.user_identifier, member.role,
+                    member.can_read, member.can_write, member.can_delete, member.can_generate
+                ))
+                r = cur.fetchone()
+                conn.commit()
+                logger.info(f"Added member {member.user_identifier} to workspace {workspace_id}")
+                return {
+                    "id": r[0], "workspace_id": r[1], "user_identifier": r[2],
+                    "role": r[3], "can_read": r[4], "can_write": r[5],
+                    "can_delete": r[6], "can_generate": r[7], "created_at": r[8]
+                }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error adding member to workspace {workspace_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/{workspace_id}/members/{user_identifier}", status_code=204)
+async def remove_member(workspace_id: int, user_identifier: str):
+    """Remove a user from a workspace."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    DELETE FROM workspace_permissions
+                    WHERE workspace_id = %s AND user_identifier = %s AND user_identifier != 'public'
+                    RETURNING id
+                """, (workspace_id, user_identifier))
+                if not cur.fetchone():
+                    raise HTTPException(status_code=404, detail="Member not found")
+                conn.commit()
+                logger.info(f"Removed member {user_identifier} from workspace {workspace_id}")
+                return None
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error removing member {user_identifier} from workspace {workspace_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+

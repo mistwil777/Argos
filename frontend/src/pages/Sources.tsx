@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link2, Rss, Github, Code, Filter, Trash2, ExternalLink, Tag, CheckCircle, XCircle, CheckSquare, Square } from 'lucide-react';
+import { Link2, Rss, Github, Code, Filter, Trash2, ExternalLink, Tag, CheckCircle, XCircle, CheckSquare, Square, Plus, X, FolderOpen } from 'lucide-react';
+import { workspacesApi } from '../services/api';
 
 interface Source {
   id?: number;
@@ -11,6 +12,7 @@ interface Source {
   description: string;
   tags: string[];
   active: boolean;
+  workspace_id?: number;
   createdAt?: string;
 }
 
@@ -26,16 +28,15 @@ const fetchSources = async (): Promise<Source[]> => {
   return data.sources || [];
 };
 
-// TODO: Add source creation UI
-// const addSource = async (source: Omit<Source, 'id'>): Promise<Source> => {
-//   const response = await fetch('http://localhost:8000/api/v1/sources', {
-//     method: 'POST',
-//     headers: { 'Content-Type': 'application/json' },
-//     body: JSON.stringify(source),
-//   });
-//   if (!response.ok) throw new Error('Failed to add source');
-//   return response.json();
-// };
+const addSource = async (source: Omit<Source, 'id' | 'createdAt'>): Promise<{ id: number; message: string }> => {
+  const response = await fetch('http://localhost:8000/api/v1/sources', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...source, tags: source.tags ?? [] }),
+  });
+  if (!response.ok) throw new Error('Failed to add source');
+  return response.json();
+};
 
 const deleteSource = async (id: number): Promise<void> => {
   const response = await fetch(`http://localhost:8000/api/v1/sources/${id}`, {
@@ -58,11 +59,25 @@ export default function Sources({ addToast }: SourcesProps) {
   const [selectedType, setSelectedType] = useState<string>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedSources, setSelectedSources] = useState<Set<number>>(new Set());
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newSource, setNewSource] = useState<Omit<Source, 'id' | 'createdAt'>>({
+    name: '', url: '', type: 'rss', category: '', description: '', tags: [], active: false, workspace_id: undefined,
+  });
 
   const { data: sources = [], isLoading } = useQuery({
     queryKey: ['sources'],
     queryFn: fetchSources,
   });
+
+  const { data: workspaces = [] } = useQuery({
+    queryKey: ['workspaces'],
+    queryFn: workspacesApi.list,
+  });
+
+  const getWorkspaceName = (wsId?: number) => {
+    if (!wsId) return null;
+    return workspaces.find(w => w.id === wsId)?.name ?? null;
+  };
 
   const deleteMutation = useMutation({
     mutationFn: deleteSource,
@@ -78,6 +93,20 @@ export default function Sources({ addToast }: SourcesProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sources'] });
       addToast?.('Source mise à jour', 'success');
+    },
+  });
+
+  const addMutation = useMutation({
+    mutationFn: addSource,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sources'] });
+      queryClient.invalidateQueries({ queryKey: ['workspaces'] });
+      addToast?.('Source ajoutée avec succès', 'success');
+      setShowAddModal(false);
+      setNewSource({ name: '', url: '', type: 'rss', category: '', description: '', tags: [], active: false, workspace_id: undefined });
+    },
+    onError: () => {
+      addToast?.("Erreur lors de l'ajout de la source", 'error');
     },
   });
 
@@ -186,16 +215,16 @@ export default function Sources({ addToast }: SourcesProps) {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Sources de Données</h1>
           <p className="mt-2 text-gray-600">
-            Gérez vos sources RSS, repositories GitHub et APIs pour la veille technologique
+            Gérez vos sources par espace de travail. Activez une source pour déclencher la collecte et la classification automatique.
           </p>
         </div>
-        {/* <button
-          onClick={() => {}}
+        <button
+          onClick={() => setShowAddModal(true)}
           className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
         >
           <Plus className="h-5 w-5" />
           Ajouter une source
-        </button> */}
+        </button>
       </div>
 
       {/* Stats */}
@@ -444,6 +473,12 @@ export default function Sources({ addToast }: SourcesProps) {
                 >
                   {source.type.toUpperCase()}
                 </span>
+                {getWorkspaceName(source.workspace_id) && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 border border-indigo-200">
+                    <FolderOpen className="h-3 w-3" />
+                    {getWorkspaceName(source.workspace_id)}
+                  </span>
+                )}
                 <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
                   {source.category}
                 </span>
@@ -474,6 +509,132 @@ export default function Sources({ addToast }: SourcesProps) {
           <p className="mt-2 text-sm text-gray-600">
             Essayez de modifier vos filtres ou ajoutez une nouvelle source.
           </p>
+        </div>
+      )}
+
+      {/* Add Source Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-5">
+                <h2 className="text-xl font-bold text-gray-900">Ajouter une source</h2>
+                <button onClick={() => setShowAddModal(false)} className="p-1 hover:bg-gray-100 rounded">
+                  <X className="h-5 w-5 text-gray-500" />
+                </button>
+              </div>
+
+              <form
+                onSubmit={(e) => { e.preventDefault(); addMutation.mutate(newSource); }}
+                className="space-y-4"
+              >
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nom *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newSource.name}
+                    onChange={(e) => setNewSource({ ...newSource, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-primary-500"
+                    placeholder="Ex: Hacker News, ArXiv AI..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">URL *</label>
+                  <input
+                    type="url"
+                    required
+                    value={newSource.url}
+                    onChange={(e) => setNewSource({ ...newSource, url: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-primary-500"
+                    placeholder="https://example.com/feed.xml"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Type *</label>
+                    <select
+                      value={newSource.type}
+                      onChange={(e) => setNewSource({ ...newSource, type: e.target.value as any })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-primary-500"
+                    >
+                      <option value="rss">RSS</option>
+                      <option value="github">GitHub</option>
+                      <option value="api">API</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Catégorie *</label>
+                    <input
+                      type="text"
+                      required
+                      value={newSource.category}
+                      onChange={(e) => setNewSource({ ...newSource, category: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-primary-500"
+                      placeholder="ia, tech, finance..."
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Espace de travail</label>
+                  <select
+                    value={newSource.workspace_id ?? ''}
+                    onChange={(e) => setNewSource({ ...newSource, workspace_id: e.target.value ? Number(e.target.value) : undefined })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">Aucun espace (global)</option>
+                    {workspaces.map(ws => (
+                      <option key={ws.id} value={ws.id}>{ws.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                  <textarea
+                    value={newSource.description}
+                    onChange={(e) => setNewSource({ ...newSource, description: e.target.value })}
+                    rows={2}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-primary-500"
+                    placeholder="Brève description de la source..."
+                  />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="active-toggle"
+                    checked={newSource.active}
+                    onChange={(e) => setNewSource({ ...newSource, active: e.target.checked })}
+                    className="h-4 w-4 text-primary-600 rounded border-gray-300"
+                  />
+                  <label htmlFor="active-toggle" className="text-sm text-gray-700">
+                    Activer immédiatement (déclenche la collecte au prochain cycle)
+                  </label>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddModal(false)}
+                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={addMutation.isPending}
+                    className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 text-sm font-medium"
+                  >
+                    {addMutation.isPending ? 'Ajout...' : 'Ajouter la source'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
         </div>
       )}
     </div>
