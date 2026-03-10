@@ -1,7 +1,7 @@
 // TopBar - Barre supérieure
 import { useState } from 'react';
 import { useGlobalStats, useWorkspaces } from '../../hooks/useApi';
-import { Bell, DollarSign, PanelRightOpen, PanelRightClose, ChevronDown, Zap, FileText, BookOpen, MessageSquare, Rss, Loader2 } from 'lucide-react';
+import { Bell, DollarSign, PanelRightOpen, PanelRightClose, ChevronDown, Zap, FileText, BookOpen, MessageSquare, Rss, Loader2, BarChart2 } from 'lucide-react';
 import { UserMenu } from '../components/UserMenu';
 import { WorkspaceModal } from '../components/WorkspaceModal';
 import { useCockpit, type CockpitMode } from '../context/CockpitContext';
@@ -11,11 +11,12 @@ const MODE_META: Record<CockpitMode, { label: string; icon: React.ElementType; c
   production: { label: 'Contenus',   icon: BookOpen,      color: 'text-indigo-400' },
   assistant:  { label: 'Chat RAG',   icon: MessageSquare, color: 'text-sky-400' },
   sources:    { label: 'Sources',    icon: Rss,           color: 'text-emerald-400' },
+  dashboard:  { label: 'Dashboard',  icon: BarChart2,     color: 'text-violet-400' },
 };
 
 export function TopBar() {
   const { data: stats } = useGlobalStats();
-  const { inspectorOpen, setInspectorOpen, selectedItemId, selectedDocId, activeWorkspaceId, activeMode, activeGeneration, pendingGenerations } = useCockpit();
+  const { inspectorOpen, setInspectorOpen, selectedItemId, selectedDocId, activeWorkspaceId, activeMode, setActiveMode, activeGeneration, pendingGenerations } = useCockpit();
   const totalQueued = pendingGenerations.length + (activeGeneration ? 1 : 0);
   const { data: workspaces = [] } = useWorkspaces();
   const [workspaceModalOpen, setWorkspaceModalOpen] = useState(false);
@@ -80,10 +81,14 @@ export function TopBar() {
               {pendingCount} en attente
             </span>
           )}
-          <span className="flex items-center gap-1.5 text-zinc-700 text-xs font-mono">
-            <DollarSign className="w-3 h-3" />
+          <button
+            onClick={() => setActiveMode('dashboard')}
+            className="flex items-center gap-1.5 text-xs font-mono text-emerald-600 hover:text-emerald-400 transition-colors px-2 py-1 rounded-lg hover:bg-emerald-500/10"
+            title="Voir le tableau de bord analytique"
+          >
+            <span className="text-[11px]">€</span>
             {costToday.toFixed(4)}
-          </span>
+          </button>
         </div>
 
         {/* Right */}

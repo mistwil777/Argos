@@ -239,18 +239,20 @@ class VectorStoreService:
         item_id = item["id"]
         title = item["title"]
         summary = item.get("summary", "")
+        workspace_id = item.get("workspace_id")  # None = no workspace
         
-        logger.info(f"Indexing item {item_id}: {title}")
+        logger.info(f"Indexing item {item_id}: {title} (workspace={workspace_id})")
         
         # Create a single chunk combining title + summary
         text = f"{title}\n\n{summary}"
         embedding = self.embed_text(text)
         
-        # Prepare data
+        # Prepare data — workspace_id stored as int (0 means no workspace)
         data = [{
             "id": f"item_{item_id}",
             "source_type": "item",
             "source_id": item_id,
+            "workspace_id": int(workspace_id) if workspace_id else 0,
             "title": title,
             "section_title": "Summary",
             "chunk_text": text,
@@ -267,11 +269,21 @@ class VectorStoreService:
         return 1
     
     def _upsert_to_table(self, data: List[Dict]):
-        """Upsert data to LanceDB table."""
+        """Upsert data to LanceDB table, migrating schema if needed."""
         try:
-            # Check if table exists
             if self.table_name in self.db.table_names():
                 table = self.db.open_table(self.table_name)
+                # Detect schema: if workspace_id column is missing, drop and recreate
+                existing_columns = table.schema.names if hasattr(table, 'schema') else []
+                if existing_columns and 'workspace_id' not in existing_columns:
+                    logger.warning(
+                        "LanceDB table schema is missing 'workspace_id' column — "
+                        "dropping and recreating table to apply new schema."
+                    )
+                    self.db.drop_table(self.table_name)
+                    self.db.create_table(self.table_name, data=data)
+                    self._fts_index_created = False
+                    return
                 # Delete existing records with same IDs
                 ids_to_delete = [record["id"] for record in data]
                 for record_id in ids_to_delete:
@@ -284,7 +296,6 @@ class VectorStoreService:
             else:
                 # Create new table
                 self.db.create_table(self.table_name, data=data)
-        
         except Exception as e:
             logger.error(f"Failed to upsert to LanceDB: {e}", exc_info=True)
             raise
@@ -297,7 +308,8 @@ class VectorStoreService:
         self,
         query: str,
         limit: int = 5,
-        filter_source_type: Optional[str] = None
+        filter_source_type: Optional[str] = None,
+        workspace_id: Optional[int] = None
     ) -> List[Dict]:
         """
         Semantic search for similar content (vector-only).
@@ -306,11 +318,12 @@ class VectorStoreService:
             query: Search query
             limit: Maximum number of results
             filter_source_type: Filter by 'course' or 'item' (optional)
+            workspace_id: Filter results to a specific workspace (optional)
         
         Returns:
             List of dicts with chunk data and similarity scores
         """
-        logger.info(f"[Vector Search] Searching for: {query} (limit={limit})")
+        logger.info(f"[Vector Search] Searching for: {query} (limit={limit}, workspace={workspace_id})")
         
         # Check if table exists
         if self.table_name not in self.db.table_names():
@@ -326,9 +339,19 @@ class VectorStoreService:
         # Build search query
         search_query = table.search(query_embedding.tolist()).limit(limit)
         
-        # Apply filter if provided
+        # Build WHERE clauses
+        filters = []
         if filter_source_type:
-            search_query = search_query.where(f"source_type = '{filter_source_type}'")
+            filters.append(f"source_type = '{filter_source_type}'")
+        if workspace_id is not None:
+            try:
+                schema_names = table.schema.names if hasattr(table, 'schema') else []
+                if not schema_names or 'workspace_id' in schema_names:
+                    filters.append(f"workspace_id = {int(workspace_id)}")
+            except Exception:
+                pass  # Column may not exist in old tables — skip filter
+        if filters:
+            search_query = search_query.where(" AND ".join(filters))
         
         # Execute search
         results = search_query.to_list()
@@ -341,7 +364,8 @@ class VectorStoreService:
         query: str,
         limit: int = 5,
         filter_source_type: Optional[str] = None,
-        rerank_method: str = "rrf"  # Reciprocal Rank Fusion
+        rerank_method: str = "rrf",  # Reciprocal Rank Fusion
+        workspace_id: Optional[int] = None
     ) -> List[Dict]:
         """
         Hybrid search combining semantic (vector) + lexical (FTS) search.
@@ -355,6 +379,7 @@ class VectorStoreService:
             limit: Maximum results to return
             filter_source_type: Optional filter by 'course' or 'item'
             rerank_method: Reranking method ('rrf' for Reciprocal Rank Fusion)
+            workspace_id: Filter results to a specific workspace (optional)
         
         Returns:
             List of reranked chunks with combined scores
@@ -383,9 +408,19 @@ class VectorStoreService:
                 .limit(limit)
             )
             
-            # Apply filter if provided
+            # Build and apply WHERE filters
+            filters = []
             if filter_source_type:
-                hybrid_query = hybrid_query.where(f"source_type = '{filter_source_type}'")
+                filters.append(f"source_type = '{filter_source_type}'")
+            if workspace_id is not None:
+                try:
+                    schema_names = table.schema.names if hasattr(table, 'schema') else []
+                    if not schema_names or 'workspace_id' in schema_names:
+                        filters.append(f"workspace_id = {int(workspace_id)}")
+                except Exception:
+                    pass  # Column may not exist in old tables — skip filter
+            if filters:
+                hybrid_query = hybrid_query.where(" AND ".join(filters))
             
             results = hybrid_query.to_list()
             
@@ -398,7 +433,7 @@ class VectorStoreService:
         except Exception as e:
             # Fallback to vector-only search if hybrid fails
             logger.warning(f"Hybrid search failed, falling back to vector-only: {e}")
-            return self.search(query, limit, filter_source_type)
+            return self.search(query, limit, filter_source_type, workspace_id=workspace_id)
     
     def _ensure_fts_index(self, table):
         """

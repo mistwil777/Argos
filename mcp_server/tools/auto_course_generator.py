@@ -329,7 +329,8 @@ async def generate_course_from_item(
                 {
                     "id": item_id,
                     "title": item["title"],
-                    "summary": f"{item.get('description', '')}\n\n{item.get('content', '')[:2000]}"  # First 2000 chars of content
+                    "summary": f"{item.get('description', '')}\n\n{item.get('content', '')[:2000]}",  # First 2000 chars of content
+                    "workspace_id": item.get("workspace_id")
                 }
             )
             
@@ -350,7 +351,8 @@ async def generate_course_from_item(
                 search_results = await asyncio.to_thread(
                     vector_store.search,
                     query=search_query,
-                    limit=5
+                    limit=5,
+                    workspace_id=item.get("workspace_id")
                 )
             
             if search_results:
