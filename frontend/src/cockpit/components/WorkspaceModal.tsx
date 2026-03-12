@@ -7,6 +7,7 @@ import { useCockpit } from '../context/CockpitContext';
 interface WorkspaceModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialCreate?: boolean;
 }
 
 const DOMAIN_OPTIONS = [
@@ -69,14 +70,14 @@ function getSuggestedSources(domain: string): SuggestedSource[] {
   return DOMAIN_SOURCES[domain] ?? DOMAIN_SOURCES['general'];
 }
 
-export function WorkspaceModal({ isOpen, onClose }: WorkspaceModalProps) {
+export function WorkspaceModal({ isOpen, onClose, initialCreate = false }: WorkspaceModalProps) {
   const { activeWorkspaceId, setActiveWorkspaceId } = useCockpit();
   const { data: workspaces = [], isLoading } = useWorkspaces();
   const createMutation = useCreateWorkspace();
   const deleteMutation = useDeleteWorkspace();
   const createSourceMutation = useCreateSource();
 
-  const [showCreate, setShowCreate] = useState(false);
+  const [showCreate, setShowCreate] = useState(initialCreate);
   // step 1 = fill workspace form; step 2 = pick suggested sources
   const [step, setStep] = useState<1 | 2>(1);
   const [newWorkspaceId, setNewWorkspaceId] = useState<number | null>(null);

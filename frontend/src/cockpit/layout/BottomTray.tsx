@@ -9,7 +9,7 @@ export function BottomTray() {
   const sourcesTotal = sourcesData?.total ?? 0;
   const activeSources = sourcesData?.sources?.filter(s => s.active).length ?? 0;
   const jobsActive = 0;
-  const costToday = stats?.cost_this_month ?? 0;
+  const costToday = stats?.cost_today ?? 0;
 
   return (
     <div className="h-9 bg-zinc-950 border-t border-white/[0.06] flex items-center justify-between px-5 shrink-0">

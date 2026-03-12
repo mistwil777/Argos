@@ -46,9 +46,13 @@ export interface CourseSection {
 }
 
 export interface Source {
-  course_id: number;
+  course_id?: number;
+  source_id?: number;
+  source_type?: string;
   title: string;
   chunk_text: string;
+  section?: string;
+  similarity_score?: number;
   _distance?: number;
 }
 
@@ -69,6 +73,7 @@ export interface Stats {
   published_courses: number;
   draft_courses: number;
   total_cost: number;
+  cost_today: number;
   cost_this_month: number;
 }
 

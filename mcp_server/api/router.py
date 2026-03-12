@@ -7,6 +7,7 @@ Provides REST endpoints alongside the existing JSON-RPC interface.
 from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 from typing import Optional, Dict, Any
 import logging
+from datetime import datetime, timezone
 
 from mcp_server.database import DatabaseManager
 from mcp_server.config import settings
@@ -119,9 +120,13 @@ async def get_global_stats():
         
         # Get total cost
         total_cost, _ = db.get_total_cost()
-        
-        # Calculate cost this month (simplified - would need proper date filtering)
-        cost_this_month = total_cost  # For now, same as total
+
+        # Date-filtered costs
+        now = datetime.now(timezone.utc)
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        cost_today = db.get_cost_for_period(today_start, now)
+        cost_this_month = db.get_cost_for_period(month_start, now)
         
         # Get course counts
         with db.get_connection() as conn:
@@ -143,6 +148,7 @@ async def get_global_stats():
             "published_courses": published_courses,
             "draft_courses": draft_courses,
             "total_cost": total_cost,
+            "cost_today": cost_today,
             "cost_this_month": cost_this_month,
         }
     except Exception as e:
@@ -236,19 +242,34 @@ async def get_topics_stats(limit: int = Query(default=10, ge=1, le=50)):
 
 @api_router.get("/stats/costs")
 async def get_costs_stats(period: str = Query(default="month", regex="^(week|month|year)$")):
-    """Get cost breakdown over time."""
+    """Get daily cost breakdown over the requested period."""
     try:
-        # For now, return simplified cost data
-        # In production, this would query a costs table with timestamps
-        total_cost, request_count = db.get_total_cost()
-        
-        return [{
-            "date": "2026-02-23",  # Current date
-            "classifier_cost": total_cost * 0.3,  # Approximate breakdown
-            "course_generator_cost": total_cost * 0.5,
-            "rag_cost": total_cost * 0.2,
-            "total": total_cost
-        }]
+        days = {"week": 7, "month": 30, "year": 365}.get(period, 30)
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT
+                        DATE(decided_at) as date,
+                        COALESCE(SUM(cost_usd), 0) as total
+                    FROM decisions
+                    WHERE decided_at >= NOW() - INTERVAL '%s days'
+                      AND cost_usd IS NOT NULL
+                    GROUP BY DATE(decided_at)
+                    ORDER BY date ASC
+                    LIMIT %s
+                """, (days, days))
+                rows = cur.fetchall()
+
+        return [
+            {
+                "date": row[0].strftime("%Y-%m-%d") if hasattr(row[0], "strftime") else str(row[0]),
+                "classifier_cost": float(row[1]) * 0.3,
+                "course_generator_cost": float(row[1]) * 0.5,
+                "rag_cost": float(row[1]) * 0.2,
+                "total": float(row[1]),
+            }
+            for row in rows
+        ]
     except Exception as e:
         logger.error(f"Error fetching costs stats: {e}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -1,12 +1,13 @@
 // TopBar - Barre supérieure
 import { useState } from 'react';
 import { useGlobalStats, useWorkspaces } from '../../hooks/useApi';
-import { Bell, DollarSign, PanelRightOpen, PanelRightClose, ChevronDown, Zap, FileText, BookOpen, MessageSquare, Rss, Loader2, BarChart2 } from 'lucide-react';
+import { Bell, DollarSign, PanelRightOpen, PanelRightClose, ChevronDown, Zap, FileText, BookOpen, MessageSquare, Rss, Loader2, BarChart2, Home } from 'lucide-react';
 import { UserMenu } from '../components/UserMenu';
 import { WorkspaceModal } from '../components/WorkspaceModal';
 import { useCockpit, type CockpitMode } from '../context/CockpitContext';
 
 const MODE_META: Record<CockpitMode, { label: string; icon: React.ElementType; color: string }> = {
+  home:       { label: 'Accueil',    icon: Home,          color: 'text-zinc-400' },
   flux:       { label: 'Flux',       icon: FileText,      color: 'text-zinc-400' },
   production: { label: 'Contenus',   icon: BookOpen,      color: 'text-indigo-400' },
   assistant:  { label: 'Chat RAG',   icon: MessageSquare, color: 'text-sky-400' },
@@ -22,7 +23,7 @@ export function TopBar() {
   const [workspaceModalOpen, setWorkspaceModalOpen] = useState(false);
 
   const pendingCount = stats?.pending_items || 0;
-  const costToday = stats?.cost_this_month || 0;
+  const costToday = stats?.cost_today ?? 0;
   const hasSelection = selectedItemId !== null || selectedDocId !== null;
   const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId);
   const workspaceName = activeWorkspace?.name || 'Général';
@@ -49,13 +50,17 @@ export function TopBar() {
       >
         {/* Left: Brand + mode */}
         <div className="flex items-center gap-3">
-          {/* App logo */}
-          <div className="flex items-center gap-2">
+          {/* App logo — cliquable pour revenir à l'accueil */}
+          <button
+            onClick={() => setActiveMode('home')}
+            className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+            title="Accueil"
+          >
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20">
               <Zap className="w-3.5 h-3.5 text-white" strokeWidth={2.5} />
             </div>
-            <span className="text-sm font-bold text-zinc-100 tracking-tight select-none">Veille IA</span>
-          </div>
+            <span className="text-sm font-bold text-zinc-100 tracking-tight select-none">VeilleOps</span>
+          </button>
 
           {/* Separator */}
           <div className="w-px h-4 bg-white/[0.08]" />

@@ -286,14 +286,19 @@ class RAGService:
 """)
             
             # Metadata for response
-            sources_list.append({
+            entry: Dict = {
                 "source_number": idx,
                 "source_type": source_type,
                 "source_id": source_id,
                 "title": title,
                 "section": section,
-                "similarity_score": result.get("_distance", 0.0)
-            })
+                "chunk_text": text[:500],
+                "similarity_score": result.get("_distance", 0.0),
+            }
+            # course_id alias so the frontend can look up the full document
+            if source_type == "course":
+                entry["course_id"] = source_id
+            sources_list.append(entry)
         
         sources_text = "\n".join(sources_text_parts)
         return sources_text, sources_list

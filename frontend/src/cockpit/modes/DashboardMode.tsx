@@ -203,9 +203,9 @@ export function DashboardMode() {
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
           <KpiCard
             icon={Euro}
-            label="Coût ce mois"
-            value={`€${(stats?.cost_this_month ?? 0).toFixed(4)}`}
-            sub={`Cumul total : €${(stats?.total_cost ?? 0).toFixed(2)}`}
+            label="Coût aujourd'hui"
+            value={`€${(stats?.cost_today ?? 0).toFixed(4)}`}
+            sub={`Ce mois : €${(stats?.cost_this_month ?? 0).toFixed(4)} · Total : €${(stats?.total_cost ?? 0).toFixed(2)}`}
             color="emerald"
           />
           <KpiCard

@@ -346,16 +346,21 @@ class DatabaseManager:
     
     def get_total_cost(self) -> Tuple[float, int]:
         """
-        Calculate total LLM costs and token usage.
-        
+        Calculate total LLM costs and token usage across all LLM operations.
+        Aggregates rag_queries (RAG calls) and llm_usage (generation/QA/etc.).
+
         Returns:
             Tuple of (total_cost_usd, total_tokens)
         """
         query = """
-            SELECT 
+            SELECT
                 COALESCE(SUM(cost_usd), 0) as total_cost,
                 COALESCE(SUM(tokens_used), 0) as total_tokens
-            FROM decisions
+            FROM (
+                SELECT cost_usd, tokens_used FROM rag_queries
+                UNION ALL
+                SELECT cost_usd, tokens_used FROM llm_usage
+            ) all_usage
         """
         
         with self.get_connection() as conn:
@@ -370,6 +375,32 @@ class DatabaseManager:
             f"Total LLM usage: ${total_cost:.4f} USD, {total_tokens:,} tokens"
         )
         return total_cost, total_tokens
+
+    def get_cost_for_period(self, start, end) -> float:
+        """
+        Calculate LLM costs for a given time period.
+        
+        Args:
+            start: start datetime (inclusive)
+            end: end datetime (inclusive)
+        
+        Returns:
+            Total cost in USD for the period
+        """
+        query = """
+            SELECT COALESCE(SUM(cost_usd), 0) as period_cost
+            FROM (
+                SELECT cost_usd, created_at FROM rag_queries
+                UNION ALL
+                SELECT cost_usd, created_at FROM llm_usage
+            ) all_usage
+            WHERE created_at >= %s AND created_at <= %s
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, (start, end))
+                result = cur.fetchone()
+        return float(result[0])
     
     def get_topics_by_popularity(self, limit: int = 10) -> List[Dict]:
         """
@@ -702,51 +733,38 @@ class DatabaseManager:
         cost_usd: float
     ) -> int:
         """
-        Insert a decision record for LLM operations.
-        
-        Args:
-            decision_type: Type of operation (e.g., "course_generation", "course_qa")
-            entity_id: ID of the entity (course_id, item_id, etc.)
-            entity_type: Type of entity ("course", "item", etc.)
-            input_data: Input parameters as dict
-            output_data: Output results as dict
-            model: LLM model name
-            tokens_used: Total tokens
-            cost_usd: Cost in USD
-        
+        Insert an LLM usage record (course_generation, course_qa, classification, etc.).
+        Uses the llm_usage table — distinct from the HITL decisions table.
+
         Returns:
-            Decision ID
+            Record ID
         """
         import json
-        
-        # For backwards compatibility, use item_id field for entity_id
-        # Store entity_type in decision_value
-        decision_value = {
-            "entity_type": entity_type,
-            "entity_id": entity_id,
-            "input": input_data,
-            "output": output_data
-        }
-        
+
         query = """
-            INSERT INTO decisions (
-                item_id, decision_type, decision_value,
-                model_used, tokens_used, cost_usd
+            INSERT INTO llm_usage (
+                operation_type, entity_type, entity_id,
+                model, tokens_used, cost_usd,
+                input_data, output_data
             )
-            VALUES (%s, %s, %s::jsonb, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb)
             RETURNING id
         """
-        
+
         with self.get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     query,
-                    (entity_id, decision_type, json.dumps(decision_value), model, tokens_used, cost_usd)
+                    (
+                        decision_type, entity_type, entity_id,
+                        model, tokens_used, cost_usd,
+                        json.dumps(input_data), json.dumps(output_data)
+                    )
                 )
-                decision_id = cur.fetchone()[0]
-        
+                record_id = cur.fetchone()[0]
+
         logger.info(
-            f"Logged decision {decision_id} for {entity_type} {entity_id}",
-            extra={"decision_id": decision_id, "type": decision_type}
+            f"Logged LLM usage {record_id} for {entity_type} {entity_id}",
+            extra={"record_id": record_id, "type": decision_type, "cost_usd": cost_usd}
         )
-        return decision_id
+        return record_id
