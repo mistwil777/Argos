@@ -6,6 +6,7 @@ import { ProductionMode } from '../modes/ProductionMode';
 import { AssistantMode } from '../modes/AssistantMode';
 import { SourcesMode } from '../modes/SourcesMode';
 import { DashboardMode } from '../modes/DashboardMode';
+import { DevOpsMode } from '../modes/DevOpsMode';
 
 export function CockpitCanvas() {
   const { activeMode } = useCockpit();
@@ -18,6 +19,7 @@ export function CockpitCanvas() {
       {activeMode === 'assistant' && <AssistantMode />}
       {activeMode === 'sources' && <SourcesMode />}
       {activeMode === 'dashboard' && <DashboardMode />}
+      {activeMode === 'devops' && <DevOpsMode />}
     </div>
   );
 }

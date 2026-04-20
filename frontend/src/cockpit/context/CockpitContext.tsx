@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { coursesApi } from '../../services/api';
 
-export type CockpitMode = 'home' | 'flux' | 'production' | 'assistant' | 'sources' | 'dashboard';
+export type CockpitMode = 'home' | 'flux' | 'production' | 'assistant' | 'sources' | 'dashboard' | 'devops';
 export type LayoutMode = 'focus' | 'split' | 'review';
 
 // ── Generation queue ──────────────────────────────────────────────────────
@@ -29,7 +29,7 @@ function loadWorkspaceId(): number | null {
 function loadMode(): CockpitMode {
   try {
     const v = localStorage.getItem(LS_MODE) as CockpitMode;
-    return ['home', 'flux', 'production', 'assistant', 'sources', 'dashboard'].includes(v) ? v : 'home';
+    return ['home', 'flux', 'production', 'assistant', 'sources', 'dashboard', 'devops'].includes(v) ? v : 'home';
   } catch { return 'flux'; }
 }
 

@@ -268,7 +268,64 @@ class VectorStoreService:
         
         logger.info(f"Indexed item {item_id}")
         return 1
-    
+
+    def index_codebase_file(self, filepath: str, content: str) -> int:
+        """
+        Index a source code file into the vector store.
+
+        Args:
+            filepath: Relative path of the file (e.g., 'mcp_server/api/router.py')
+            content: Full text content of the file
+
+        Returns:
+            Number of chunks indexed
+        """
+        # Chunk by logical blocks of ~60 lines
+        lines = content.split('\n')
+        chunk_size = 60
+        chunks = []
+        for i in range(0, len(lines), chunk_size):
+            chunk_lines = lines[i:i + chunk_size]
+            chunk_text = '\n'.join(chunk_lines).strip()
+            if chunk_text:
+                chunks.append({
+                    "section_title": f"{filepath}:L{i+1}-L{min(i+chunk_size, len(lines))}",
+                    "chunk_text": chunk_text,
+                })
+
+        if not chunks:
+            return 0
+
+        texts = [c["chunk_text"] for c in chunks]
+        embeddings = self.embed_texts(texts)
+
+        data = []
+        for idx, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
+            data.append({
+                "id": f"codebase_{filepath.replace('/', '_').replace('.', '_')}_chunk_{idx}",
+                "source_type": "codebase",
+                "source_id": 0,
+                "workspace_id": 0,
+                "title": filepath,
+                "section_title": chunk["section_title"],
+                "chunk_text": chunk["chunk_text"],
+                "chunk_index": idx,
+                "subject": filepath,
+                "level": "",
+                "vector": embedding.tolist()
+            })
+
+        self._upsert_to_table(data)
+        logger.info(f"Indexed codebase file {filepath}: {len(chunks)} chunks")
+        return len(chunks)
+
+    def delete_codebase(self):
+        """Delete all codebase chunks from the vector store."""
+        if self.table_name in self.db.table_names():
+            table = self.db.open_table(self.table_name)
+            table.delete("source_type = 'codebase'")
+            logger.info("Deleted all codebase chunks from vector store")
+
     def _upsert_to_table(self, data: List[Dict]):
         """Upsert data to LanceDB table, migrating schema if needed."""
         try:

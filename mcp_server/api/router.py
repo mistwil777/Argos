@@ -4,10 +4,11 @@ REST API Router for AcademiaOps Web Interface
 Provides REST endpoints alongside the existing JSON-RPC interface.
 """
 
-from fastapi import APIRouter, HTTPException, Query, BackgroundTasks, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, Query, BackgroundTasks, UploadFile, File, Form, Header
 from typing import Optional, Dict, Any
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 
 from mcp_server.database import DatabaseManager
 from mcp_server.config import settings
@@ -1788,5 +1789,158 @@ async def check_all_monitors(background_tasks: BackgroundTasks):
 
     except Exception as e:
         logger.error(f"Error triggering global monitor check: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# Admin Endpoints (codebase ingestion + auto-diag)
+# ============================================
+
+def _check_admin(token: Optional[str]):
+    """Raise 403 if admin token is invalid or not configured."""
+    if not settings.admin_token:
+        raise HTTPException(status_code=503, detail="Admin access not configured (ADMIN_TOKEN not set)")
+    if token != settings.admin_token:
+        raise HTTPException(status_code=403, detail="Invalid admin token")
+
+
+# Files to index from the codebase (relative to /app)
+_CODEBASE_EXTENSIONS = {".py", ".ts", ".tsx", ".sql", ".yaml", ".yml", ".md"}
+_CODEBASE_ROOTS = [
+    Path("/app/mcp_server"),
+]
+_CODEBASE_SKIP_DIRS = {"__pycache__", ".git", "node_modules", "dist", ".venv", "venv"}
+_CODEBASE_MAX_FILE_BYTES = 200_000  # skip very large files
+
+
+def _walk_codebase():
+    """Yield (relative_path, content) for all indexable source files."""
+    from pathlib import Path as _Path
+    for root in _CODEBASE_ROOTS:
+        root_path = _Path(root)
+        if not root_path.exists():
+            continue
+        for fpath in root_path.rglob("*"):
+            if fpath.is_dir():
+                continue
+            # Skip ignored dirs
+            if any(part in _CODEBASE_SKIP_DIRS for part in fpath.parts):
+                continue
+            if fpath.suffix not in _CODEBASE_EXTENSIONS:
+                continue
+            if fpath.stat().st_size > _CODEBASE_MAX_FILE_BYTES:
+                continue
+            try:
+                content = fpath.read_text(encoding="utf-8", errors="replace")
+                rel = str(fpath.relative_to("/app"))
+                yield rel, content
+            except Exception:
+                pass
+
+
+@api_router.post("/admin/ingest-codebase")
+async def admin_ingest_codebase(
+    background_tasks: BackgroundTasks,
+    x_admin_token: Optional[str] = Header(default=None)
+):
+    """Index the entire VeilleOps codebase into the RAG vector store."""
+    _check_admin(x_admin_token)
+
+    async def _run():
+        from mcp_server.services.vector_store_singleton import get_vector_store
+        vector_store = get_vector_store()
+        # Clear previous codebase index
+        vector_store.delete_codebase()
+        total_files = 0
+        total_chunks = 0
+        for rel_path, content in _walk_codebase():
+            try:
+                n = vector_store.index_codebase_file(rel_path, content)
+                total_chunks += n
+                total_files += 1
+            except Exception as exc:
+                logger.warning(f"[admin] skip {rel_path}: {exc}")
+        logger.info(f"[admin] codebase ingestion done: {total_files} files, {total_chunks} chunks")
+
+    background_tasks.add_task(_run)
+    return {"message": "Ingestion du code source lancée en arrière-plan"}
+
+
+@api_router.get("/admin/codebase-stats")
+async def admin_codebase_stats(
+    x_admin_token: Optional[str] = Header(default=None)
+):
+    """Return stats about the indexed codebase."""
+    _check_admin(x_admin_token)
+    try:
+        from mcp_server.services.vector_store_singleton import get_vector_store
+        vector_store = get_vector_store()
+        if vector_store.table_name in vector_store.db.table_names():
+            table = vector_store.db.open_table(vector_store.table_name)
+            rows = table.search().where("source_type = 'codebase'").limit(100000).to_list()
+            files = list({r["title"] for r in rows})
+            return {
+                "chunks": len(rows),
+                "files": len(files),
+                "file_list": sorted(files),
+            }
+        return {"chunks": 0, "files": 0, "file_list": []}
+    except Exception as e:
+        logger.error(f"Error fetching codebase stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/admin/rag-diag")
+async def admin_rag_diag(
+    request: Dict[str, Any],
+    x_admin_token: Optional[str] = Header(default=None)
+):
+    """RAG query scoped to the indexed codebase — for auto-diagnostics."""
+    _check_admin(x_admin_token)
+    query = request.get("query", "").strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="query is required")
+    try:
+        from mcp_server.services.vector_store_singleton import get_vector_store
+        from mcp_server.services.rag import RAGService
+
+        vector_store = get_vector_store()
+        if settings.llm_provider == "aws":
+            model = settings.aws_bedrock_model
+        else:
+            model = settings.default_classification_model
+
+        llm_provider = create_llm_provider(
+            provider_type=settings.llm_provider,
+            aws_access_key_id=settings.aws_access_key_id if settings.llm_provider == "aws" else None,
+            aws_secret_access_key=settings.aws_secret_access_key if settings.llm_provider == "aws" else None,
+            aws_region=settings.aws_region if settings.llm_provider == "aws" else None,
+            openai_api_key=settings.openai_api_key if settings.llm_provider == "openai" else None,
+            model=model
+        )
+
+        # Override the system prompt for code-focused diagnostics
+        rag = RAGService(
+            llm_provider=llm_provider,
+            vector_store=vector_store,
+            db_manager=db,
+            top_k=request.get("top_k", 8),
+            temperature=0.3,
+            max_tokens=1200
+        )
+
+        result = await rag.ask(
+            query=query,
+            use_hybrid_search=True,
+            filter_source_type="codebase",
+            workspace_id=None
+        )
+        return {
+            "answer": result.get("answer", ""),
+            "sources": result.get("sources", []),
+            "confidence": result.get("confidence_score", 0.0),
+        }
+    except Exception as e:
+        logger.error(f"Error in admin RAG diag: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 

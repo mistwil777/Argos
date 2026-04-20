@@ -184,6 +184,14 @@ class Settings(BaseSettings):
         description="Claude Sonnet output cost per 1k tokens (USD)"
     )
     
+    # ============================================
+    # Admin
+    # ============================================
+    admin_token: str = Field(
+        default="",
+        description="Secret token for admin-only endpoints (set ADMIN_TOKEN env var)"
+    )
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
