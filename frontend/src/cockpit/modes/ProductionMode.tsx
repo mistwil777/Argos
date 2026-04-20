@@ -38,18 +38,23 @@ const CT_CLS: Record<string, string> = {
  * Otherwise fall back to content_type typical length.
  */
 function readingTime(course: any): string {
+  // Priority 1: calculate from actual content when available (most accurate)
   if (course.content && course.content.length > 200) {
     const words = course.content.trim().split(/\s+/).length;
-    const mins = Math.max(1, Math.round(words / 250));
+    const mins = Math.max(1, Math.round(words / 200));
     return `${mins} min`;
   }
-  // Type-based fallback (realistic ranges for generated content)
+  // Priority 2: use stored DB value (estimated_duration_minutes, set by backend word-count)
+  if (course.duration && course.duration > 0) {
+    return `${course.duration} min`;
+  }
+  // Priority 3: type-based range (last resort, no DB value)
   const defaults: Record<string, string> = {
-    course:       '40–55 min',
-    guide:        '10–15 min',
-    article:       '6–10 min',
-    fiche:         '4–7 min',
-    cas_pratique: '15–25 min',
+    course:       '30–45 min',
+    guide:        '10–20 min',
+    article:      '5–10 min',
+    fiche:        '3–7 min',
+    cas_pratique: '10–20 min',
   };
   return defaults[course.content_type ?? 'course'] ?? '—';
 }
