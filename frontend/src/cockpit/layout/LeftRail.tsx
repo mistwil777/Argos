@@ -1,94 +1,91 @@
-// LeftRail - Navigation par modes
+// LeftRail - Dock de navigation — redesigned (icon + label, DESIGN_VARIANCE:8)
 import { useCockpit, type CockpitMode } from '../context/CockpitContext';
-import { FileText, BookOpen, MessageSquare, Rss, BarChart2, Home } from 'lucide-react';
+import { FileText, BookOpen, MessageSquare, Rss, BarChart2, Home, Zap } from 'lucide-react';
 
-interface ModeConfig {
+interface NavItem {
   id: CockpitMode;
-  icon: typeof FileText;
+  icon: React.ElementType;
   label: string;
 }
 
-const MODES: ModeConfig[] = [
-  { id: 'flux', icon: FileText, label: 'Flux' },
-  { id: 'production', icon: BookOpen, label: 'Contenu' },
-  { id: 'assistant', icon: MessageSquare, label: 'Chat RAG' },
-  { id: 'sources', icon: Rss, label: 'Sources' },
+const NAV_ITEMS: NavItem[] = [
+  { id: 'home',       icon: Home,          label: 'Accueil'   },
+  { id: 'sources',    icon: Rss,           label: 'Sources'   },
+  { id: 'flux',       icon: FileText,      label: 'Flux'      },
+  { id: 'production', icon: BookOpen,      label: 'Contenu'   },
+  { id: 'assistant',  icon: MessageSquare, label: 'Assistant' },
+  { id: 'dashboard',  icon: BarChart2,     label: 'Analyse'   },
 ];
 
-interface LeftRailProps {}
-
-export function LeftRail({}: LeftRailProps) {
+export function LeftRail() {
   const { activeMode, setActiveMode } = useCockpit();
 
   return (
-    <div className="w-14 bg-zinc-950 border-r border-white/[0.06] flex flex-col items-center py-4 gap-1 shrink-0">
-      {/* Home button */}
+    <nav className="w-[72px] shrink-0 bg-zinc-950 border-r border-white/[0.05] flex flex-col items-center pt-3 pb-4">
+
+      {/* App mark */}
       <button
         onClick={() => setActiveMode('home')}
-        className={`group relative w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 mb-2 ${
-          activeMode === 'home'
-            ? 'bg-sky-500/12 text-sky-400'
-            : 'text-zinc-600 hover:text-zinc-300 hover:bg-white/[0.05]'
-        }`}
-        title="Accueil"
+        className="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-500 to-sky-700 flex items-center justify-center mb-4 shadow-lg shadow-sky-500/20 hover:shadow-sky-500/30 transition-shadow shrink-0"
+        title="VeilleOps"
       >
-        {activeMode === 'home' && (
-          <div className="absolute -left-[1px] top-2.5 bottom-2.5 w-0.5 rounded-r-full bg-sky-500" />
-        )}
-        <Home className="w-[18px] h-[18px]" strokeWidth={activeMode === 'home' ? 2 : 1.5} />
-        <div className="absolute left-12 px-2.5 py-1.5 bg-zinc-800 border border-white/[0.08] text-zinc-200 text-xs rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity duration-150 z-50 shadow-xl">
-          Accueil
-        </div>
+        <Zap className="w-4 h-4 text-white" strokeWidth={2.5} />
       </button>
 
-      {/* Séparateur */}
-      <div className="w-6 h-px bg-white/[0.06] mb-1" />
+      <div className="w-8 h-px bg-white/[0.05] mb-2 shrink-0" />
 
-      {/* Mode Icons */}
-      {MODES.map((mode) => {
-        const Icon = mode.icon;
-        const isActive = activeMode === mode.id;
-        return (
-          <button
-            key={mode.id}
-            onClick={() => setActiveMode(mode.id)}
-            className={`group relative w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 ${
-              isActive
-                ? 'bg-sky-500/12 text-sky-400'
-                : 'text-zinc-600 hover:text-zinc-300 hover:bg-white/[0.05]'
-            }`}
-            title={mode.label}
-          >
-            {isActive && (
-              <div className="absolute -left-[1px] top-2.5 bottom-2.5 w-0.5 rounded-r-full bg-sky-500" />
-            )}
-            <Icon className="w-[18px] h-[18px]" strokeWidth={isActive ? 2 : 1.5} />
-            <div className="absolute left-12 px-2.5 py-1.5 bg-zinc-800 border border-white/[0.08] text-zinc-200 text-xs rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity duration-150 z-50 shadow-xl">
-              {mode.label}
-            </div>
-          </button>
-        );
-      })}
+      {/* Nav items */}
+      <div className="flex flex-col w-full gap-0.5 flex-1">
+        {NAV_ITEMS.map((item) => {
+          const Icon = item.icon;
+          const isActive = activeMode === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => setActiveMode(item.id)}
+              className={`
+                relative flex flex-col items-center gap-1 w-full py-2.5 px-1
+                transition-colors duration-150 group
+                ${isActive ? 'text-sky-400' : 'text-zinc-600 hover:text-zinc-300'}
+              `}
+            >
+              {/* Left active bar */}
+              <div
+                className={`
+                  absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-r-full
+                  transition-all duration-200
+                  ${isActive ? 'bg-sky-500 opacity-100' : 'opacity-0'}
+                `}
+              />
 
-      <div className="flex-1" />
+              {/* Icon container */}
+              <div
+                className={`
+                  w-9 h-9 rounded-xl flex items-center justify-center
+                  transition-all duration-150
+                  ${isActive ? 'bg-sky-500/12' : 'group-hover:bg-white/[0.04]'}
+                `}
+              >
+                <Icon
+                  className="w-[17px] h-[17px]"
+                  strokeWidth={isActive ? 2 : 1.5}
+                />
+              </div>
 
-      {/* Dashboard button - always visible with violet accent */}
-      <button
-        onClick={() => setActiveMode('dashboard')}
-        className={`group relative w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 mb-2 ${
-          activeMode === 'dashboard'
-            ? 'bg-violet-500/20 text-violet-300 shadow-lg shadow-violet-500/20'
-            : 'bg-violet-500/10 text-violet-500 hover:bg-violet-500/20 hover:text-violet-300'
-        }`}
-        title="Tableau de bord analytique"
-      >
-        <div className="absolute -left-[1px] top-2.5 bottom-2.5 w-0.5 rounded-r-full bg-violet-500" />
-        <BarChart2 className="w-[18px] h-[18px]" strokeWidth={activeMode === 'dashboard' ? 2 : 1.75} />
-        <div className="absolute left-12 px-2.5 py-1.5 bg-zinc-800 border border-white/[0.08] text-zinc-200 text-xs rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity duration-150 z-50 shadow-xl">
-          Tableau de bord
-        </div>
-      </button>
-    </div>
+              {/* Label */}
+              <span
+                className={`
+                  text-[9px] font-medium tracking-wide leading-none
+                  transition-colors duration-150
+                  ${isActive ? 'text-sky-400' : 'text-zinc-700 group-hover:text-zinc-500'}
+                `}
+              >
+                {item.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </nav>
   );
 }
-

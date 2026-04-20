@@ -114,6 +114,14 @@ class Settings(BaseSettings):
     )
     
     # ============================================
+    # Microsoft Teams Bot
+    # ============================================
+    teams_webhook_url: str | None = Field(
+        default=None,
+        description="Teams Incoming Webhook URL for notifications"
+    )
+
+    # ============================================
     # Telegram Bot (HITL)
     # ============================================
     telegram_bot_token: str | None = Field(

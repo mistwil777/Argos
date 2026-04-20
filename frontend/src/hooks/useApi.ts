@@ -213,13 +213,18 @@ export const useExportCourse = () => {
 export const useRAGAsk = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ query, useHybridSearch }: { query: string; useHybridSearch?: boolean }) => 
-      ragApi.ask(query, useHybridSearch),
+    mutationFn: ({ query, useHybridSearch, documentContext, workspaceId }: { query: string; useHybridSearch?: boolean; documentContext?: string; workspaceId?: number | null }) => 
+      ragApi.ask(query, useHybridSearch, documentContext, workspaceId),
     onSuccess: () => {
-      // Invalidate and refetch history immediately
       queryClient.invalidateQueries({ queryKey: ['rag', 'history'] });
       queryClient.refetchQueries({ queryKey: ['rag', 'history'] });
     },
+  });
+};
+
+export const useRAGExtractDocument = () => {
+  return useMutation({
+    mutationFn: (file: File) => ragApi.extractDocument(file),
   });
 };
 

@@ -100,8 +100,8 @@ ON CONFLICT (slug) DO NOTHING;
 CREATE TABLE IF NOT EXISTS courses (
     id SERIAL PRIMARY KEY,
     
-    -- Source item
-    item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+    -- Source item (nullable : le cours est conservé même si l'item source est supprimé)
+    item_id INTEGER REFERENCES items(id) ON DELETE SET NULL,
     
     -- Course metadata
     title VARCHAR(500) NOT NULL,

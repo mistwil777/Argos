@@ -276,6 +276,60 @@ class TeamsBot:
             facts=facts
         )
     
+    async def send_new_content_detected(
+        self,
+        source_name: str,
+        source_url: str,
+        snippet: str,
+        item_id: Optional[int],
+        dashboard_url: str = "http://localhost:3000",
+    ) -> bool:
+        """
+        Notify that new content has been detected on a monitored website.
+
+        Args:
+            source_name: Human-readable name of the monitored source
+            source_url: URL of the page that changed
+            snippet: Short excerpt of the new/changed content
+            item_id: ID of the pending item created in DB (or None)
+            dashboard_url: Base URL of the AcademiaOps dashboard
+
+        Returns:
+            True if sent successfully
+        """
+        title = "🔍 Nouveau Contenu Détecté"
+        message = (
+            f"Une mise à jour a été détectée sur **{source_name}**.\n\n"
+            f"> {snippet}"
+        )
+
+        facts = [
+            {"title": "Source", "value": source_name},
+            {"title": "URL", "value": source_url},
+            {"title": "Heure", "value": datetime.now().strftime("%d/%m/%Y %H:%M")},
+        ]
+        if item_id:
+            facts.append({"title": "Item ID", "value": str(item_id)})
+
+        actions = [
+            {
+                "title": "📋 Valider dans l'interface",
+                "url": f"{dashboard_url}/hitl",
+            },
+            {
+                "title": "🌐 Voir la page source",
+                "url": source_url,
+            },
+        ]
+
+        return await self.send_notification(
+            title=title,
+            message=message,
+            color="6f42c1",  # Purple — distinct des autres notifs
+            facts=facts,
+            actions=actions,
+        )
+
     def _create_adaptive_card(
         self,
         title: str,

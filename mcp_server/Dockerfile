@@ -14,6 +14,10 @@ RUN apt-get update && apt-get install -y \
     --no-install-recommends \
     gcc \
     ca-certificates \
+    tesseract-ocr \
+    tesseract-ocr-fra \
+    libtesseract-dev \
+    poppler-utils \
     && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 

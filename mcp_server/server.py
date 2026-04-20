@@ -1201,6 +1201,27 @@ async def startup_event():
     )
     
     logger.info(f"Registered {len(tool_registry.tools)} tools")
+
+    # ============================================
+    # Site Monitor Scheduler
+    # ============================================
+    try:
+        from mcp_server.services.site_monitor import init_site_monitor
+        from mcp_server.services.teams_bot import get_teams_bot
+        from mcp_server.api.router import db as api_db
+
+        teams_bot = get_teams_bot(settings.teams_webhook_url)
+        monitor = init_site_monitor(
+            db_manager=api_db,
+            teams_bot=teams_bot,
+            dashboard_url="http://localhost:3000",
+        )
+        # Poll every 60 s — les sources sont vérifiées selon leur check_interval_minutes
+        await monitor.start_scheduler(poll_interval_seconds=60)
+        logger.info("Site monitor scheduler démarré")
+    except Exception as exc:
+        logger.warning(f"Site monitor non démarré : {exc}")
+
     logger.info("MCP Server ready!")
 
 
@@ -1210,3 +1231,14 @@ async def shutdown_event():
     Application shutdown: cleanup.
     """
     logger.info("Shutting down AcademiaOps MCP Server...")
+
+    # Arrêter le scheduler de surveillance
+    try:
+        from mcp_server.services.site_monitor import get_site_monitor
+        monitor = get_site_monitor()
+        if monitor:
+            monitor.stop_scheduler()
+            logger.info("Site monitor scheduler arrêté")
+    except Exception:
+        pass
+

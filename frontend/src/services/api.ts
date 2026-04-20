@@ -157,10 +157,23 @@ export const coursesApi = {
 
 // RAG API
 export const ragApi = {
-  ask: async (query: string, useHybridSearch: boolean = true): Promise<RAGResult> => {
+  ask: async (query: string, useHybridSearch: boolean = true, documentContext?: string, workspaceId?: number | null): Promise<RAGResult> => {
     const { data } = await apiClient.post('/api/v1/rag/ask', { 
       query,
-      use_hybrid_search: useHybridSearch 
+      use_hybrid_search: useHybridSearch,
+      ...(documentContext ? { document_context: documentContext } : {}),
+      ...(workspaceId != null ? { workspace_id: workspaceId } : {}),
+    });
+    return data;
+  },
+
+  extractDocument: async (file: File): Promise<{ text: string; method: string; filename: string; char_count: number; truncated: boolean }> => {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('use_vision', 'true');
+    const { data } = await apiClient.post('/api/v1/rag/extract-document', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60_000, // OCR can be slow
     });
     return data;
   },

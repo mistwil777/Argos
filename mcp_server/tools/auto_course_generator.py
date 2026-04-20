@@ -25,22 +25,29 @@ CONTENT_TYPE_CONFIG = {
         "system_prompt": (
             "Tu es un expert pédagogique spécialisé en IA et technologies émergentes. "
             "Tu crées des cours complets, structurés et professionnels en français "
-            "(5000+ mots) avec objectifs, prérequis, exemples de code et quiz."
+            "(5000+ mots) avec objectifs, prérequis, exemples concrets et quiz. "
+            "N'inclus des exemples de code que si le sujet le justifie vraiment "
+            "(implémentation technique, bibliothèque logicielle, etc.). "
+            "Pour les sujets conceptuels (techniques de prompting, méthodologies, "
+            "stratégies, etc.), utilise des exemples textuels et des schémas Markdown."
         ),
         "prefix": (
             "OBJECTIF : Créer un cours pédagogique complet (5000+ mots) avec "
-            "objectifs d'apprentissage, prérequis, exemples Python, quiz et glossaire."
+            "objectifs d'apprentissage, prérequis, exemples adaptés au sujet, quiz et glossaire. "
+            "N'ajoute du code que si le sujet traite d'implémentation technique."
         ),
     },
     "guide": {
         "label": "Guide pratique",
         "system_prompt": (
             "Tu es un expert technique. Tu rédiges des guides pratiques clairs, "
-            "orientés action, avec des étapes concrètes et des exemples réels."
+            "orientés action, avec des étapes concrètes et des exemples réels. "
+            "N'inclus des exemples de code ou de commandes que si le sujet le nécessite vraiment."
         ),
         "prefix": (
             "OBJECTIF : Créer un guide pratique (2000-3000 mots) étape par étape. "
-            "Chaque étape doit être actionnable, avec exemples concrets de code ou commandes."
+            "Chaque étape doit être actionnable avec exemples concrets — de code ou commandes "
+            "seulement si le sujet est technique, sinon des exemples textuels."
         ),
     },
     "article": {
@@ -69,11 +76,13 @@ CONTENT_TYPE_CONFIG = {
         "label": "Cas pratique",
         "system_prompt": (
             "Tu es un formateur spécialisé. Tu conçois des cas pratiques immersifs "
-            "avec contexte réel, problématique, solution détaillée et code fonctionnel."
+            "avec contexte réel, problématique et solution détaillée. "
+            "Inclus du code fonctionnel uniquement si le sujet est une implémentation technique."
         ),
         "prefix": (
             "OBJECTIF : Créer un cas pratique complet (3000+ mots) avec contexte métier, "
-            "problématique, démarche de résolution, implémentation commentée et résultats attendus."
+            "problématique, démarche de résolution et résultats attendus. "
+            "Ajouter du code commenté uniquement si le sujet est une implémentation logicielle."
         ),
     },
 }
@@ -124,11 +133,7 @@ Rédiger une introduction captivante avec :
 
 **Analogie** : [Comparaison du quotidien qui rend le concept accessible]
 
-**Exemple concret en Python** :
-```python
-# [Commentaire expliquant le contexte]
-[Code Python pertinent et commenté (10-15 lignes)]
-```
+**Exemple concret** : [Si le sujet est technique/implémentation : bloc de code commenté. Sinon : exemple textuel, dialogue, schéma Markdown ou tableau illustratif — PAS de code Python si le sujet ne l'exige pas.]
 
 💡 **Importance** : 
 - [Raison 1 pourquoi c'est crucial]
@@ -165,25 +170,19 @@ Présenter **5 applications concrètes** dans différents domaines :
 
 [Répéter pour 4 autres domaines]
 
-## 🛠️ Outils et Frameworks
+## 🛠️ Outils et Ressources
 
-Présenter les outils essentiels :
+Présenter les outils, plateformes ou ressources essentiels pour ce sujet :
 
-### [Outil/Framework 1]
+### [Outil/Ressource/Plateforme 1]
 
-**Description** : [Ce que c'est]
+**Description** : [Ce que c'est et pourquoi c'est utile]
+**Cas d'usage** : [Comment l'utiliser concrètement]
+**Lien** : [URL si disponible]
 
-**Installation** :
-```bash
-pip install [package]
-```
+[Si et seulement si le sujet traite d'implémentation logicielle, ajouter ici un exemple de code commenté. Sinon, omettre complètement les blocs de code.]
 
-**Exemple d'utilisation** :
-```python
-[Code Python commenté (15-20 lignes)]
-```
-
-[Répéter pour 2-3 outils majeurs]
+[Répéter pour 2-3 ressources majeures]
 
 ## 📝 Exercices Pratiques
 
@@ -242,9 +241,9 @@ CONTRAINTES CRITIQUES :
 - **Longueur** : MINIMUM 5000 mots
 - **Langue** : UNIQUEMENT français
 - **Ton** : Pédagogique mais rigoureux
-- **Code** : Python avec commentaires français
+- **Code** : UNIQUEMENT si le sujet traite d'implémentation logicielle, de bibliothèques ou d'algorithmes. Pour les sujets conceptuels (prompting, méthodologies, stratégies, frameworks de pensée, etc.), NE PAS inclure de code Python — utiliser des exemples textuels, des tableaux comparatifs ou des schémas Markdown.
 - **Progression** : Du simple au complexe
-- **Exemples** : Concrets et actuels
+- **Exemples** : Concrets, actuels et adaptés au sujet (textuels si conceptuel, code si technique)
 - **Analogies** : Créatives et pertinentes
 
 Génère maintenant le cours complet."""

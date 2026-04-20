@@ -910,3 +910,90 @@ html[data-theme="clair"] .cockpit-card {
 html[data-theme="clair"] ::-webkit-scrollbar-track { background: #f1f5f9; }
 html[data-theme="clair"] ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); }
 html[data-theme="clair"] ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.25); }
+
+/* ── Redesign components — missing light mode overrides ── */
+
+/* text-zinc-50 (near-white) → near-black in light mode */
+html[data-theme="clair"] .text-zinc-50 { color: #0f172a !important; }
+html[data-theme="clair"] .group:hover .group-hover\:text-zinc-50 { color: #0f172a !important; }
+html[data-theme="clair"] .hover\:text-zinc-50:hover { color: #0f172a !important; }
+
+/* Missing border overrides for redesigned layout borders */
+html[data-theme="clair"] .border-white\/\[0\.04\] { border-color: rgba(0,0,0,0.06) !important; }
+html[data-theme="clair"] .border-white\/\[0\.05\] { border-color: rgba(0,0,0,0.07) !important; }
+html[data-theme="clair"] .border-white\/\[0\.10\] { border-color: rgba(0,0,0,0.12) !important; }
+
+/* Divide utilities — Dashboard metric strip and Bento rows */
+html[data-theme="clair"] .divide-white\/\[0\.06\] > :not([hidden]) ~ :not([hidden]) { border-color: rgba(0,0,0,0.08) !important; }
+html[data-theme="clair"] .divide-x > :not([hidden]) ~ :not([hidden]) { border-color: rgba(0,0,0,0.08) !important; }
+
+/* Workspace card and surface backgrounds */
+html[data-theme="clair"] .bg-zinc-900\/40 { background-color: rgba(226,232,240,0.65) !important; }
+html[data-theme="clair"] .bg-zinc-900\/50 { background-color: rgba(226,232,240,0.85) !important; }
+html[data-theme="clair"] .bg-zinc-800\/80 { background-color: rgba(203,213,225,0.55) !important; }
+html[data-theme="clair"] .bg-zinc-700\/20 { background-color: rgba(203,213,225,0.25) !important; }
+
+/* Hover states for new components */
+html[data-theme="clair"] .hover\:border-white\/\[0\.12\]:hover { border-color: rgba(0,0,0,0.16) !important; }
+html[data-theme="clair"] .hover\:text-zinc-400:hover { color: #475569 !important; }
+
+/* Dashboard metric cells — background + text contrast in light mode */
+html[data-theme="clair"] .metric-cell { background-color: rgba(241,245,249,0.9) !important; }
+html[data-theme="clair"] .metric-cell:hover { background-color: rgba(226,232,240,0.95) !important; }
+html[data-theme="clair"] .text-sky-500    { color: #0369a1 !important; }
+html[data-theme="clair"] .text-indigo-500 { color: #4338ca !important; }
+html[data-theme="clair"] .text-emerald-600 { color: #065f46 !important; }
+html[data-theme="clair"] .text-amber-600  { color: #92400e !important; }
+
+/* ── Redesign additions ── */
+
+/* Pipeline node pulse for 'warn' health state */
+@keyframes pipeline-warn-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.4); }
+  50%       { box-shadow: 0 0 0 6px rgba(251, 191, 36, 0); }
+}
+
+/* Metric strip hover: subtle shimmer */
+@keyframes metric-shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+/* Topic density bar fill animation */
+@keyframes bar-grow {
+  from { width: 0%; }
+  to   { width: var(--bar-width, 100%); }
+}
+
+/* Slow fade-in for dashboard sections (stagger with delay) */
+@keyframes section-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.section-enter { animation: section-enter 0.35s ease-out forwards; }
+.section-enter-d1 { animation-delay: 0.05s; }
+.section-enter-d2 { animation-delay: 0.10s; }
+.section-enter-d3 { animation-delay: 0.15s; }
+.section-enter-d4 { animation-delay: 0.20s; }
+
+/* Glassmorphism surface — premium card */
+.glass-surface {
+  background: rgba(24, 24, 27, 0.7);
+  backdrop-filter: blur(12px) saturate(1.4);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+/* Accent left border shorthand utilities */
+.accent-bar-sky    { border-left: 2px solid #0ea5e9; }
+.accent-bar-indigo { border-left: 2px solid #6366f1; }
+.accent-bar-emerald{ border-left: 2px solid #10b981; }
+.accent-bar-amber  { border-left: 2px solid #f59e0b; }
+.accent-bar-violet { border-left: 2px solid #a855f7; }
+
+/* Live dot animation — stronger pulse */
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(0.8); }
+}
+.live-dot { animation: live-pulse 1.5s ease-in-out infinite; }

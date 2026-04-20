@@ -1,19 +1,23 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link2, Rss, Github, Code, Filter, Trash2, ExternalLink, Tag, CheckCircle, XCircle, CheckSquare, Square, Plus, X, FolderOpen } from 'lucide-react';
+import { Link2, Rss, Github, Code, Filter, Trash2, ExternalLink, Tag, CheckCircle, XCircle, CheckSquare, Square, Plus, X, FolderOpen, Globe, Bell, RefreshCw, Clock } from 'lucide-react';
 import { workspacesApi } from '../services/api';
 
 interface Source {
   id?: number;
   name: string;
   url: string;
-  type: 'rss' | 'github' | 'api';
+  type: 'rss' | 'github' | 'api' | 'website';
   category: string;
   description: string;
   tags: string[];
   active: boolean;
   workspace_id?: number;
   createdAt?: string;
+  // Monitor fields (website type only)
+  monitor_enabled?: boolean;
+  check_interval_minutes?: number;
+  last_checked_at?: string;
 }
 
 interface SourcesProps {
@@ -52,6 +56,22 @@ const toggleSourceActive = async (id: number, active: boolean): Promise<void> =>
     body: JSON.stringify({ active }),
   });
   if (!response.ok) throw new Error('Failed to toggle source');
+};
+
+const updateMonitorSettings = async (id: number, data: { monitor_enabled?: boolean; check_interval_minutes?: number }): Promise<void> => {
+  const response = await fetch(`http://localhost:8000/api/v1/sources/${id}/monitor`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error('Failed to update monitor settings');
+};
+
+const triggerMonitorCheck = async (id: number): Promise<void> => {
+  const response = await fetch(`http://localhost:8000/api/v1/sources/${id}/check-monitor`, {
+    method: 'POST',
+  });
+  if (!response.ok) throw new Error('Failed to trigger monitor check');
 };
 
 export default function Sources({ addToast }: SourcesProps) {
@@ -103,11 +123,27 @@ export default function Sources({ addToast }: SourcesProps) {
       queryClient.invalidateQueries({ queryKey: ['workspaces'] });
       addToast?.('Source ajoutée avec succès', 'success');
       setShowAddModal(false);
-      setNewSource({ name: '', url: '', type: 'rss', category: '', description: '', tags: [], active: false, workspace_id: undefined });
+      setNewSource({ name: '', url: '', type: 'rss', category: '', description: '', tags: [], active: false, workspace_id: undefined, monitor_enabled: false, check_interval_minutes: 60 });
     },
     onError: () => {
       addToast?.("Erreur lors de l'ajout de la source", 'error');
     },
+  });
+
+  const monitorMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: { monitor_enabled?: boolean; check_interval_minutes?: number } }) =>
+      updateMonitorSettings(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sources'] });
+      addToast?.('Surveillance mise à jour', 'success');
+    },
+    onError: () => addToast?.('Erreur mise à jour surveillance', 'error'),
+  });
+
+  const checkMonitorMutation = useMutation({
+    mutationFn: triggerMonitorCheck,
+    onSuccess: () => addToast?.('Vérification lancée en arrière-plan', 'info'),
+    onError: () => addToast?.('Erreur déclenchement vérification', 'error'),
   });
 
   const toggleSelectSource = (sourceId: number) => {
@@ -173,6 +209,8 @@ export default function Sources({ addToast }: SourcesProps) {
         return <Github className="h-5 w-5" />;
       case 'api':
         return <Code className="h-5 w-5" />;
+      case 'website':
+        return <Globe className="h-5 w-5" />;
       default:
         return <Link2 className="h-5 w-5" />;
     }
@@ -186,6 +224,8 @@ export default function Sources({ addToast }: SourcesProps) {
         return 'bg-gray-100 text-gray-800 border-gray-200';
       case 'api':
         return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'website':
+        return 'bg-violet-100 text-violet-800 border-violet-200';
       default:
         return 'bg-gray-100 text-gray-800 border-gray-200';
     }
@@ -198,7 +238,7 @@ export default function Sources({ addToast }: SourcesProps) {
   });
 
   const categories = Array.from(new Set(sources.map((s) => s.category)));
-  const types = ['rss', 'github', 'api'];
+  const types = ['rss', 'github', 'api', 'website'];
 
   if (isLoading) {
     return (
@@ -269,6 +309,18 @@ export default function Sources({ addToast }: SourcesProps) {
               </p>
             </div>
             <Code className="h-12 w-12 text-blue-400" />
+          </div>
+        </div>
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Sites surveillés</p>
+              <p className="mt-2 text-3xl font-bold text-violet-600">
+                {sources.filter((s) => s.type === 'website' && s.monitor_enabled).length}
+                <span className="text-sm font-normal text-gray-500">/{sources.filter((s) => s.type === 'website').length}</span>
+              </p>
+            </div>
+            <Bell className="h-12 w-12 text-violet-400" />
           </div>
         </div>
       </div>
@@ -497,6 +549,80 @@ export default function Sources({ addToast }: SourcesProps) {
                   </span>
                 )}
               </div>
+
+              {/* Monitor panel — website type only */}
+              {source.type === 'website' && source.id && (
+                <div className={`mt-4 rounded-lg border p-3 ${
+                  source.monitor_enabled
+                    ? 'bg-violet-50 border-violet-200'
+                    : 'bg-gray-50 border-gray-200'
+                }`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <Bell className={`h-4 w-4 ${source.monitor_enabled ? 'text-violet-600' : 'text-gray-400'}`} />
+                      <span className="text-xs font-semibold text-gray-700">Surveillance de contenu</span>
+                      {source.monitor_enabled && (
+                        <span className="px-1.5 py-0.5 rounded text-xs bg-violet-100 text-violet-700 font-medium">Actif</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {source.monitor_enabled && (
+                        <button
+                          onClick={() => source.id && checkMonitorMutation.mutate(source.id)}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-white border border-violet-300 text-violet-700 rounded hover:bg-violet-50 transition-colors"
+                          title="Vérifier maintenant"
+                          disabled={checkMonitorMutation.isPending}
+                        >
+                          <RefreshCw className="h-3 w-3" />
+                          Vérifier
+                        </button>
+                      )}
+                      <button
+                        onClick={() => source.id && monitorMutation.mutate({
+                          id: source.id,
+                          data: { monitor_enabled: !source.monitor_enabled },
+                        })}
+                        className={`text-xs px-2 py-1 rounded border transition-colors ${
+                          source.monitor_enabled
+                            ? 'bg-white border-violet-300 text-violet-700 hover:bg-violet-50'
+                            : 'bg-violet-600 border-transparent text-white hover:bg-violet-700'
+                        }`}
+                      >
+                        {source.monitor_enabled ? 'Désactiver' : 'Activer'}
+                      </button>
+                    </div>
+                  </div>
+                  {source.monitor_enabled && (
+                    <div className="mt-2 flex items-center gap-4 text-xs text-gray-500">
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        Intervalle :
+                        <select
+                          value={source.check_interval_minutes ?? 60}
+                          onChange={(e) => source.id && monitorMutation.mutate({
+                            id: source.id,
+                            data: { check_interval_minutes: Number(e.target.value) },
+                          })}
+                          className="ml-1 border border-gray-300 rounded px-1 py-0.5 text-xs bg-white"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <option value={15}>15 min</option>
+                          <option value={30}>30 min</option>
+                          <option value={60}>1h</option>
+                          <option value={180}>3h</option>
+                          <option value={360}>6h</option>
+                          <option value={720}>12h</option>
+                          <option value={1440}>24h</option>
+                        </select>
+                      </div>
+                      {source.last_checked_at && (
+                        <span>Dernière vérif : {new Date(source.last_checked_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                      )}
+                      {!source.last_checked_at && <span className="italic">Pas encore vérifié</span>}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -563,6 +689,7 @@ export default function Sources({ addToast }: SourcesProps) {
                       <option value="rss">RSS</option>
                       <option value="github">GitHub</option>
                       <option value="api">API</option>
+                      <option value="website">Site web (surveillance)</option>
                     </select>
                   </div>
                   <div>
@@ -615,6 +742,41 @@ export default function Sources({ addToast }: SourcesProps) {
                     Activer immédiatement (déclenche la collecte au prochain cycle)
                   </label>
                 </div>
+
+                {newSource.type === 'website' && (
+                  <div className="rounded-lg border border-violet-200 bg-violet-50 p-3 space-y-3">
+                    <p className="text-xs font-semibold text-violet-800">Surveillance de contenu</p>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="monitor-toggle"
+                        checked={!!newSource.monitor_enabled}
+                        onChange={(e) => setNewSource({ ...newSource, monitor_enabled: e.target.checked })}
+                        className="h-4 w-4 text-violet-600 rounded border-gray-300"
+                      />
+                      <label htmlFor="monitor-toggle" className="text-sm text-gray-700">
+                        Activer la surveillance (notifie via Teams si nouveau contenu)
+                      </label>
+                    </div>
+                    {newSource.monitor_enabled && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Intervalle de vérification</label>
+                        <select
+                          value={newSource.check_interval_minutes ?? 60}
+                          onChange={(e) => setNewSource({ ...newSource, check_interval_minutes: Number(e.target.value) })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-violet-500"
+                        >
+                          <option value={15}>Toutes les 15 minutes</option>
+                          <option value={30}>Toutes les 30 minutes</option>
+                          <option value={60}>Toutes les heures</option>
+                          <option value={180}>Toutes les 3 heures</option>
+                          <option value={360}>Toutes les 6 heures</option>
+                          <option value={1440}>Une fois par jour</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="flex gap-3 pt-2">
                   <button

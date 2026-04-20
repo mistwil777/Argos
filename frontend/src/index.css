@@ -9,20 +9,76 @@
   }
 }
 
-@layer components {
-  .btn-primary {
-    @apply bg-primary-600 hover:bg-primary-700 text-white font-medium py-2 px-4 rounded-lg transition-colors;
-  }
-  
-  .btn-secondary {
-    @apply bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-4 rounded-lg transition-colors;
-  }
-  
-  .card {
-    @apply bg-white rounded-lg shadow-sm border border-gray-200 p-6;
-  }
-  
-  .input-field {
-    @apply w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent;
-  }
+/* ── Shimmer skeleton ─────────────────────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.shimmer-box {
+  background: linear-gradient(
+    90deg,
+    rgba(39, 39, 42, 0.9) 25%,
+    rgba(63, 63, 70, 0.55) 50%,
+    rgba(39, 39, 42, 0.9) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+
+/* ── Workspace card spotlight (cursor-tracking glow) ─────────────────────── */
+.ws-card {
+  isolation: isolate;
+  position: relative;
+  overflow: hidden;
+}
+
+.ws-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(
+    220px circle at var(--mx, 50%) var(--my, 50%),
+    rgba(14, 165, 233, 0.07),
+    transparent 70%
+  );
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+}
+
+.ws-card:hover::before {
+  opacity: 1;
+}
+
+/* ── Staggered entrance ──────────────────────────────────────────────────── */
+@keyframes slideUpIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ws-card-enter {
+  animation: slideUpIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--i, 0) * 55ms);
+}
+
+/* ── Live dot pulse ──────────────────────────────────────────────────────── */
+@keyframes livebeat {
+  0%, 100% { opacity: 1;  transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.85); }
+}
+
+.live-beat {
+  animation: livebeat 1.5s ease-in-out infinite;
+}
+
+/* ── Cockpit indicator (existing compat) ─────────────────────────────────── */
+@keyframes cockpit-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+.cockpit-indicator-active {
+  animation: cockpit-pulse 2s ease-in-out infinite;
 }

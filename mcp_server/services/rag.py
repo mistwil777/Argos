@@ -96,7 +96,8 @@ class RAGService:
         query: str,
         filter_source_type: Optional[str] = None,
         user_identifier: str = "anonymous",
-        use_hybrid_search: bool = True
+        use_hybrid_search: bool = True,
+        workspace_id: Optional[int] = None
     ) -> Dict:
         """
         Answer a question using RAG.
@@ -127,13 +128,15 @@ class RAGService:
             search_results = self.vector_store.hybrid_search(
                 query=query,
                 limit=self.top_k,
-                filter_source_type=filter_source_type
+                filter_source_type=filter_source_type,
+                workspace_id=workspace_id
             )
         else:
             search_results = self.vector_store.search(
                 query=query,
                 limit=self.top_k,
-                filter_source_type=filter_source_type
+                filter_source_type=filter_source_type,
+                workspace_id=workspace_id
             )
         
         if not search_results:

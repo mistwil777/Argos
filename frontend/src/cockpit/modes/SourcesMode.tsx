@@ -1,12 +1,12 @@
 // SourcesMode - Gestion des sources de données
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSources, useCreateSource, useToggleSource, useCollectSource, useCollectWorkspace, useUpdateSource, useDeleteSource } from '../../hooks/useApi';
 import { useCockpit } from '../context/CockpitContext';
 import { CockpitHeader } from '../components/CockpitHeader';
 import type { SourceCreate } from '../../services/api';
 import {
   Rss, Github, Zap, Globe, Plus, ToggleLeft, ToggleRight,
-  AlertCircle, X, Check, Loader2, RefreshCw, Pencil, Trash2, Save,
+  AlertCircle, X, Check, Loader2, RefreshCw, Pencil, Trash2, Save, ChevronRight,
 } from 'lucide-react';
 
 const TYPE_CONFIG = {
@@ -417,12 +417,85 @@ function SourceCard({ source, highlighted }: { source: any; highlighted?: boolea
   );
 }
 
+// ─── SourceGroup ─────────────────────────────────────────────────────────────
+function domainOf(url: string): string {
+  try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; }
+}
+
+function SourceGroup({
+  domain, sources, selectedSourceUrl, collapsed, onToggle,
+}: {
+  domain: string; sources: any[]; selectedSourceUrl: string | null;
+  collapsed: boolean; onToggle: () => void;
+}) {
+  const activeCt = sources.filter((s) => s.active).length;
+  const hasHighlighted = !!selectedSourceUrl && sources.some((s) => s.url === selectedSourceUrl);
+  const isOpen = hasHighlighted || !collapsed;
+
+  // Count sources by type for the header badges
+  const typeCounts = sources.reduce((acc, s) => {
+    const t = s.type as SourceType;
+    acc[t] = (acc[t] ?? 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  return (
+    <div className={`rounded-xl border transition-all ${
+      hasHighlighted ? 'border-emerald-500/30 bg-emerald-500/[0.02]' : 'border-white/[0.06] bg-white/[0.01]'
+    }`}>
+      {/* Group header — clickable */}
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/[0.02] transition-colors rounded-xl"
+      >
+        <ChevronRight
+          className={`w-3.5 h-3.5 text-zinc-600 shrink-0 transition-transform duration-200 ${
+            isOpen ? 'rotate-90' : ''
+          }`}
+        />
+        <Globe className="w-4 h-4 text-teal-400 shrink-0" strokeWidth={1.5} />
+        <span className="text-sm font-semibold text-zinc-300 flex-1 text-left">{domain}</span>
+        {/* Per-type badges */}
+        <div className="flex items-center gap-1.5">
+          {(Object.entries(typeCounts) as [SourceType, number][]).map(([t, ct]) => {
+            const C = TYPE_CONFIG[t];
+            if (!C) return null;
+            const Icon = C.icon;
+            return (
+              <span key={t} className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border font-medium ${C.bg} ${C.color}`}>
+                <Icon className="w-2.5 h-2.5" strokeWidth={1.5} />{ct}
+              </span>
+            );
+          })}
+        </div>
+        <span className="text-[10px] text-zinc-600 font-mono tabular-nums ml-1">
+          {activeCt} / {sources.length} actives
+        </span>
+      </button>
+
+      {/* Expanded source cards */}
+      {isOpen && (
+        <div className="px-3 pb-3 flex flex-col gap-2">
+          {sources.map((s) => (
+            <SourceCard
+              key={s.id}
+              source={s}
+              highlighted={!!selectedSourceUrl && s.url === selectedSourceUrl}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── SourcesMode ────────────────────────────────────────────────────────────────
 export function SourcesMode() {
   const { activeWorkspaceId, selectedSourceUrl, setSelectedSourceUrl } = useCockpit();
   const [showAdd, setShowAdd] = useState(false);
   const [typeFilter, setTypeFilter] = useState<'all' | SourceType>('all');
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [collapsedDomains, setCollapsedDomains] = useState<Set<string>>(new Set());
   const collectWorkspaceMutation = useCollectWorkspace();
 
   // Clear selected source URL when leaving this mode or on unmount
@@ -457,6 +530,24 @@ export function SourcesMode() {
   });
 
   const activeSources = allSources.filter((s: any) => s.active);
+
+  // Group visible sources by domain
+  const sourcesByDomain = useMemo(() => {
+    const map = new Map<string, any[]>();
+    for (const s of sources) {
+      const d = domainOf(s.url);
+      if (!map.has(d)) map.set(d, []);
+      map.get(d)!.push(s);
+    }
+    return map;
+  }, [sources]);
+
+  const toggleDomain = (domain: string) =>
+    setCollapsedDomains((prev) => {
+      const next = new Set(prev);
+      next.has(domain) ? next.delete(domain) : next.add(domain);
+      return next;
+    });
 
   if (isLoading) {
     return (
@@ -582,11 +673,14 @@ export function SourcesMode() {
           </div>
         ) : (
           <div className="space-y-2">
-            {sources.map((source: any) => (
-              <SourceCard
-                key={source.id}
-                source={source}
-                highlighted={selectedSourceUrl ? source.url === selectedSourceUrl : false}
+            {[...sourcesByDomain.entries()].map(([domain, domainSources]) => (
+              <SourceGroup
+                key={domain}
+                domain={domain}
+                sources={domainSources}
+                selectedSourceUrl={selectedSourceUrl}
+                collapsed={collapsedDomains.has(domain)}
+                onToggle={() => toggleDomain(domain)}
               />
             ))}
           </div>

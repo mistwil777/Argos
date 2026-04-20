@@ -1,9 +1,10 @@
 // AssistantMode - Interface RAG avec gestion multi-conversations
 import { useState, useEffect, useRef } from 'react';
-import { useRAGAsk, useCourse, useItem } from '../../hooks/useApi';
+import { useRAGAsk, useCourse, useItem, useRAGExtractDocument } from '../../hooks/useApi';
 import {
   Send, Settings, Sparkles, X, ExternalLink, Trash2,
   Plus, MessageSquare, History, CheckSquare, Square, ArrowLeft, FileText, Clock, Layers, Tag,
+  Paperclip, AlertCircle, Loader2,
 } from 'lucide-react';
 import { Preloader } from '../components/Preloader';
 import { useCockpit } from '../context/CockpitContext';
@@ -13,6 +14,7 @@ import { useCockpit } from '../context/CockpitContext';
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+  attachment?: { filename: string; method: string; charCount: number };
   sources?: Array<{
     course_id?: number;
     source_id?: number;
@@ -216,7 +218,9 @@ function SourcePanel({ source, onClose }: { source: SourceInfo; onClose: () => v
 export function AssistantMode() {
   const { activeWorkspaceId } = useCockpit();
   const ragMutation = useRAGAsk();
+  const extractMutation = useRAGExtractDocument();
   const bottomRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── State ──────────────────────────────────────────────────────────────
 
@@ -234,6 +238,10 @@ export function AssistantMode() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
   const [activeSource, setActiveSource] = useState<SourceInfo | null>(null);
+  // Attachment state
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [documentContext, setDocumentContext] = useState<string | null>(null);
+  const [extractError, setExtractError] = useState<string | null>(null);
 
   const activeConv = conversations.find(c => c.id === activeId) ?? conversations[0];
   const messages = activeConv?.messages ?? [];
@@ -328,24 +336,57 @@ export function AssistantMode() {
     }
   }
 
+  // ── Attachment handlers ───────────────────────────────────────────────
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Reset previous
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setAttachedFile(file);
+    setDocumentContext(null);
+    setExtractError(null);
+    try {
+      const result = await extractMutation.mutateAsync(file);
+      setDocumentContext(result.text);
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail ?? 'Extraction échouée';
+      setExtractError(msg);
+      setAttachedFile(null);
+    }
+  };
+
+  const clearAttachment = () => {
+    setAttachedFile(null);
+    setDocumentContext(null);
+    setExtractError(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   // ── Send message ───────────────────────────────────────────────────────
 
   const handleSend = async () => {
-    if (!input.trim() || !activeConv) return;
+    if ((!input.trim() && !documentContext) || !activeConv) return;
+    if (extractMutation.isPending) return;
 
-    const text = input.trim();
-    const userMsg: Message = { role: 'user', content: text };
+    const text = input.trim() || '(voir document joint)';
+    const userMsg: Message = {
+      role: 'user',
+      content: text,
+      ...(attachedFile ? { attachment: { filename: attachedFile.name, method: extractMutation.data?.method ?? '', charCount: documentContext?.length ?? 0 } } : {}),
+    };
 
-    // Auto-title from first user message
     updateConv(activeId, c => ({
       ...c,
       title: c.messages.length === 0 ? text.slice(0, 50) : c.title,
       messages: [...c.messages, userMsg],
     }));
     setInput('');
+    const ctxToSend = documentContext;
+    clearAttachment();
 
     try {
-      const response = await ragMutation.mutateAsync({ query: text, useHybridSearch: true });
+      const response = await ragMutation.mutateAsync({ query: text, useHybridSearch: true, documentContext: ctxToSend ?? undefined, workspaceId: activeWorkspaceId });
       const assistantMsg: Message = {
         role: 'assistant',
         content: response.answer || 'Aucune réponse disponible.',
@@ -561,6 +602,13 @@ export function AssistantMode() {
                     ? 'bg-sky-500/15 text-zinc-200 border border-sky-500/20'
                     : 'bg-white/[0.04] text-zinc-300 border border-white/[0.06]'
                 }`}>
+                  {msg.role === 'user' && msg.attachment && (
+                    <div className="flex items-center gap-1.5 mb-2 px-2 py-1 bg-white/[0.06] rounded-lg border border-white/[0.08] w-fit">
+                      <FileText className="w-3 h-3 text-sky-400 shrink-0" strokeWidth={1.5} />
+                      <span className="text-[10px] text-sky-300 truncate max-w-[180px]">{msg.attachment.filename}</span>
+                      <span className="text-[10px] text-zinc-600">{msg.attachment.charCount.toLocaleString()} car.</span>
+                    </div>
+                  )}
                   <p className="whitespace-pre-wrap">{msg.content}</p>
                   {msg.sources && msg.sources.length > 0 && (
                     <div className="mt-3 pt-3 border-t border-white/[0.06] flex flex-col gap-1.5">
@@ -604,20 +652,69 @@ export function AssistantMode() {
 
         {/* Input */}
         <div className="p-4 border-t border-white/[0.06]">
-          <div className="flex items-end gap-3">
+          {/* Attachment chip or error */}
+          {(attachedFile || extractError) && (
+            <div className="flex items-center gap-2 mb-2">
+              {attachedFile && (
+                <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs ${
+                  extractMutation.isPending
+                    ? 'bg-zinc-900 border-white/[0.08] text-zinc-500'
+                    : documentContext
+                    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                    : 'bg-white/[0.04] border-white/[0.08] text-zinc-400'
+                }`}>
+                  {extractMutation.isPending
+                    ? <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+                    : <FileText className="w-3 h-3 shrink-0" strokeWidth={1.5} />
+                  }
+                  <span className="max-w-[200px] truncate">{attachedFile.name}</span>
+                  {documentContext && <span className="text-zinc-600">{documentContext.length.toLocaleString()} car.</span>}
+                  <button onClick={clearAttachment} className="text-zinc-600 hover:text-zinc-300 transition-colors ml-0.5">
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+              {extractError && (
+                <div className="flex items-center gap-1.5 text-xs text-red-400">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{extractError}</span>
+                  <button onClick={() => setExtractError(null)} className="text-zinc-600 hover:text-zinc-300 ml-1"><X className="w-3 h-3" /></button>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex items-end gap-2">
+            {/* File attach button */}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={extractMutation.isPending}
+              className="p-2.5 rounded-xl bg-white/[0.04] border border-white/[0.08] text-zinc-600 hover:text-zinc-300 hover:bg-white/[0.06] hover:border-white/[0.12] transition-all disabled:opacity-40 self-end"
+              title="Joindre un document (PDF, image, DOCX, TXT)"
+            >
+              <Paperclip className="w-4 h-4" />
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.png,.jpg,.jpeg,.webp,.tiff,.tif,.bmp,.txt,.md,.docx"
+              className="hidden"
+              onChange={handleFileSelect}
+            />
+
             <div className="flex-1">
               <textarea
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Posez votre question..."
+                placeholder={documentContext ? 'Question sur le document joint…' : 'Posez votre question…'}
                 rows={2}
                 className="w-full px-4 py-3 bg-white/[0.04] border border-white/[0.08] rounded-xl resize-none focus:outline-none focus:ring-1 focus:ring-sky-500/50 text-sm text-zinc-200 placeholder-zinc-700 transition-colors"
               />
             </div>
             <button
               onClick={handleSend}
-              disabled={!input.trim() || ragMutation.isPending}
+              disabled={(!input.trim() && !documentContext) || ragMutation.isPending || extractMutation.isPending}
               className="cockpit-btn cockpit-btn-primary px-4 py-3 self-end"
             >
               <Send className="w-4 h-4" />

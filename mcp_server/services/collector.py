@@ -483,21 +483,45 @@ class CollectorService:
 
         class _HTMLExtractor(HTMLParser):
             """Minimal extractor: title + visible text + hrefs, skips script/style/nav."""
-            _SKIP = {'script', 'style', 'nav', 'header', 'footer', 'aside', 'noscript'}
+            _SKIP = {'script', 'style', 'nav', 'header', 'footer', 'aside', 'noscript',
+                     'banner', 'announcement'}
+            # Prefer content from semantic main/article containers
+            _MAIN = {'main', 'article'}
 
             def __init__(self):
                 super().__init__()
-                self.title: str = ''
+                self._title_parts: list = []
+                self._title_done: bool = False   # stop after first </title>
                 self._chunks: list = []
-                self._in_title = False
-                self._skip_depth = 0
+                self._main_chunks: list = []     # content inside <main>/<article>
+                self._in_title: bool = False
+                self._skip_depth: int = 0
+                self._main_depth: int = 0
                 self.links: list = []
 
+            # ── title property: accumulate parts + strip comment artefacts ──────
+            @property
+            def title(self) -> str:
+                import re as _re
+                raw = ' '.join(self._title_parts)
+                # Strip HTML comment artefacts emitted by Next.js/React:
+                # both <!-- --> (ASCII) and <!— —> (em-dash variant)
+                clean = _re.sub(r'<![—\-][—\-].*?[—\-][—\-]>', '', raw)
+                clean = _re.sub(r'<!--.*?-->', '', clean)
+                return clean.strip()
+
+            # ── preferred chunks: <main>/<article> if found, else full page ─────
+            @property
+            def content_chunks(self) -> list:
+                return self._main_chunks if self._main_chunks else self._chunks
+
             def handle_starttag(self, tag, attrs):
-                if tag == 'title':
+                if tag == 'title' and not self._title_done:
                     self._in_title = True
                 if tag in self._SKIP:
                     self._skip_depth += 1
+                if tag in self._MAIN:
+                    self._main_depth += 1
                 if tag == 'a':
                     href = dict(attrs).get('href', '')
                     if href:
@@ -506,17 +530,22 @@ class CollectorService:
             def handle_endtag(self, tag):
                 if tag == 'title':
                     self._in_title = False
+                    self._title_done = True  # ignore SVG <title> icons after this
                 if tag in self._SKIP:
                     self._skip_depth = max(0, self._skip_depth - 1)
+                if tag in self._MAIN:
+                    self._main_depth = max(0, self._main_depth - 1)
 
             def handle_data(self, data):
                 stripped = data.strip()
                 if not stripped:
                     return
                 if self._in_title:
-                    self.title = stripped
+                    self._title_parts.append(stripped)
                 elif self._skip_depth == 0:
                     self._chunks.append(stripped)
+                    if self._main_depth > 0:
+                        self._main_chunks.append(stripped)
 
         import urllib3
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -553,8 +582,8 @@ class CollectorService:
         if not crawl_mode:
             try:
                 ext = _fetch_single(source_url)
-                title = ext.title.strip() or source_url
-                summary = self._extract_summary(' '.join(ext._chunks), 1500)
+                title = ext.title or source_url
+                summary = self._extract_summary(' '.join(ext.content_chunks), 1500)
                 logger.info(f"Fetched website page: {title[:60]}…")
                 self.stats["fetched"] += 1
                 items.append(_make_item(source_url, title, summary))
@@ -575,8 +604,8 @@ class CollectorService:
             visited.add(url)
             try:
                 ext = _fetch_single(url)
-                title = ext.title.strip() or url
-                summary = self._extract_summary(' '.join(ext._chunks), 1500)
+                title = ext.title or url
+                summary = self._extract_summary(' '.join(ext.content_chunks), 1500)
                 logger.info(f"Crawled [{len(visited)}/{MAX_PAGES}]: {title[:60]}…")
                 self.stats["fetched"] += 1
                 items.append(_make_item(url, title, summary))

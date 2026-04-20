@@ -26,6 +26,7 @@ export interface Course {
   topics?: string[];
   level: 'beginner' | 'intermediate' | 'advanced';
   status: 'draft' | 'review' | 'published' | 'archived';
+  content_type?: 'course' | 'guide' | 'article' | 'fiche' | 'cas_pratique';
   duration?: number;
   qa_score?: number;
   qa_issues?: string[];

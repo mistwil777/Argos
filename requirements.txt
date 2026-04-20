@@ -1,5 +1,5 @@
 # ========================================
-# AcademiaOps - Requirements
+# VeilleOps - Requirements
 # ========================================
 
 # Core Framework
@@ -40,3 +40,10 @@ feedparser==6.0.11
 requests==2.31.0
 PyYAML==6.0.1
 python-dateutil==2.8.2
+
+
+# Document extraction & OCR
+pdfplumber==0.11.4      # text extraction from digital PDFs
+pdf2image==1.17.0       # PDF page → image (for scanned PDFs)
+pytesseract==0.3.13     # Tesseract OCR wrapper
+Pillow==10.2.0          # image processing

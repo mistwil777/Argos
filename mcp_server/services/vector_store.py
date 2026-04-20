@@ -211,6 +211,7 @@ class VectorStoreService:
                 "id": f"course_{course_id}_chunk_{idx}",
                 "source_type": "course",
                 "source_id": course_id,
+                "workspace_id": int(course.get("workspace_id")) if course.get("workspace_id") else 0,
                 "title": title,
                 "section_title": chunk["section_title"],
                 "chunk_text": chunk["chunk_text"],

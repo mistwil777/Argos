@@ -4,7 +4,7 @@ REST API Router for AcademiaOps Web Interface
 Provides REST endpoints alongside the existing JSON-RPC interface.
 """
 
-from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Query, BackgroundTasks, UploadFile, File, Form
 from typing import Optional, Dict, Any
 import logging
 from datetime import datetime, timezone
@@ -571,7 +571,8 @@ async def list_courses(
                         c.id, c.title, c.subject, c.level,
                         c.estimated_duration_minutes, c.status, c.qa_score,
                         c.created_at, c.published_at,
-                        i.source_url, i.source_type, i.url as item_url
+                        i.source_url, i.source_type, i.url as item_url,
+                        c.content_type
                     FROM courses c
                     LEFT JOIN items i ON i.id = c.item_id
                     WHERE {where_clause}
@@ -597,6 +598,7 @@ async def list_courses(
                         "source_url": row[9],
                         "source_type": row[10],
                         "item_url": row[11],
+                        "content_type": row[12],
                     })
                 
                 # Get total count
@@ -620,7 +622,8 @@ async def get_course(course_id: int):
                     SELECT 
                         id, title, subject, level,
                         estimated_duration_minutes, status, qa_score,
-                        created_at, published_at, content
+                        created_at, published_at, content,
+                        content_type
                     FROM courses
                     WHERE id = %s
                 """, (course_id,))
@@ -639,7 +642,8 @@ async def get_course(course_id: int):
                     "qa_score": float(row[6]) if row[6] else None,
                     "created_at": row[7].isoformat() if row[7] else None,
                     "published_at": row[8].isoformat() if row[8] else None,
-                    "content": row[9]
+                    "content": row[9],
+                    "content_type": row[10]
                 }
     except HTTPException:
         raise
@@ -656,7 +660,7 @@ async def publish_course(course_id: int):
             with conn.cursor() as cur:
                 # First check if course exists and is in draft or review
                 cur.execute("""
-                    SELECT id, item_id, title, subject, content, estimated_duration_minutes
+                    SELECT id, item_id, title, subject, content, estimated_duration_minutes, workspace_id
                     FROM courses
                     WHERE id = %s AND status IN ('draft', 'review')
                 """, (course_id,))
@@ -671,7 +675,8 @@ async def publish_course(course_id: int):
                     "title": row[2],
                     "subject": row[3],
                     "content": row[4],
-                    "duration": row[5]
+                    "duration": row[5],
+                    "workspace_id": row[6]
                 }
                 
                 # Publish course
@@ -979,6 +984,57 @@ async def validate_course(course_id: int):
 # RAG Endpoints
 # ============================================
 
+@api_router.post("/rag/extract-document")
+async def rag_extract_document(
+    file: UploadFile = File(...),
+    use_vision: bool = Form(default=True),
+):
+    """
+    Extract text from an uploaded document (PDF, image, DOCX, TXT).
+    Returns the extracted text to be passed as document_context to /rag/ask.
+    """
+    from mcp_server.services.document_extractor import extract_document, SUPPORTED_MIME_TYPES
+
+    mime_type = file.content_type or "application/octet-stream"
+    short_mime = mime_type.lower().split(";")[0].strip()
+    if short_mime not in SUPPORTED_MIME_TYPES and not file.filename.endswith(".docx"):
+        raise HTTPException(
+            status_code=415,
+            detail=f"Type de fichier non supporté : {mime_type}. Formats acceptés : PDF, PNG, JPG, WEBP, TIFF, TXT, DOCX.",
+        )
+
+    # Size limit: 20 MB
+    content = await file.read()
+    if len(content) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Fichier trop volumineux (max 20 Mo).")
+
+    try:
+        result = await extract_document(
+            file_bytes=content,
+            mime_type=mime_type,
+            filename=file.filename or "",
+            use_vision_for_images=use_vision,
+        )
+    except Exception as e:
+        logger.error(f"Document extraction failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Extraction échouée : {str(e)}")
+
+    if not result["text"]:
+        raise HTTPException(
+            status_code=422,
+            detail="Impossible d'extraire du texte de ce document. Vérifiez que le fichier n'est pas protégé ou vide.",
+        )
+
+    return {
+        "filename": file.filename,
+        "mime_type": mime_type,
+        "method": result["method"],
+        "char_count": result["char_count"],
+        "truncated": result["truncated"],
+        "text": result["text"],
+    }
+
+
 @api_router.post("/rag/ask")
 async def rag_ask(request: Dict[str, Any]):
     """Ask a question to the RAG system."""
@@ -1018,10 +1074,23 @@ async def rag_ask(request: Dict[str, Any]):
             temperature=0.6
         )
         
+        # Optionally prepend extracted document context to the query
+        document_context = request.get("document_context", "").strip()
+        effective_query = query
+        if document_context:
+            effective_query = (
+                f"[Document joint]\n{document_context}\n\n"
+                f"[Question de l'utilisateur]\n{query}"
+            )
+
+        workspace_id_raw = request.get("workspace_id")
+        workspace_id = int(workspace_id_raw) if workspace_id_raw is not None else None
+
         # Ask question
         result = await rag_service.ask(
-            query=query,
-            use_hybrid_search=request.get("use_hybrid_search", True)
+            query=effective_query,
+            use_hybrid_search=request.get("use_hybrid_search", True),
+            workspace_id=workspace_id
         )
         
         # Return result (RAGService returns all required fields)
@@ -1098,7 +1167,7 @@ async def index_all_courses():
         with db.get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT id, item_id, title, subject, content, estimated_duration_minutes
+                    SELECT id, item_id, title, subject, content, estimated_duration_minutes, workspace_id
                     FROM courses
                     WHERE status = 'published'
                     ORDER BY created_at DESC
@@ -1112,7 +1181,8 @@ async def index_all_courses():
                         "title": row[2],
                         "subject": row[3],
                         "content": row[4],
-                        "duration": row[5]
+                        "duration": row[5],
+                        "workspace_id": row[6]
                     })
         
         if not courses:
@@ -1593,3 +1663,130 @@ async def collect_workspace_sources(workspace_id: int):
     except Exception as e:
         logger.error(f"Error collecting workspace {workspace_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===========================================
+# Monitor Endpoints — surveillance de sites web
+# ===========================================
+
+@api_router.patch("/sources/{source_id}/monitor")
+async def update_monitor_settings(source_id: int, data: Dict[str, Any]):
+    """
+    Met à jour les paramètres de surveillance d'une source website.
+    Champs acceptés : monitor_enabled (bool), check_interval_minutes (int >= 5).
+    """
+    try:
+        allowed = {"monitor_enabled": bool, "check_interval_minutes": int}
+        updates: Dict[str, Any] = {}
+
+        if "monitor_enabled" in data:
+            val = data["monitor_enabled"]
+            if not isinstance(val, bool):
+                raise HTTPException(status_code=400, detail="monitor_enabled must be a boolean")
+            updates["monitor_enabled"] = val
+
+        if "check_interval_minutes" in data:
+            val = int(data["check_interval_minutes"])
+            if val < 5:
+                raise HTTPException(status_code=400, detail="check_interval_minutes must be >= 5")
+            updates["check_interval_minutes"] = val
+
+        if not updates:
+            raise HTTPException(status_code=400, detail="No valid monitor fields provided")
+
+        set_clause = ", ".join(f"{k} = %s" for k in updates)
+        params = list(updates.values()) + [source_id]
+
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    UPDATE sources
+                    SET {set_clause}, updated_at = NOW()
+                    WHERE id = %s
+                    RETURNING id, type
+                    """,
+                    params,
+                )
+                row = cur.fetchone()
+                if not row:
+                    raise HTTPException(status_code=404, detail="Source not found")
+                if row[1] != "website":
+                    conn.rollback()
+                    raise HTTPException(
+                        status_code=400,
+                        detail="La surveillance n'est disponible que pour les sources de type 'website'"
+                    )
+                conn.commit()
+
+        return {"message": "Paramètres de surveillance mis à jour", "source_id": source_id, **updates}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating monitor settings for source {source_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/sources/{source_id}/check-monitor")
+async def check_source_monitor(source_id: int, background_tasks: BackgroundTasks):
+    """
+    Déclenche manuellement la vérification de changement de contenu
+    pour une source website surveillée.
+    """
+    try:
+        from mcp_server.services.site_monitor import get_site_monitor, SiteMonitorService
+        from mcp_server.services.teams_bot import get_teams_bot
+        from mcp_server.config import settings as app_settings
+
+        monitor = get_site_monitor()
+        if monitor is None:
+            # Initialisation à la volée si le serveur ne l'a pas fait
+            teams_bot = get_teams_bot(app_settings.teams_webhook_url)
+            monitor = SiteMonitorService(
+                db_manager=db,
+                teams_bot=teams_bot,
+            )
+
+        async def _run():
+            result = await monitor.check_source(source_id)
+            logger.info(f"[monitor] check-monitor result: {result}")
+
+        background_tasks.add_task(_run)
+        return {"message": "Vérification lancée en arrière-plan", "source_id": source_id}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error triggering monitor check for source {source_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/monitors/check-all")
+async def check_all_monitors(background_tasks: BackgroundTasks):
+    """
+    Déclenche manuellement la vérification de toutes les sources website
+    avec monitor_enabled=True dont l'intervalle est écoulé.
+    """
+    try:
+        from mcp_server.services.site_monitor import get_site_monitor, SiteMonitorService
+        from mcp_server.services.teams_bot import get_teams_bot
+        from mcp_server.config import settings as app_settings
+
+        monitor = get_site_monitor()
+        if monitor is None:
+            teams_bot = get_teams_bot(app_settings.teams_webhook_url)
+            monitor = SiteMonitorService(db_manager=db, teams_bot=teams_bot)
+
+        async def _run():
+            results = await monitor.check_all_sources()
+            changed = sum(1 for r in results if r.get("changed"))
+            logger.info(f"[monitor] check-all: {len(results)} vérifié(es), {changed} changement(s)")
+
+        background_tasks.add_task(_run)
+        return {"message": "Vérification globale lancée en arrière-plan"}
+
+    except Exception as e:
+        logger.error(f"Error triggering global monitor check: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+

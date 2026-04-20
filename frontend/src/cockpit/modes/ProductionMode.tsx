@@ -1,10 +1,10 @@
 // ProductionMode - Mode Docs (bibliothèque de documents générés)
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useCourses, useCourse, usePublishCourse, useDeleteCourse, useModifyCourse } from '../../hooks/useApi';
 import { useCockpit } from '../context/CockpitContext';
 import {
   BookOpen, Clock, Tag, TrendingUp, Check, Archive,
-  Sparkles, ChevronLeft, AlertTriangle, Calendar, Layers, Trash2, ExternalLink
+  Sparkles, ChevronLeft, AlertTriangle, Calendar, Layers, Trash2, ExternalLink, ChevronRight
 } from 'lucide-react';
 import { CockpitHeader } from '../components/CockpitHeader';
 import { Preloader } from '../components/Preloader';
@@ -13,6 +13,45 @@ import ReactMarkdown from 'react-markdown';
 function sourceDomain(url?: string | null): string | null {
   if (!url) return null;
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return null; }
+}
+
+// Content type labels & styles
+const CT_LABEL: Record<string, string> = {
+  course:      'Cours',
+  guide:       'Guide pratique',
+  article:     'Article de veille',
+  fiche:       'Fiche de synthèse',
+  cas_pratique:'Cas pratique',
+};
+const CT_CLS: Record<string, string> = {
+  course:      'bg-sky-500/8 text-sky-400 border-sky-500/15',
+  guide:       'bg-teal-500/8 text-teal-400 border-teal-500/15',
+  article:     'bg-violet-500/8 text-violet-400 border-violet-500/15',
+  fiche:       'bg-amber-500/8 text-amber-400 border-amber-500/15',
+  cas_pratique:'bg-orange-500/8 text-orange-400 border-orange-500/15',
+};
+
+/**
+ * Realistic reading time for engineering teams.
+ * Engineers read technical content at ~250 words/min.
+ * If content is available, derive from actual length.
+ * Otherwise fall back to content_type typical length.
+ */
+function readingTime(course: any): string {
+  if (course.content && course.content.length > 200) {
+    const words = course.content.trim().split(/\s+/).length;
+    const mins = Math.max(1, Math.round(words / 250));
+    return `${mins} min`;
+  }
+  // Type-based fallback (realistic ranges for generated content)
+  const defaults: Record<string, string> = {
+    course:       '40–55 min',
+    guide:        '10–15 min',
+    article:       '6–10 min',
+    fiche:         '4–7 min',
+    cas_pratique: '15–25 min',
+  };
+  return defaults[course.content_type ?? 'course'] ?? '—';
 }
 
 // ─── QA helpers ────────────────────────────────────────────────────────────────
@@ -278,6 +317,7 @@ export function ProductionMode() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'review' | 'published'>('all');
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [collapsedDomains, setCollapsedDomains] = useState<Set<string>>(new Set());
   const { activeWorkspaceId, setActiveMode, setSelectedSourceUrl } = useCockpit();
   const deleteMutation = useDeleteCourse();
 
@@ -304,6 +344,20 @@ export function ProductionMode() {
 
   const courses = coursesData?.courses || [];
   const allCourses = allCoursesData?.courses || [];
+
+  // Group visible courses by source domain
+  const coursesByDomain = useMemo(() => {
+    const map = new Map<string, any[]>();
+    for (const c of courses) {
+      const d = sourceDomain(c.source_url) ?? '(source inconnue)';
+      if (!map.has(d)) map.set(d, []);
+      map.get(d)!.push(c);
+    }
+    return map;
+  }, [courses]);
+
+  const toggleDomain = (domain: string) =>
+    setCollapsedDomains(prev => { const n = new Set(prev); n.has(domain) ? n.delete(domain) : n.add(domain); return n; });
 
   if (isLoading && selectedCourseId === null) {
     return (
@@ -431,71 +485,126 @@ export function ProductionMode() {
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto scrollable p-5">
+      <div className="flex-1 overflow-y-auto scrollable p-4 flex flex-col gap-3">
         {courses.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-3">
             <BookOpen className="w-10 h-10 text-zinc-800" strokeWidth={1.5} />
             <p className="text-sm text-zinc-700">Aucun document trouvé</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {courses.map((course: any) => {
-              const pct = qaPercent(course.qa_score);
-              const isSelected = selectedIds.has(course.id);
-              return (
-                <div
-                  key={course.id}
-                  onClick={() => setSelectedCourseId(course.id)}
-                  className={`cockpit-card rounded-xl p-4 cursor-pointer group flex flex-col gap-3 transition-all ${
-                    isSelected ? 'ring-1 ring-sky-500/40 bg-sky-500/[0.04]' : ''
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <span onClick={(e) => toggleOne(course.id, e)} className="shrink-0 mt-0.5">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => {}}
-                        className="w-3.5 h-3.5 accent-sky-500 cursor-pointer"
-                      />
-                    </span>
-                    <BookOpen className="w-4 h-4 text-zinc-600 shrink-0 mt-0.5" strokeWidth={1.5} />
-                    <h3 className="text-sm font-medium text-zinc-200 group-hover:text-zinc-100 transition-colors line-clamp-2 leading-snug">
-                      {course.title}
-                    </h3>
-                  </div>
-                  <div className="flex items-center justify-between mt-auto">
-                    <span className={`px-2 py-0.5 rounded-md text-xs font-medium border ${
-                      course.status === 'published' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                      course.status === 'review'    ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
-                      'bg-white/[0.04] text-zinc-500 border-white/[0.06]'
-                    }`}>{course.status}</span>
-                    {course.qa_score != null && (
-                      <span className={`text-xs font-mono ${qaColor(pct)}`}>{pct.toFixed(0)}%</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-zinc-700">
-                    {course.level && <span>{course.level}</span>}
-                    {course.duration && (
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" strokeWidth={1.5} />{course.duration} min
+          [...coursesByDomain.entries()].map(([domain, domainCourses]) => {
+            const isCollapsed = collapsedDomains.has(domain);
+            const publishedCt = domainCourses.filter((c: any) => c.status === 'published').length;
+            const reviewCt    = domainCourses.filter((c: any) => c.status === 'review').length;
+            const draftCt     = domainCourses.filter((c: any) => c.status === 'draft').length;
+            const allDomainChecked = domainCourses.every((c: any) => selectedIds.has(c.id));
+            return (
+              <div key={domain} className="rounded-xl border border-white/[0.07] overflow-hidden bg-white/[0.01]">
+                {/* Domain header */}
+                <div className="flex items-center gap-4 px-5 py-4 bg-white/[0.025] border-b border-white/[0.06]">
+                  <button
+                    onClick={() => toggleDomain(domain)}
+                    className="flex items-center gap-3 flex-1 min-w-0 group/hdr text-left"
+                  >
+                    <div className={`w-9 h-9 rounded-lg border flex items-center justify-center shrink-0 transition-colors ${
+                      isCollapsed ? 'bg-white/[0.03] border-white/[0.06]' : 'bg-indigo-500/8 border-indigo-500/20'
+                    }`}>
+                      <BookOpen className={`w-4 h-4 transition-colors ${
+                        isCollapsed ? 'text-zinc-600' : 'text-indigo-400'
+                      }`} strokeWidth={1.5} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-zinc-200 group-hover/hdr:text-white transition-colors truncate">{domain}</span>
+                        <ChevronRight className={`w-3.5 h-3.5 text-zinc-600 shrink-0 transition-transform duration-200 ${isCollapsed ? '' : 'rotate-90'}`} />
+                      </div>
+                      <p className="text-[11px] text-zinc-600 mt-0.5">
+                        {domainCourses.length} document{domainCourses.length > 1 ? 's' : ''} générés
+                      </p>
+                    </div>
+                  </button>
+                  {/* Stat pills */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {publishedCt > 0 && (
+                      <span className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-lg bg-emerald-500/8 text-emerald-400 border border-emerald-500/15 font-medium">
+                        <Check className="w-3 h-3 shrink-0" />{publishedCt} publié{publishedCt > 1 ? 's' : ''}
                       </span>
                     )}
-                    {sourceDomain(course.source_url) && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setSelectedSourceUrl(course.source_url); setActiveMode('sources'); }}
-                        className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/8 text-emerald-500/70 border border-emerald-500/15 hover:bg-emerald-500/15 hover:text-emerald-400 transition-all text-[10px]"
-                        title="Voir la source"
-                      >
-                        <ExternalLink className="w-2.5 h-2.5" />
-                        {sourceDomain(course.source_url)}
-                      </button>
+                    {reviewCt > 0 && (
+                      <span className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-lg bg-amber-500/8 text-amber-400 border border-amber-500/15 font-medium">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 cockpit-indicator-active shrink-0" />{reviewCt} en revue
+                      </span>
+                    )}
+                    {draftCt > 0 && (
+                      <span className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-lg bg-white/[0.04] text-zinc-500 border border-white/[0.06] font-medium">
+                        {draftCt} brouillon{draftCt > 1 ? 's' : ''}
+                      </span>
                     )}
                   </div>
+                  {/* Select-all for group */}
+                  <label
+                    className="flex items-center cursor-pointer shrink-0"
+                    title="Sélectionner tout le groupe"
+                    onClick={e => { e.preventDefault(); if (allDomainChecked) setSelectedIds(prev => { const n = new Set(prev); domainCourses.forEach((c: any) => n.delete(c.id)); return n; }); else setSelectedIds(prev => { const n = new Set(prev); domainCourses.forEach((c: any) => n.add(c.id)); return n; }); }}
+                  >
+                    <input type="checkbox" readOnly checked={allDomainChecked} className="w-3.5 h-3.5 accent-sky-500 cursor-pointer" />
+                  </label>
                 </div>
-              );
-            })}
-          </div>
+
+                {/* Course rows */}
+                {!isCollapsed && (
+                  <div>
+                    {domainCourses.map((course: any) => {
+                      const pct = qaPercent(course.qa_score);
+                      const isSelected = selectedIds.has(course.id);
+                      return (
+                        <div
+                          key={course.id}
+                          onClick={() => setSelectedCourseId(course.id)}
+                          className={`group flex items-center gap-3 px-5 py-3 border-b border-white/[0.04] last:border-b-0 hover:bg-white/[0.025] transition-all duration-100 cursor-pointer ${
+                            isSelected ? 'bg-sky-500/[0.04]' : ''
+                          }`}
+                        >
+                          <div onClick={(e) => toggleOne(course.id, e)} className="shrink-0">
+                            <input type="checkbox" checked={isSelected} readOnly onChange={()=>{}} className="w-3 h-3 accent-sky-500 cursor-pointer" />
+                          </div>
+                          <BookOpen className="w-3.5 h-3.5 text-zinc-600 shrink-0" strokeWidth={1.5} />
+                          <h3 className="text-sm font-medium text-zinc-300 group-hover:text-zinc-100 transition-colors flex-1 min-w-0 truncate leading-snug">{course.title}</h3>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {course.content_type && (
+                              <span className={`text-[10px] px-2 py-0.5 rounded-md font-medium border ${CT_CLS[course.content_type] ?? 'bg-white/[0.04] text-zinc-500 border-white/[0.06]'}`}>
+                                {CT_LABEL[course.content_type] ?? course.content_type}
+                              </span>
+                            )}
+                            {course.topic && (
+                              <span className="text-[10px] text-zinc-600 truncate max-w-[120px]">{course.topic}</span>
+                            )}
+                            {course.level && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/[0.04] text-zinc-600 border border-white/[0.05]">{course.level}</span>
+                            )}
+                            <span className="flex items-center gap-1 text-[10px] text-zinc-700">
+                              <Clock className="w-2.5 h-2.5" strokeWidth={1.5} />{readingTime(course)}
+                            </span>
+                            {course.qa_score != null && (
+                              <span className={`text-[11px] font-mono font-semibold ${qaColor(pct)}`}>{pct.toFixed(0)}%</span>
+                            )}
+                            <span className={`text-[10px] px-2 py-0.5 rounded-md font-medium border ${
+                              course.status === 'published' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                              course.status === 'review'    ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                              'bg-white/[0.04] text-zinc-500 border-white/[0.06]'
+                            }`}>{course.status}</span>
+                            <span className="text-[10px] text-zinc-700 font-mono tabular-nums w-12 text-right">
+                              {new Date(course.created_at).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })
         )}
       </div>
     </div>
