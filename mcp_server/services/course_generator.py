@@ -526,6 +526,12 @@ class CourseGeneratorService:
             if field not in course_data:
                 raise ValueError(f"LLM response missing required field: {field}")
         
+        # Override LLM-estimated duration with actual word count (more reliable).
+        # Technical content: ~200 words/min; minimum 1 min.
+        if course_data.get("content"):
+            word_count = len(course_data["content"].split())
+            course_data["estimated_duration_minutes"] = max(1, round(word_count / 200))
+        
         return course_data, usage
     
     def _format_sources(self, items: List[Dict]) -> str:

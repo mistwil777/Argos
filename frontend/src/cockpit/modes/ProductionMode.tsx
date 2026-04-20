@@ -177,11 +177,16 @@ function CourseReader({ courseId, onBack }: { courseId: number; onBack: () => vo
               <Layers className="w-3 h-3 shrink-0" strokeWidth={1.5} />{course.level}
             </span>
           )}
-          {course.duration && (
-            <span className="flex items-center gap-1 text-xs text-zinc-600">
-              <Clock className="w-3 h-3 shrink-0" strokeWidth={1.5} />{course.duration} min
-            </span>
-          )}
+          {course.content
+            ? <span className="flex items-center gap-1 text-xs text-zinc-600">
+                <Clock className="w-3 h-3 shrink-0" strokeWidth={1.5} />{readingTime(course)}
+              </span>
+            : course.duration
+              ? <span className="flex items-center gap-1 text-xs text-zinc-600">
+                  <Clock className="w-3 h-3 shrink-0" strokeWidth={1.5} />{course.duration} min
+                </span>
+              : null
+          }
           {course.qa_score != null && (
             <span className={`flex items-center gap-1 text-xs font-mono ${qaColor(pct)}`}>
               <TrendingUp className="w-3 h-3 shrink-0" strokeWidth={1.5} />QA {pct.toFixed(0)}%
