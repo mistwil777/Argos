@@ -88,7 +88,8 @@ class ClassifierService:
         llm_provider: LLMProvider,
         db_manager: DatabaseManager,
         temperature: float = 0.3,
-        max_tokens: int = 800
+        max_tokens: int = 800,
+        top_p: float = 0.9
     ):
         """
         Initialize ClassifierService.
@@ -103,10 +104,11 @@ class ClassifierService:
         self.db = db_manager
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.top_p = top_p
         
         logger.info(
             f"ClassifierService initialized with {type(llm_provider).__name__}",
-            extra={"temperature": temperature}
+            extra={"temperature": temperature, "top_p": top_p}
         )
     
     # ============================================
@@ -314,7 +316,8 @@ class ClassifierService:
                 prompt=prompt,
                 system_prompt=system_prompt,
                 temperature=self.temperature,
-                max_tokens=self.max_tokens
+                max_tokens=self.max_tokens,
+                top_p=self.top_p
             )
             
             logger.debug(f"LLM response received: {usage.get('total_tokens', 0)} tokens")

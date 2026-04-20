@@ -20,7 +20,8 @@ class LLMProvider(ABC):
         prompt: str,
         system_prompt: str,
         temperature: float = 0.3,
-        max_tokens: int = 500
+        max_tokens: int = 1000,
+        top_p: float = 0.95
     ) -> Tuple[str, Dict]:
         """
         Generate text from prompt.
@@ -30,6 +31,7 @@ class LLMProvider(ABC):
             system_prompt: System instruction
             temperature: Sampling temperature
             max_tokens: Maximum tokens to generate
+            top_p: Nucleus sampling — cumulative probability threshold (0.0–1.0)
         
         Returns:
             Tuple of (generated_text, usage_dict)
@@ -66,7 +68,8 @@ class OpenAIProvider(LLMProvider):
         prompt: str,
         system_prompt: str,
         temperature: float = 0.3,
-        max_tokens: int = 500
+        max_tokens: int = 1000,
+        top_p: float = 0.95
     ) -> Tuple[str, Dict]:
         """Generate text using OpenAI API."""
         
@@ -79,6 +82,7 @@ class OpenAIProvider(LLMProvider):
                 ],
                 temperature=temperature,
                 max_tokens=max_tokens,
+                top_p=top_p,
                 response_format={"type": "json_object"}
             )
             
@@ -139,7 +143,8 @@ class AWSBedrockProvider(LLMProvider):
         prompt: str,
         system_prompt: str,
         temperature: float = 0.3,
-        max_tokens: int = 500
+        max_tokens: int = 1000,
+        top_p: float = 0.95
     ) -> Tuple[str, Dict]:
         """Generate text using AWS Bedrock."""
         
@@ -159,7 +164,8 @@ class AWSBedrockProvider(LLMProvider):
                     ],
                     "inferenceConfig": {
                         "temperature": temperature,
-                        "max_new_tokens": max_tokens
+                        "max_new_tokens": max_tokens,
+                        "topP": top_p
                     }
                 }
             # Claude format (if using Claude via Bedrock)
@@ -168,6 +174,7 @@ class AWSBedrockProvider(LLMProvider):
                     "anthropic_version": "bedrock-2023-05-31",
                     "max_tokens": max_tokens,
                     "temperature": temperature,
+                    "top_p": top_p,
                     "system": system_prompt,
                     "messages": [
                         {"role": "user", "content": prompt}

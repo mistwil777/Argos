@@ -183,7 +183,8 @@ class CourseGeneratorService:
         llm_provider: LLMProvider,
         db_manager: DatabaseManager,
         temperature: float = 0.7,
-        max_tokens: int = 4000
+        max_tokens: int = 4000,
+        top_p: float = 0.95
     ):
         """
         Initialize CourseGeneratorService.
@@ -198,6 +199,7 @@ class CourseGeneratorService:
         self.db = db_manager
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.top_p = top_p
         
         logger.info(
             f"CourseGeneratorService initialized with {type(llm_provider).__name__}",
@@ -551,7 +553,8 @@ Source {i}:
             prompt=prompt,
             system_prompt=system_prompt,
             temperature=temp,
-            max_tokens=self.max_tokens
+            max_tokens=self.max_tokens,
+            top_p=self.top_p
         )
         
         return content, usage

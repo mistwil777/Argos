@@ -58,7 +58,8 @@ class RAGService:
         db_manager: DatabaseManager,
         top_k: int = 5,
         temperature: float = 0.5,
-        max_tokens: int = 800
+        max_tokens: int = 1500,
+        top_p: float = 0.95
     ):
         """
         Initialize RAGService.
@@ -70,6 +71,7 @@ class RAGService:
             top_k: Number of chunks to retrieve
             temperature: LLM temperature
             max_tokens: Maximum tokens for answer
+            top_p: Nucleus sampling threshold
         """
         self.llm_provider = llm_provider
         self.vector_store = vector_store
@@ -77,13 +79,15 @@ class RAGService:
         self.top_k = top_k
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.top_p = top_p
         
         logger.info(
             f"RAGService initialized",
             extra={
                 "llm_model": getattr(llm_provider, 'model', None) or getattr(llm_provider, 'model_id', 'unknown'),
                 "top_k": top_k,
-                "temperature": temperature
+                "temperature": temperature,
+                "top_p": top_p
             }
         )
     
@@ -328,7 +332,8 @@ class RAGService:
             prompt=user_prompt,
             system_prompt=system_prompt,
             temperature=self.temperature,
-            max_tokens=self.max_tokens
+            max_tokens=self.max_tokens,
+            top_p=self.top_p
         )
         
         return answer, usage
