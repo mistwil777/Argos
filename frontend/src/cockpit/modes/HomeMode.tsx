@@ -98,23 +98,23 @@ export function HomeMode() {
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         {/* Top-left sky glow */}
         <div
-          className="absolute -top-40 -left-20 w-[600px] h-[500px] rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(14,165,233,0.13) 0%, transparent 68%)' }}
+          className="absolute -top-60 -left-40 w-[900px] h-[750px] rounded-full"
+          style={{ background: 'radial-gradient(circle, rgba(14,165,233,0.14) 0%, transparent 65%)' }}
         />
         {/* Bottom-right indigo glow */}
         <div
-          className="absolute -bottom-40 right-0 w-[700px] h-[550px] rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(99,102,241,0.10) 0%, transparent 68%)' }}
+          className="absolute -bottom-60 right-0 w-[1000px] h-[800px] rounded-full"
+          style={{ background: 'radial-gradient(circle, rgba(99,102,241,0.11) 0%, transparent 65%)' }}
         />
-        {/* Center-right emerald whisper */}
+        {/* Center emerald whisper */}
         <div
-          className="absolute top-1/3 right-1/4 w-[350px] h-[280px] rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.06) 0%, transparent 70%)' }}
+          className="absolute top-1/4 right-1/3 w-[600px] h-[500px] rounded-full"
+          style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.07) 0%, transparent 65%)' }}
         />
       </div>
 
       {/* ── LEFT: Brand panel ─────────────────────────────────────────────── */}
-<div className="relative border-r border-white/[0.08] flex flex-col justify-between px-14 py-12 overflow-y-auto">
+<div className="relative border-r border-white/[0.08] flex flex-col justify-between pl-20 pr-12 py-12 overflow-y-auto">
 
         <div className="flex flex-col gap-10">
           {/* Logo + brand */}
@@ -126,11 +126,12 @@ export function HomeMode() {
               Veille<span className="text-sky-500">Ops</span>
             </h1>
             <p className="text-base font-semibold text-zinc-400 tracking-tight mb-5">
-              Technologique · Pilotée par l'IA
+              Votre radar IA pour ne rien manquer
             </p>
             <p className="text-sm text-zinc-400 leading-relaxed max-w-[320px]">
-              Pipeline IA end-to-end : collecte des sources, classification
-              automatique et génération de contenus structurés.
+              VeilleOps surveille le web à votre place, trie les contenus
+              importants par l'IA, et les transforme en synthèses et cours
+              prêts à l'emploi.
             </p>
           </div>
 
