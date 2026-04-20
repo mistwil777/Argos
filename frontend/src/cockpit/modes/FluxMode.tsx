@@ -2,7 +2,7 @@
 import { useState, useMemo } from 'react';
 import { useItems, useDeleteItem, useClassifyBatch, useCourses } from '../../hooks/useApi';
 import { useCockpit } from '../context/CockpitContext';
-import { AlertCircle, Trash2, ExternalLink, Sparkles, BookOpen, Clock, CheckCircle2, Layers, ChevronRight } from 'lucide-react';
+import { AlertCircle, Trash2, Globe, Sparkles, BookOpen, Clock, CheckCircle2, Layers, ChevronRight } from 'lucide-react';
 import type { Item } from '../../types';
 
 function sourceDomain(url?: string | null): string | null {
@@ -69,7 +69,7 @@ function ItemRow({ item, selected, courses, onSelect, onOpen, onDelete, onSource
             {item.importance && <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${IMP_CLS[item.importance] ?? ''}`}>{IMP_LABEL[item.importance] ?? item.importance}</span>}
             {domain && (
               <button onClick={(e)=>{e.stopPropagation();item.source_url&&onSourceClick(item.source_url);}} className="flex items-center gap-1 text-[10px] text-zinc-700 hover:text-sky-400 transition-colors">
-                <ExternalLink className="w-2.5 h-2.5 shrink-0" />{domain}
+                <Globe className="w-2.5 h-2.5 shrink-0" />{domain}
               </button>
             )}
             <span className="text-[10px] text-zinc-700 font-mono tabular-nums w-12 text-right">
@@ -261,7 +261,7 @@ export function FluxMode() {
                   className="flex items-center gap-3 flex-1 min-w-0 group/hdr text-left"
                 >
                   <div className={`w-9 h-9 rounded-lg border flex items-center justify-center shrink-0 transition-colors ${isCollapsed ? 'bg-white/[0.03] border-white/[0.06]' : 'bg-sky-500/8 border-sky-500/20'}`}>
-                    <ExternalLink className={`w-4 h-4 transition-colors ${isCollapsed ? 'text-zinc-600' : 'text-sky-400'}`} strokeWidth={1.5} />
+                    <Globe className={`w-4 h-4 transition-colors ${isCollapsed ? 'text-zinc-600' : 'text-sky-400'}`} strokeWidth={1.5} />
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">

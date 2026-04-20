@@ -13,7 +13,7 @@ const MODE_META: Record<CockpitMode, { label: string; icon: React.ElementType }>
   home:       { label: 'Accueil',   icon: Home          },
   flux:       { label: 'Flux',      icon: FileText      },
   production: { label: 'Contenus',  icon: BookOpen      },
-  assistant:  { label: 'Assistant', icon: MessageSquare },
+  assistant:  { label: 'Conversation', icon: MessageSquare },
   sources:    { label: 'Sources',   icon: Rss           },
   dashboard:  { label: 'Analyse',   icon: BarChart2     },
   devops:     { label: 'DevOps',    icon: Terminal      },

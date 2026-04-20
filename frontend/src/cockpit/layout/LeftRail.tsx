@@ -13,7 +13,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'sources',    icon: Rss,           label: 'Sources'   },
   { id: 'flux',       icon: FileText,      label: 'Flux'      },
   { id: 'production', icon: BookOpen,      label: 'Contenu'   },
-  { id: 'assistant',  icon: MessageSquare, label: 'Assistant' },
+  { id: 'assistant',  icon: MessageSquare, label: 'Conversation' },
   { id: 'dashboard',  icon: BarChart2,     label: 'Analyse'   },
 ];
 

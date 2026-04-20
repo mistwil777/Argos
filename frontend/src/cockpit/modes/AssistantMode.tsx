@@ -555,7 +555,7 @@ export function AssistantMode() {
             </button>
             <div className="w-px h-4 bg-white/[0.08]" />
             <span className="text-xs text-zinc-500 truncate max-w-[200px]">
-              {activeConv?.title ?? 'Chat RAG'}
+              {activeConv?.title ?? 'Conversation'}
             </span>
           </div>
           <div className="flex items-center gap-1">
@@ -589,7 +589,7 @@ export function AssistantMode() {
               <div className="text-center">
                 <h2 className="text-sm font-medium text-zinc-400 mb-1">Nouvelle conversation</h2>
                 <p className="text-xs text-zinc-700 max-w-sm leading-relaxed">
-                  Posez des questions sur vos documents. L'assistant utilise la recherche sémantique
+                  Posez des questions sur vos documents. La recherche sémantique
                   pour vous fournir les réponses les plus pertinentes.
                 </p>
               </div>
