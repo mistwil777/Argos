@@ -1,6 +1,4 @@
-// HomeMode - Split Screen asymétrique — redesigned (DESIGN_VARIANCE:8)
-// LEFT 42%: Brand + pipeline teaser + live stats
-// RIGHT 58%: Workspace cards avec spotlight effect + stagger entrance
+// HomeMode - Split Screen asymétrique — redesigned v2 (gradient bg, full-height)
 import { useRef, useState } from 'react';
 import { useWorkspaces, useGlobalStats } from '../../hooks/useApi';
 import { useCockpit } from '../context/CockpitContext';
@@ -70,25 +68,6 @@ function WorkspaceCard({ ws, index, onClick }: {
   );
 }
 
-// ── Stat block ─────────────────────────────────────────────────────────────────
-function StatBlock({ value, label, color }: {
-  value: string | number; label: string; color: string;
-}) {
-  return (
-    <div className="flex flex-col">
-      <span
-        className="text-3xl font-bold font-mono tracking-tight tabular-nums leading-none"
-        style={{ color }}
-      >
-        {value}
-      </span>
-      <span className="text-[10px] text-zinc-600 uppercase tracking-wider mt-1.5">
-        {label}
-      </span>
-    </div>
-  );
-}
-
 // ── Pipeline stage decorative ──────────────────────────────────────────────────
 const STAGES = [
   { label: 'Collecte',   color: '#0ea5e9' },
@@ -112,145 +91,157 @@ export function HomeMode() {
 
   return (
     <div
-      className="h-full overflow-hidden"
-      style={{ display: 'grid', gridTemplateColumns: '42% 58%' }}
+      className="h-full overflow-hidden relative"
+      style={{ display: 'grid', gridTemplateColumns: '44% 56%' }}
     >
+      {/* ── Decorative gradient blobs ────────────────────────────────────── */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        {/* Top-left sky glow */}
+        <div
+          className="absolute -top-40 -left-20 w-[600px] h-[500px] rounded-full"
+          style={{ background: 'radial-gradient(circle, rgba(14,165,233,0.13) 0%, transparent 68%)' }}
+        />
+        {/* Bottom-right indigo glow */}
+        <div
+          className="absolute -bottom-40 right-0 w-[700px] h-[550px] rounded-full"
+          style={{ background: 'radial-gradient(circle, rgba(99,102,241,0.10) 0%, transparent 68%)' }}
+        />
+        {/* Center-right emerald whisper */}
+        <div
+          className="absolute top-1/3 right-1/4 w-[350px] h-[280px] rounded-full"
+          style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.06) 0%, transparent 70%)' }}
+        />
+      </div>
 
       {/* ── LEFT: Brand panel ─────────────────────────────────────────────── */}
-      <div className="border-r border-white/[0.05] flex flex-col justify-between p-10 overflow-y-auto">
+      <div className="relative border-r border-white/[0.05] flex flex-col justify-between px-14 py-12 overflow-y-auto">
 
-        <div>
-          {/* Logo */}
-          <div className="flex items-center gap-3 mb-10">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-sky-500 to-sky-700 flex items-center justify-center shadow-2xl shadow-sky-500/25">
-              <Zap className="w-6 h-6 text-white" strokeWidth={2.5} />
+        <div className="flex flex-col gap-10">
+          {/* Logo + brand */}
+          <div>
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-sky-500 to-sky-700 flex items-center justify-center shadow-2xl shadow-sky-500/30 mb-8">
+              <Zap className="w-7 h-7 text-white" strokeWidth={2.5} />
             </div>
+            <h1 className="text-[3.5rem] font-bold tracking-tight leading-[1.05] text-zinc-100 mb-2">
+              Veille<span className="text-sky-500">Ops</span>
+            </h1>
+            <p className="text-base font-semibold text-zinc-400 tracking-tight mb-5">
+              Technologique · Pilotée par l'IA
+            </p>
+            <p className="text-sm text-zinc-500 leading-relaxed max-w-[320px]">
+              Pipeline IA end-to-end : collecte des sources, classification
+              automatique et génération de contenus structurés.
+            </p>
           </div>
 
-          {/* Headline — left aligned, NOT centered */}
-          <h1 className="text-[3.25rem] font-bold tracking-tight leading-[1.07] text-zinc-100 mb-1">
-            Veille<span className="text-sky-500">Ops</span>
-          </h1>
-          <p className="text-base font-semibold text-zinc-400 tracking-tight mb-6">
-            Technologique · Pilotée par l'IA
-          </p>
-
-          <p className="text-sm text-zinc-500 leading-relaxed max-w-[300px] mb-10">
-            Pipeline IA end-to-end : collecte des sources, classification
-            automatique et génération de contenus structurés.
-          </p>
-
-          {/* Pipeline stages — decorative */}
-          <div className="flex items-center flex-wrap gap-0 mb-10">
-            {STAGES.map((s, i) => (
-              <div key={s.label} className="flex items-center">
-                <div className="flex flex-col items-center gap-1.5">
+          {/* Pipeline stages */}
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-700 mb-4">Pipeline</p>
+            <div className="flex flex-col gap-3">
+              {STAGES.map((s, i) => (
+                <div key={s.label} className="flex items-center gap-3">
                   <div
-                    className="w-2 h-2 rounded-full"
-                    style={{ backgroundColor: s.color, boxShadow: `0 0 6px ${s.color}50` }}
-                  />
-                  <span className="text-[9px] text-zinc-700 whitespace-nowrap">{s.label}</span>
-                </div>
-                {i < STAGES.length - 1 && (
-                  <div
-                    className="w-6 h-px mb-4 mx-0.5"
+                    className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-[10px] font-bold"
                     style={{
-                      background: `linear-gradient(90deg, ${s.color}35, ${STAGES[i + 1].color}35)`,
+                      backgroundColor: `${s.color}18`,
+                      color: s.color,
+                      border: `1px solid ${s.color}30`,
                     }}
-                  />
-                )}
-              </div>
-            ))}
+                  >
+                    {i + 1}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-zinc-300">{s.label}</span>
+                      <div
+                        className="h-px flex-1 rounded"
+                        style={{ background: `linear-gradient(90deg, ${s.color}30, transparent)` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Live stats strip — bottom of left panel */}
+        {/* Live stats strip */}
         {stats ? (
-          <div className="grid grid-cols-3 divide-x divide-white/[0.06] pt-6 border-t border-white/[0.06]">
-            <StatBlock
-              value={(stats.total_items ?? 0).toLocaleString('fr-FR')}
-              label="Items"
-              color="#0ea5e9"
-            />
-            <div className="pl-4">
-              <StatBlock
-                value={stats.classified_items ?? 0}
-                label="Classifiés"
-                color="#6366f1"
-              />
-            </div>
-            <div className="pl-4">
-              <StatBlock
-                value={stats.published_courses ?? 0}
-                label="Publiés"
-                color="#10b981"
-              />
-            </div>
+          <div className="grid grid-cols-3 gap-4 pt-8 border-t border-white/[0.06]">
+            {[
+              { value: (stats.total_items ?? 0).toLocaleString('fr-FR'), label: 'Items', color: '#0ea5e9' },
+              { value: stats.classified_items ?? 0, label: 'Classifiés', color: '#6366f1' },
+              { value: stats.published_courses ?? 0, label: 'Publiés', color: '#10b981' },
+            ].map(({ value, label, color }) => (
+              <div
+                key={label}
+                className="rounded-xl px-4 py-3"
+                style={{ background: `${color}08`, border: `1px solid ${color}18` }}
+              >
+                <span className="text-2xl font-bold font-mono tracking-tight tabular-nums leading-none block" style={{ color }}>
+                  {value}
+                </span>
+                <span className="text-[10px] text-zinc-600 uppercase tracking-wider mt-1.5 block">{label}</span>
+              </div>
+            ))}
           </div>
         ) : (
-          <div className="grid grid-cols-3 divide-x divide-white/[0.06] pt-6 border-t border-white/[0.06] gap-4">
+          <div className="grid grid-cols-3 gap-4 pt-8 border-t border-white/[0.06]">
             {[1, 2, 3].map(i => (
-              <div key={i} className="space-y-2">
-                <div className="h-8 rounded shimmer-box w-16" />
-                <div className="h-2.5 rounded shimmer-box w-10" />
-              </div>
+              <div key={i} className="rounded-xl p-4 space-y-2 shimmer-box h-[72px]" />
             ))}
           </div>
         )}
       </div>
 
       {/* ── RIGHT: Workspace panel ─────────────────────────────────────────── */}
-      <div className="flex flex-col overflow-hidden">
+      <div className="relative flex flex-col overflow-hidden">
 
         {/* Right header */}
-        <div className="flex items-center justify-between px-10 pt-10 pb-6 shrink-0 border-b border-white/[0.04]">
+        <div className="flex items-end justify-between px-12 pt-12 pb-7 shrink-0 border-b border-white/[0.04]">
           <div>
-            <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-widest">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600 mb-1">
               Espaces de travail
+            </p>
+            <h2 className="text-2xl font-bold text-zinc-100 tracking-tight">
+              {workspaces.length > 0
+                ? `${workspaces.length} espace${workspaces.length > 1 ? 's' : ''} configuré${workspaces.length > 1 ? 's' : ''}`
+                : 'Démarrer'}
             </h2>
-            {workspaces.length > 0 && (
-              <p className="text-[11px] text-zinc-700 mt-0.5">
-                {workspaces.length} espace{workspaces.length > 1 ? 's' : ''} configuré
-                {workspaces.length > 1 ? 's' : ''}
-              </p>
-            )}
           </div>
           <button
             onClick={() => setModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-500/10 border border-sky-500/20 text-sky-400 text-xs font-medium hover:bg-sky-500/15 transition-colors"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-400 text-sm font-medium hover:bg-sky-500/15 transition-colors shrink-0"
           >
-            <Plus className="w-3 h-3" strokeWidth={2} />
+            <Plus className="w-3.5 h-3.5" strokeWidth={2} />
             Nouveau
           </button>
         </div>
 
         {/* Card list */}
-        <div className="flex-1 overflow-y-auto px-10 py-6 space-y-2">
+        <div className="flex-1 overflow-y-auto px-12 py-6 space-y-2.5">
 
-          {/* Skeletons while loading */}
           {isLoading && (
-            <>
-              {[1, 2, 3].map(i => (
-                <div key={i} className="h-[70px] rounded-xl shimmer-box" />
-              ))}
-            </>
+            <>{[1, 2, 3].map(i => <div key={i} className="h-[72px] rounded-xl shimmer-box" />)}</>
           )}
 
-          {/* Empty state */}
           {!isLoading && workspaces.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full gap-4 py-16">
-              <div className="w-14 h-14 rounded-2xl border border-dashed border-white/[0.10] flex items-center justify-center">
-                <Layers className="w-6 h-6 text-zinc-700" strokeWidth={1} />
+            <div className="flex flex-col items-center justify-center h-full gap-5 py-20">
+              <div
+                className="w-16 h-16 rounded-2xl flex items-center justify-center"
+                style={{ background: 'radial-gradient(circle, rgba(14,165,233,0.08) 0%, transparent 70%)', border: '1px dashed rgba(14,165,233,0.25)' }}
+              >
+                <Layers className="w-7 h-7 text-zinc-600" strokeWidth={1} />
               </div>
               <div className="text-center">
-                <p className="text-sm font-medium text-zinc-500">Aucun espace de travail</p>
-                <p className="text-xs text-zinc-700 mt-1 max-w-[220px]">
-                  Créez votre premier espace pour lancer la collecte de veille.
+                <p className="text-sm font-semibold text-zinc-400">Aucun espace de travail</p>
+                <p className="text-xs text-zinc-600 mt-1.5 max-w-[240px]">
+                  Créez votre premier espace pour lancer la collecte de veille IA.
                 </p>
               </div>
               <button
                 onClick={() => setModalOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-400 text-sm font-medium hover:bg-sky-500/15 transition-colors"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-400 text-sm font-medium hover:bg-sky-500/15 transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" strokeWidth={2} />
                 Créer un espace
@@ -258,14 +249,8 @@ export function HomeMode() {
             </div>
           )}
 
-          {/* Workspace cards */}
           {workspaces.map((ws: any, i: number) => (
-            <WorkspaceCard
-              key={ws.id}
-              ws={ws}
-              index={i}
-              onClick={() => enterWorkspace(ws.id)}
-            />
+            <WorkspaceCard key={ws.id} ws={ws} index={i} onClick={() => enterWorkspace(ws.id)} />
           ))}
         </div>
       </div>
@@ -278,3 +263,4 @@ export function HomeMode() {
     </div>
   );
 }
+
