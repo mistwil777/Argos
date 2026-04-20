@@ -1805,12 +1805,25 @@ def _check_admin(token: Optional[str]):
 
 
 # Files to index from the codebase (relative to /app)
-_CODEBASE_EXTENSIONS = {".py", ".ts", ".tsx", ".sql", ".yaml", ".yml", ".md"}
+_CODEBASE_EXTENSIONS = {".py", ".ts", ".tsx", ".sql", ".yaml", ".yml", ".md", ".sh", ".json"}
 _CODEBASE_ROOTS = [
     Path("/app/mcp_server"),
+    Path("/app/docs"),
+    Path("/app/database"),
+    Path("/app/scripts"),
+    Path("/app/workflows"),
+    Path("/app/migrations"),
+    Path("/app/n8n"),
+    Path("/app/frontend/src"),
+    Path("/app/config"),
 ]
-_CODEBASE_SKIP_DIRS = {"__pycache__", ".git", "node_modules", "dist", ".venv", "venv"}
-_CODEBASE_MAX_FILE_BYTES = 200_000  # skip very large files
+# Root-level .md files via the full project_root mount (README, CAHIER_DES_CHARGES, etc.)
+_CODEBASE_ROOT_LEVEL = Path("/app/project_root")
+# Subdirs to skip when walking project_root (already covered by specific roots above)
+_CODEBASE_SKIP_DIRS = {"__pycache__", ".git", "node_modules", "dist", ".venv", "venv", "__snapshots__", ".cache"}
+_CODEBASE_SKIP_DIRS_ROOT = _CODEBASE_SKIP_DIRS | {"mcp_server", "docs", "database", "scripts", "workflows", "migrations", "n8n", "frontend", "config", "data", "logs", "tests", "lancedb"}
+_CODEBASE_SKIP_FILES = {"package-lock.json", "yarn.lock", "pnpm-lock.yaml"}
+_CODEBASE_MAX_FILE_BYTES = 300_000  # skip very large files
 
 
 def _walk_codebase():
@@ -1828,12 +1841,47 @@ def _walk_codebase():
                 continue
             if fpath.suffix not in _CODEBASE_EXTENSIONS:
                 continue
+            if fpath.name in _CODEBASE_SKIP_FILES:
+                continue
             if fpath.stat().st_size > _CODEBASE_MAX_FILE_BYTES:
                 continue
             try:
                 content = fpath.read_text(encoding="utf-8", errors="replace")
                 rel = str(fpath.relative_to("/app"))
                 yield rel, content
+            except Exception:
+                pass
+
+    # Also index root-level files (README, CAHIER_DES_CHARGES, SOLUTIONS, etc.)
+    if _CODEBASE_ROOT_LEVEL.exists():
+        for fpath in _CODEBASE_ROOT_LEVEL.iterdir():
+            if fpath.is_dir():
+                # skip subdirs already covered
+                if fpath.name in _CODEBASE_SKIP_DIRS_ROOT:
+                    continue
+                # recurse one level for any unexpected subdir not covered above
+                for sub in fpath.rglob("*"):
+                    if sub.is_dir() or sub.suffix not in _CODEBASE_EXTENSIONS:
+                        continue
+                    if sub.name in _CODEBASE_SKIP_FILES:
+                        continue
+                    if sub.stat().st_size > _CODEBASE_MAX_FILE_BYTES:
+                        continue
+                    try:
+                        content = sub.read_text(encoding="utf-8", errors="replace")
+                        yield f"project_root/{sub.relative_to(_CODEBASE_ROOT_LEVEL)}", content
+                    except Exception:
+                        pass
+                continue
+            if fpath.suffix not in _CODEBASE_EXTENSIONS:
+                continue
+            if fpath.name in _CODEBASE_SKIP_FILES:
+                continue
+            if fpath.stat().st_size > _CODEBASE_MAX_FILE_BYTES:
+                continue
+            try:
+                content = fpath.read_text(encoding="utf-8", errors="replace")
+                yield f"project_root/{fpath.name}", content
             except Exception:
                 pass
 

@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useGlobalStats, useWorkspaces } from '../../hooks/useApi';
 import {
   Bell, PanelRightOpen, PanelRightClose, ChevronDown,
-  Zap, FileText, BookOpen, MessageSquare, Rss, Loader2, BarChart2, Home,
+  Zap, FileText, BookOpen, MessageSquare, Rss, Loader2, BarChart2, Home, Terminal,
 } from 'lucide-react';
 import { UserMenu } from '../components/UserMenu';
 import { WorkspaceModal } from '../components/WorkspaceModal';
@@ -16,6 +16,7 @@ const MODE_META: Record<CockpitMode, { label: string; icon: React.ElementType }>
   assistant:  { label: 'Assistant', icon: MessageSquare },
   sources:    { label: 'Sources',   icon: Rss           },
   dashboard:  { label: 'Analyse',   icon: BarChart2     },
+  devops:     { label: 'DevOps',    icon: Terminal      },
 };
 
 export function TopBar() {

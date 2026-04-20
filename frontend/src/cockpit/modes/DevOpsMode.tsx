@@ -1,6 +1,6 @@
 // DevOpsMode — Admin-only: codebase RAG ingestion + auto-diagnostic
 import { useState, useRef, useEffect } from 'react';
-import { Terminal, RefreshCw, Send, FileCode, Layers, Zap, ChevronRight, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Terminal, RefreshCw, Send, FileCode, Layers, Zap, ChevronRight, AlertTriangle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 
 const ADMIN_TOKEN_KEY = 'veilleops_admin_token';
 
@@ -61,6 +61,7 @@ interface Msg {
 // ─── Gate — PIN input ──────────────────────────────────────────────────────────
 function AdminGate({ onUnlock }: { onUnlock: (token: string) => void }) {
   const [pin, setPin] = useState('');
+  const [showPin, setShowPin] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -93,14 +94,24 @@ function AdminGate({ onUnlock }: { onUnlock: (token: string) => void }) {
         </p>
       </div>
       <form onSubmit={handleSubmit} className="flex flex-col gap-3 w-72">
-        <input
-          type="password"
-          value={pin}
-          onChange={(e) => setPin(e.target.value)}
-          placeholder="Token admin…"
-          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-zinc-200 placeholder-zinc-700 focus:outline-none focus:border-amber-500/40 transition-colors"
-          autoFocus
-        />
+        <div className="relative">
+          <input
+            type={showPin ? 'text' : 'password'}
+            value={pin}
+            onChange={(e) => setPin(e.target.value)}
+            placeholder="Token admin…"
+            className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 pr-10 text-sm text-zinc-200 placeholder-zinc-700 focus:outline-none focus:border-amber-500/40 transition-colors"
+            autoFocus
+          />
+          <button
+            type="button"
+            onClick={() => setShowPin(v => !v)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-400 transition-colors"
+            tabIndex={-1}
+          >
+            {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+        </div>
         {error && (
           <p className="text-xs text-red-400 flex items-center gap-1.5">
             <AlertTriangle className="w-3 h-3 shrink-0" />{error}

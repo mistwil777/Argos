@@ -101,6 +101,14 @@ services:
     volumes:
       - ./mcp_server:/app/mcp_server:ro
       - ./config:/app/config:ro
+      - ./docs:/app/docs:ro
+      - ./database:/app/database:ro
+      - ./scripts:/app/scripts:ro
+      - ./workflows:/app/workflows:ro
+      - ./migrations:/app/migrations:ro
+      - ./n8n:/app/n8n:ro
+      - ./frontend/src:/app/frontend/src:ro
+      - .:/app/project_root:ro
       - lancedb_data:/data/lancedb
       - ./logs:/app/logs
     ports:
