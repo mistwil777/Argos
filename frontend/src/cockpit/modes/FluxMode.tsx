@@ -111,7 +111,7 @@ export function FluxMode() {
   const [filter, setFilter] = useState<Filter>('all');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [sortBy, setSortBy] = useState<'date' | 'importance'>('date');
-  const [collapsedDomains, setCollapsedDomains] = useState<Set<string>>(new Set());
+  const [expandedDomains, setExpandedDomains] = useState<Set<string>>(new Set());
   const wsReady = activeWorkspaceId !== null;
 
   const { data: itemsData, isLoading } = useItems({ workspace_id: activeWorkspaceId ?? undefined }, { enabled: wsReady });
@@ -163,7 +163,7 @@ export function FluxMode() {
   }, [visibleItems]);
 
   const toggleDomain = (domain: string) =>
-    setCollapsedDomains(prev => { const n = new Set(prev); n.has(domain) ? n.delete(domain) : n.add(domain); return n; });
+    setExpandedDomains(prev => { const n = new Set(prev); n.has(domain) ? n.delete(domain) : n.add(domain); return n; });
 
   const allChecked = visibleItems.length > 0 && visibleItems.every(i => selectedIds.has(i.id));
   const someChecked = selectedIds.size > 0;
@@ -246,7 +246,7 @@ export function FluxMode() {
           </div>
         )}
         {!isLoading && [...itemsByDomain.entries()].map(([domain, domainItems]) => {
-          const isCollapsed = collapsedDomains.has(domain);
+          const isCollapsed = !expandedDomains.has(domain);
           const pendingCt = domainItems.filter(i => i.classification_status === 'pending').length;
           const classifiedCt = domainItems.filter(i => i.classification_status === 'classified').length;
           const usedCt = domainItems.filter(i => itemToCourses.has(i.id)).length;

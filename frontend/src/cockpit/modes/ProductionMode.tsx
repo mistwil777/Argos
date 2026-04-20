@@ -317,7 +317,7 @@ export function ProductionMode() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'review' | 'published'>('all');
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [collapsedDomains, setCollapsedDomains] = useState<Set<string>>(new Set());
+  const [expandedDomains, setExpandedDomains] = useState<Set<string>>(new Set());
   const { activeWorkspaceId, setActiveMode, setSelectedSourceUrl } = useCockpit();
   const deleteMutation = useDeleteCourse();
 
@@ -357,7 +357,7 @@ export function ProductionMode() {
   }, [courses]);
 
   const toggleDomain = (domain: string) =>
-    setCollapsedDomains(prev => { const n = new Set(prev); n.has(domain) ? n.delete(domain) : n.add(domain); return n; });
+    setExpandedDomains(prev => { const n = new Set(prev); n.has(domain) ? n.delete(domain) : n.add(domain); return n; });
 
   if (isLoading && selectedCourseId === null) {
     return (
@@ -493,7 +493,7 @@ export function ProductionMode() {
           </div>
         ) : (
           [...coursesByDomain.entries()].map(([domain, domainCourses]) => {
-            const isCollapsed = collapsedDomains.has(domain);
+            const isCollapsed = !expandedDomains.has(domain);
             const publishedCt = domainCourses.filter((c: any) => c.status === 'published').length;
             const reviewCt    = domainCourses.filter((c: any) => c.status === 'review').length;
             const draftCt     = domainCourses.filter((c: any) => c.status === 'draft').length;

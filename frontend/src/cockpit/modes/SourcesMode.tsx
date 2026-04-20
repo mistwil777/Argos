@@ -495,7 +495,7 @@ export function SourcesMode() {
   const [showAdd, setShowAdd] = useState(false);
   const [typeFilter, setTypeFilter] = useState<'all' | SourceType>('all');
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
-  const [collapsedDomains, setCollapsedDomains] = useState<Set<string>>(new Set());
+  const [expandedDomains, setExpandedDomains] = useState<Set<string>>(new Set());
   const collectWorkspaceMutation = useCollectWorkspace();
 
   // Clear selected source URL when leaving this mode or on unmount
@@ -543,7 +543,7 @@ export function SourcesMode() {
   }, [sources]);
 
   const toggleDomain = (domain: string) =>
-    setCollapsedDomains((prev) => {
+    setExpandedDomains((prev) => {
       const next = new Set(prev);
       next.has(domain) ? next.delete(domain) : next.add(domain);
       return next;
@@ -679,7 +679,7 @@ export function SourcesMode() {
                 domain={domain}
                 sources={domainSources}
                 selectedSourceUrl={selectedSourceUrl}
-                collapsed={collapsedDomains.has(domain)}
+                collapsed={!expandedDomains.has(domain)}
                 onToggle={() => toggleDomain(domain)}
               />
             ))}
