@@ -89,7 +89,7 @@ class ClassifierService:
         db_manager: DatabaseManager,
         temperature: float = 0.3,
         max_tokens: int = 800,
-        top_p: float = 0.9
+        top_p: float = 0.5
     ):
         """
         Initialize ClassifierService.

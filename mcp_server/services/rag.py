@@ -59,7 +59,7 @@ class RAGService:
         top_k: int = 5,
         temperature: float = 0.5,
         max_tokens: int = 1500,
-        top_p: float = 0.95
+        top_p: float = 0.5
     ):
         """
         Initialize RAGService.

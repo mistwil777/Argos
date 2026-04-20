@@ -21,7 +21,7 @@ class LLMProvider(ABC):
         system_prompt: str,
         temperature: float = 0.3,
         max_tokens: int = 1000,
-        top_p: float = 0.95
+        top_p: float = 0.5
     ) -> Tuple[str, Dict]:
         """
         Generate text from prompt.
@@ -69,7 +69,7 @@ class OpenAIProvider(LLMProvider):
         system_prompt: str,
         temperature: float = 0.3,
         max_tokens: int = 1000,
-        top_p: float = 0.95
+        top_p: float = 0.5
     ) -> Tuple[str, Dict]:
         """Generate text using OpenAI API."""
         
@@ -144,7 +144,7 @@ class AWSBedrockProvider(LLMProvider):
         system_prompt: str,
         temperature: float = 0.3,
         max_tokens: int = 1000,
-        top_p: float = 0.95
+        top_p: float = 0.5
     ) -> Tuple[str, Dict]:
         """Generate text using AWS Bedrock."""
         
