@@ -93,6 +93,8 @@ services:
       - AWS_REGION=${AWS_REGION:-us-east-1}
       - AWS_BEDROCK_MODEL=${AWS_BEDROCK_MODEL:-us.amazon.nova-pro-v1:0}
       # Cache directories for SentenceTransformer (writable volume)
+      - ADMIN_TOKEN=${ADMIN_TOKEN}
+      # Cache directories for SentenceTransformer (writable volume)
       - TRANSFORMERS_CACHE=/data/lancedb/transformers_cache
       - SENTENCE_TRANSFORMERS_HOME=/data/lancedb/sentence_transformers
       - HF_HOME=/data/lancedb/huggingface
