@@ -23,7 +23,7 @@ function WorkspaceCard({ ws, index, onClick }: {
       ref={ref}
       onMouseMove={onMouseMove}
       onClick={onClick}
-      className="ws-card ws-card-enter group w-full flex items-center gap-4 p-4 rounded-xl border border-white/[0.06] bg-zinc-900/40 hover:border-white/[0.12] text-left transition-colors duration-150"
+      className="ws-card ws-card-enter group w-full flex items-center gap-4 p-4 rounded-xl border border-white/[0.10] bg-zinc-800/50 hover:border-white/[0.18] text-left transition-colors duration-150"
       style={{ '--i': index } as React.CSSProperties}
     >
       {/* Avatar */}
@@ -41,7 +41,7 @@ function WorkspaceCard({ ws, index, onClick }: {
       {/* Info */}
       <div className="flex-1 min-w-0 text-left">
         <div className="flex items-center gap-2">
-          <p className="text-sm font-semibold text-zinc-200 group-hover:text-zinc-100 transition-colors truncate">
+          <p className="text-sm font-semibold text-zinc-100 group-hover:text-white transition-colors truncate">
             {ws.name}
           </p>
           {ws.domain && (
@@ -57,12 +57,12 @@ function WorkspaceCard({ ws, index, onClick }: {
           )}
         </div>
         {ws.description && (
-          <p className="text-xs text-zinc-600 mt-0.5 truncate">{ws.description}</p>
+          <p className="text-xs text-zinc-500 mt-0.5 truncate">{ws.description}</p>
         )}
       </div>
 
-      <ArrowRight
-        className="w-3.5 h-3.5 text-zinc-700 group-hover:text-zinc-400 group-hover:translate-x-0.5 transition-all shrink-0"
+        <ArrowRight
+        className="w-3.5 h-3.5 text-zinc-600 group-hover:text-zinc-300 group-hover:translate-x-0.5 transition-all shrink-0"
       />
     </button>
   );
@@ -114,7 +114,7 @@ export function HomeMode() {
       </div>
 
       {/* ── LEFT: Brand panel ─────────────────────────────────────────────── */}
-      <div className="relative border-r border-white/[0.05] flex flex-col justify-between px-14 py-12 overflow-y-auto">
+<div className="relative border-r border-white/[0.08] flex flex-col justify-between px-14 py-12 overflow-y-auto">
 
         <div className="flex flex-col gap-10">
           {/* Logo + brand */}
@@ -128,7 +128,7 @@ export function HomeMode() {
             <p className="text-base font-semibold text-zinc-400 tracking-tight mb-5">
               Technologique · Pilotée par l'IA
             </p>
-            <p className="text-sm text-zinc-500 leading-relaxed max-w-[320px]">
+            <p className="text-sm text-zinc-400 leading-relaxed max-w-[320px]">
               Pipeline IA end-to-end : collecte des sources, classification
               automatique et génération de contenus structurés.
             </p>
@@ -136,7 +136,7 @@ export function HomeMode() {
 
           {/* Pipeline stages */}
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-700 mb-4">Pipeline</p>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 mb-4">Pipeline</p>
             <div className="flex flex-col gap-3">
               {STAGES.map((s, i) => (
                 <div key={s.label} className="flex items-center gap-3">
@@ -152,7 +152,7 @@ export function HomeMode() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-zinc-300">{s.label}</span>
+                      <span className="text-xs font-medium text-zinc-200">{s.label}</span>
                       <div
                         className="h-px flex-1 rounded"
                         style={{ background: `linear-gradient(90deg, ${s.color}30, transparent)` }}
@@ -167,7 +167,7 @@ export function HomeMode() {
 
         {/* Live stats strip */}
         {stats ? (
-          <div className="grid grid-cols-3 gap-4 pt-8 border-t border-white/[0.06]">
+          <div className="grid grid-cols-3 gap-4 pt-8 border-t border-white/[0.10]">
             {[
               { value: (stats.total_items ?? 0).toLocaleString('fr-FR'), label: 'Items', color: '#0ea5e9' },
               { value: stats.classified_items ?? 0, label: 'Classifiés', color: '#6366f1' },
@@ -176,17 +176,17 @@ export function HomeMode() {
               <div
                 key={label}
                 className="rounded-xl px-4 py-3"
-                style={{ background: `${color}08`, border: `1px solid ${color}18` }}
+                style={{ background: `${color}12`, border: `1px solid ${color}28` }}
               >
                 <span className="text-2xl font-bold font-mono tracking-tight tabular-nums leading-none block" style={{ color }}>
                   {value}
                 </span>
-                <span className="text-[10px] text-zinc-600 uppercase tracking-wider mt-1.5 block">{label}</span>
+                <span className="text-[10px] text-zinc-500 uppercase tracking-wider mt-1.5 block">{label}</span>
               </div>
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-3 gap-4 pt-8 border-t border-white/[0.06]">
+          <div className="grid grid-cols-3 gap-4 pt-8 border-t border-white/[0.10]">
             {[1, 2, 3].map(i => (
               <div key={i} className="rounded-xl p-4 space-y-2 shimmer-box h-[72px]" />
             ))}

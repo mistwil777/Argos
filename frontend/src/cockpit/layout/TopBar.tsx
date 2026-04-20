@@ -45,7 +45,7 @@ export function TopBar() {
 
   return (
     <>
-      <div className="h-12 flex items-center gap-2.5 px-4 shrink-0 border-b border-white/[0.05] bg-zinc-950">
+      <div className="h-12 flex items-center gap-2.5 px-4 shrink-0 border-b border-white/[0.08] bg-zinc-900">
 
         {/* Brand */}
         <button

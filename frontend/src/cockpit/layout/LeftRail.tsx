@@ -22,7 +22,7 @@ export function LeftRail() {
   const isDevOps = activeMode === 'devops';
 
   return (
-    <nav className="w-[72px] shrink-0 bg-zinc-950 border-r border-white/[0.05] flex flex-col items-center pt-3 pb-4">
+    <nav className="w-[72px] shrink-0 bg-zinc-900 border-r border-white/[0.08] flex flex-col items-center pt-3 pb-4">
 
       {/* App mark */}
       <button
@@ -47,7 +47,7 @@ export function LeftRail() {
               className={`
                 relative flex flex-col items-center gap-1 w-full py-2.5 px-1
                 transition-colors duration-150 group
-                ${isActive ? 'text-sky-400' : 'text-zinc-600 hover:text-zinc-300'}
+                ${isActive ? 'text-sky-400' : 'text-zinc-500 hover:text-zinc-200'}
               `}
             >
               {/* Left active bar */}
@@ -64,7 +64,7 @@ export function LeftRail() {
                 className={`
                   w-9 h-9 rounded-xl flex items-center justify-center
                   transition-all duration-150
-                  ${isActive ? 'bg-sky-500/12' : 'group-hover:bg-white/[0.04]'}
+                  ${isActive ? 'bg-sky-500/12' : 'group-hover:bg-white/[0.06]'}
                 `}
               >
                 <Icon
