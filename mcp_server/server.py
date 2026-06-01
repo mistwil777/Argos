@@ -305,14 +305,37 @@ async def rpc_endpoint(request: Request):
 async def health_check():
     """
     Health check endpoint for monitoring.
-    Used by Docker healthcheck and load balancers.
+    Checks database connectivity and Playwright availability.
     """
+    from mcp_server.api.router import db as api_db
+
+    # Database check
+    database_status = "error"
+    try:
+        with api_db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+                cur.fetchone()
+        database_status = "ok"
+    except Exception:
+        pass
+
+    # Playwright check
+    playwright_status = "error"
+    try:
+        from playwright.async_api import async_playwright  # noqa: F401
+        playwright_status = "ok"
+    except ImportError:
+        playwright_status = "not_installed"
+
     return {
-        "status": "healthy",
+        "status": "ok",
         "timestamp": datetime.utcnow().isoformat(),
-        "version": "0.1.0",
+        "version": "1.0.0",
         "environment": settings.environment,
-        "tools_registered": len(tool_registry.tools)
+        "tools_registered": len(tool_registry.tools),
+        "database": database_status,
+        "playwright": playwright_status,
     }
 
 
@@ -379,15 +402,30 @@ async def startup_event():
     from mcp_server.tools.web_tools import WEB_TOOLS
     from mcp_server.api.router import db as api_db
     try:
-        from mcp_server.services.llm_provider import LLMProvider
-        llm = LLMProvider()
+        from mcp_server.services.llm_provider import create_llm_provider
+        llm = create_llm_provider(
+            provider_type=settings.llm_provider,
+            openai_api_key=settings.openai_api_key,
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            aws_region=settings.aws_region,
+            model=settings.aws_bedrock_model if settings.llm_provider == "aws" else settings.default_classification_model
+        )
     except Exception:
         llm = None
 
+    import functools
+
+    def _make_web_tool_wrapper(tool_func, _db, _llm):
+        """Wrap web tools (signature: func(params:dict, db, llm_provider))
+        into the MCP execute_tool interface (func(**kwargs))."""
+        async def wrapper(**kwargs):
+            return await tool_func(params=kwargs, db=_db, llm_provider=_llm)
+        return wrapper
+
     for name, func in WEB_TOOLS.items():
-        import functools
-        bound = functools.partial(func, db=api_db, llm_provider=llm)
-        tool_registry.register(name, bound, f"Web tool: {name}")
+        wrapper = _make_web_tool_wrapper(func, api_db, llm)
+        tool_registry.register(name, wrapper, f"Web tool: {name}")
 
     logger.info(f"Registered {len(tool_registry.tools)} tools")
 

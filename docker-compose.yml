@@ -41,7 +41,7 @@ services:
     restart: unless-stopped
     environment:
       - ENVIRONMENT=development
-      - DATABASE_URL=postgresql://openwebmcp:${POSTGRES_PASSWORD}@postgres:5432/openwebmcp
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-openwebmcp}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-openwebmcp}
       - LANCEDB_PATH=/data/lancedb
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}

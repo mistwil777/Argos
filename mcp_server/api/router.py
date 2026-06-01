@@ -1,5 +1,5 @@
 """
-REST API Router for AcademiaOps Web Interface
+REST API Router for OpenWebMCP Web Interface
 
 Provides REST endpoints alongside the existing JSON-RPC interface.
 """
@@ -112,42 +112,44 @@ async def _auto_collect_and_classify(source_id: int):
 async def get_global_stats():
     """Get global statistics."""
     try:
-        stats = db.get_classification_stats()
-        
-        # Calculate totals from stats
-        classified_items = stats.get("classified", 0)
-        pending_items = stats.get("pending", 0)
-        total_items = classified_items + pending_items
-        
-        # Get total cost
-        total_cost, _ = db.get_total_cost()
-
-        # Date-filtered costs
-        now = datetime.now(timezone.utc)
-        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        cost_today = db.get_cost_for_period(today_start, now)
-        cost_this_month = db.get_cost_for_period(month_start, now)
-        
-        # Get course counts
         with db.get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT COUNT(*) FROM courses WHERE status = 'published'")
-                published_courses = cur.fetchone()[0]
-                
-                cur.execute("SELECT COUNT(*) FROM courses WHERE status = 'draft'")
-                draft_courses = cur.fetchone()[0]
-                
-                cur.execute("SELECT COUNT(*) FROM courses")
-                total_courses = cur.fetchone()[0]
-        
+                cur.execute("SELECT COUNT(*) FROM items")
+                total_items = cur.fetchone()[0]
+
+                cur.execute("SELECT COUNT(*) FROM items WHERE classification_status = 'classified'")
+                classified_items = cur.fetchone()[0]
+
+                cur.execute("SELECT COUNT(*) FROM items WHERE classification_status = 'pending'")
+                pending_items = cur.fetchone()[0]
+
+                cur.execute("SELECT COUNT(*) FROM browse_sessions")
+                total_browses = cur.fetchone()[0]
+
+                cur.execute("SELECT COUNT(*) FROM search_sessions")
+                total_searches = cur.fetchone()[0]
+
+                cur.execute("SELECT COALESCE(SUM(cost_usd), 0) FROM llm_usage")
+                total_cost = float(cur.fetchone()[0] or 0)
+
+                cur.execute("""
+                    SELECT COALESCE(SUM(cost_usd), 0) FROM llm_usage
+                    WHERE created_at >= CURRENT_DATE
+                """)
+                cost_today = float(cur.fetchone()[0] or 0)
+
+                cur.execute("""
+                    SELECT COALESCE(SUM(cost_usd), 0) FROM llm_usage
+                    WHERE created_at >= date_trunc('month', CURRENT_DATE)
+                """)
+                cost_this_month = float(cur.fetchone()[0] or 0)
+
         return {
             "total_items": total_items,
             "classified_items": classified_items,
             "pending_items": pending_items,
-            "total_courses": total_courses,
-            "published_courses": published_courses,
-            "draft_courses": draft_courses,
+            "total_browses": total_browses,
+            "total_searches": total_searches,
             "total_cost": total_cost,
             "cost_today": cost_today,
             "cost_this_month": cost_this_month,
@@ -163,9 +165,8 @@ async def get_timeline_stats(days: int = Query(default=7, ge=1, le=90)):
     try:
         with db.get_connection() as conn:
             with conn.cursor() as cur:
-                # Get daily item collection counts
                 cur.execute("""
-                    SELECT 
+                    SELECT
                         DATE(created_at) as date,
                         COUNT(*) as items_collected,
                         COUNT(CASE WHEN classification_status = 'classified' THEN 1 END) as items_classified
@@ -175,23 +176,16 @@ async def get_timeline_stats(days: int = Query(default=7, ge=1, le=90)):
                     ORDER BY date DESC
                     LIMIT %s
                 """, (days, days))
-                
                 items_data = cur.fetchall()
-                
-                # Get daily course generation counts
+
                 cur.execute("""
-                    SELECT 
-                        DATE(created_at) as date,
-                        COUNT(*) as courses_generated
-                    FROM courses
+                    SELECT DATE(created_at) as date, COUNT(*) as browses
+                    FROM browse_sessions
                     WHERE created_at >= NOW() - INTERVAL '%s days'
                     GROUP BY DATE(created_at)
-                    ORDER BY date DESC
                 """, (days,))
-                
-                courses_data = {row[0]: row[1] for row in cur.fetchall()}
-        
-        # Combine data
+                browses_data = {row[0]: row[1] for row in cur.fetchall()}
+
         timeline = []
         for row in items_data:
             date_str = row[0].strftime("%Y-%m-%d") if hasattr(row[0], 'strftime') else str(row[0])
@@ -199,9 +193,9 @@ async def get_timeline_stats(days: int = Query(default=7, ge=1, le=90)):
                 "date": date_str,
                 "items_collected": row[1],
                 "items_classified": row[2],
-                "courses_generated": courses_data.get(row[0], 0)
+                "browses": browses_data.get(row[0], 0),
             })
-        
+
         return timeline
     except Exception as e:
         logger.error(f"Error fetching timeline stats: {e}")
@@ -250,12 +244,14 @@ async def get_costs_stats(period: str = Query(default="month", regex="^(week|mon
             with conn.cursor() as cur:
                 cur.execute("""
                     SELECT
-                        DATE(decided_at) as date,
-                        COALESCE(SUM(cost_usd), 0) as total
-                    FROM decisions
-                    WHERE decided_at >= NOW() - INTERVAL '%s days'
-                      AND cost_usd IS NOT NULL
-                    GROUP BY DATE(decided_at)
+                        DATE(created_at) as date,
+                        COALESCE(SUM(cost_usd), 0) as total,
+                        SUM(CASE WHEN operation_type = 'classification' THEN cost_usd ELSE 0 END) as classifier_cost,
+                        SUM(CASE WHEN operation_type = 'digest' THEN cost_usd ELSE 0 END) as digest_cost,
+                        SUM(CASE WHEN operation_type = 'rag' THEN cost_usd ELSE 0 END) as rag_cost
+                    FROM llm_usage
+                    WHERE created_at >= NOW() - INTERVAL '%s days'
+                    GROUP BY DATE(created_at)
                     ORDER BY date ASC
                     LIMIT %s
                 """, (days, days))
@@ -264,10 +260,10 @@ async def get_costs_stats(period: str = Query(default="month", regex="^(week|mon
         return [
             {
                 "date": row[0].strftime("%Y-%m-%d") if hasattr(row[0], "strftime") else str(row[0]),
-                "classifier_cost": float(row[1]) * 0.3,
-                "course_generator_cost": float(row[1]) * 0.5,
-                "rag_cost": float(row[1]) * 0.2,
-                "total": float(row[1]),
+                "classifier_cost": float(row[2] or 0),
+                "digest_cost": float(row[3] or 0),
+                "rag_cost": float(row[4] or 0),
+                "total": float(row[1] or 0),
             }
             for row in rows
         ]
@@ -540,448 +536,6 @@ async def delete_item(item_id: int):
 
 
 # ============================================
-# Courses Endpoints
-# ============================================
-
-@api_router.get("/courses")
-async def list_courses(
-    status: str = Query(default="all"),
-    workspace_id: Optional[int] = Query(default=None, description="Filter by workspace ID"),
-    limit: int = Query(default=20, ge=1, le=100),
-    offset: int = Query(default=0, ge=0)
-):
-    """List courses with optional filters."""
-    try:
-        with db.get_connection() as conn:
-            with conn.cursor() as cur:
-                where_conditions = []
-                params = []
-                
-                if status != "all":
-                    where_conditions.append("status = %s")
-                    params.append(status)
-                
-                if workspace_id is not None:
-                    where_conditions.append("c.workspace_id = %s")
-                    params.append(workspace_id)
-                
-                where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
-                
-                query = f"""
-                    SELECT 
-                        c.id, c.title, c.subject, c.level,
-                        c.estimated_duration_minutes, c.status, c.qa_score,
-                        c.created_at, c.published_at,
-                        i.source_url, i.source_type, i.url as item_url,
-                        c.content_type
-                    FROM courses c
-                    LEFT JOIN items i ON i.id = c.item_id
-                    WHERE {where_clause}
-                    ORDER BY c.created_at DESC
-                    LIMIT %s OFFSET %s
-                """
-                
-                params.extend([limit, offset])
-                cur.execute(query, params)
-                
-                courses = []
-                for row in cur.fetchall():
-                    courses.append({
-                        "id": row[0],
-                        "title": row[1],
-                        "topic": row[2],
-                        "level": row[3],
-                        "duration": row[4],
-                        "status": row[5],
-                        "qa_score": float(row[6]) if row[6] else None,
-                        "created_at": row[7].isoformat() if row[7] else None,
-                        "published_at": row[8].isoformat() if row[8] else None,
-                        "source_url": row[9],
-                        "source_type": row[10],
-                        "item_url": row[11],
-                        "content_type": row[12],
-                    })
-                
-                # Get total count
-                count_query = f"SELECT COUNT(*) FROM courses c WHERE {where_clause}"
-                cur.execute(count_query, params[:-2])  # Exclude limit and offset
-                total = cur.fetchone()[0]
-                
-                return {"courses": courses, "total": total}
-    except Exception as e:
-        logger.error(f"Error listing courses: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@api_router.get("/courses/{course_id}")
-async def get_course(course_id: int):
-    """Get a single course by ID."""
-    try:
-        with db.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    SELECT 
-                        id, title, subject, level,
-                        estimated_duration_minutes, status, qa_score,
-                        created_at, published_at, content,
-                        content_type
-                    FROM courses
-                    WHERE id = %s
-                """, (course_id,))
-                
-                row = cur.fetchone()
-                if not row:
-                    raise HTTPException(status_code=404, detail="Course not found")
-                
-                return {
-                    "id": row[0],
-                    "title": row[1],
-                    "topic": row[2],
-                    "level": row[3],
-                    "duration": row[4],
-                    "status": row[5],
-                    "qa_score": float(row[6]) if row[6] else None,
-                    "created_at": row[7].isoformat() if row[7] else None,
-                    "published_at": row[8].isoformat() if row[8] else None,
-                    "content": row[9],
-                    "content_type": row[10]
-                }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error fetching course {course_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@api_router.post("/courses/{course_id}/publish")
-async def publish_course(course_id: int):
-    """Publish a course and automatically index it in RAG."""
-    try:
-        with db.get_connection() as conn:
-            with conn.cursor() as cur:
-                # First check if course exists and is in draft or review
-                cur.execute("""
-                    SELECT id, item_id, title, subject, content, estimated_duration_minutes, workspace_id
-                    FROM courses
-                    WHERE id = %s AND status IN ('draft', 'review')
-                """, (course_id,))
-                
-                row = cur.fetchone()
-                if not row:
-                    raise HTTPException(status_code=404, detail="Course not found or already published")
-                
-                course = {
-                    "id": row[0],
-                    "item_id": row[1],
-                    "title": row[2],
-                    "subject": row[3],
-                    "content": row[4],
-                    "duration": row[5],
-                    "workspace_id": row[6]
-                }
-                
-                # Publish course
-                cur.execute("""
-                    UPDATE courses
-                    SET status = 'published',
-                        published_at = CURRENT_TIMESTAMP,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE id = %s
-                """, (course_id,))
-                
-                conn.commit()
-        
-        # Index course in RAG system using singleton (with Bedrock Embeddings!)
-        try:
-            from mcp_server.services.vector_store_singleton import get_vector_store
-            
-            vector_store = get_vector_store()
-            
-            chunks_count = vector_store.index_course(course)
-            logger.info(f"Course {course_id} indexed with {chunks_count} chunks")
-            
-            return {
-                "message": "Course published and indexed successfully",
-                "course_id": course_id,
-                "chunks_indexed": chunks_count
-            }
-        except Exception as e:
-            logger.warning(f"Course published but indexing failed: {e}")
-            return {
-                "message": "Course published but indexing failed",
-                "course_id": course_id,
-                "indexing_error": str(e)
-            }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error publishing course {course_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@api_router.post("/courses/generate")
-async def generate_course_from_item(request: Dict[str, Any]):
-    """
-    Generate a complete pedagogical course from a classified item.
-    
-    Request body:
-    {
-        "item_id": 123,
-        "duration_minutes": 180,  // optional, default 180
-        "language": "fr"  // optional, default "fr"
-    }
-    """
-    try:
-        item_id = request.get("item_id")
-        if not item_id:
-            raise HTTPException(status_code=400, detail="item_id is required")
-        
-        duration_minutes = request.get("duration_minutes", 180)
-        language = request.get("language", "fr")
-        content_type = request.get("content_type", "course")
-        
-        # Import here to avoid circular dependency
-        from mcp_server.tools.auto_course_generator import generate_course_from_item
-        
-        # Generate course
-        result = await generate_course_from_item(
-            item_id=item_id,
-            duration_minutes=duration_minutes,
-            language=language,
-            content_type=content_type
-        )
-        
-        if "error" in result:
-            raise HTTPException(status_code=400, detail=result["error"])
-        
-        return {
-            "message": "Course generated successfully",
-            "course_id": result.get("course_id"),
-            "item_id": item_id,
-            "status": "draft",
-            "tokens_used": result.get("tokens_used", 0),
-            "cost": result.get("cost", 0.0),
-            "content_length": result.get("content_length", 0)
-        }
-    except Exception as e:
-        logger.error(f"Error generating course: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@api_router.post("/courses/{course_id}/modify")
-async def modify_course_with_llm(course_id: int, request: Dict[str, Any]):
-    """
-    Modify course content using LLM based on user instructions.
-    
-    Request body:
-    {
-        "instruction": "Ajouter des exemples concrets",
-        "section": "all"  // optional, specific section to modify
-    }
-    """
-    try:
-        instruction = request.get("instruction")
-        if not instruction:
-            raise HTTPException(status_code=400, detail="instruction is required")
-        
-        db = DatabaseManager(settings.database_url)
-        
-        # Get course
-        with db.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT id, content, title, subject FROM courses WHERE id = %s", (course_id,))
-                row = cur.fetchone()
-                if not row:
-                    raise HTTPException(status_code=404, detail="Course not found")
-                
-                course_content = row[1]
-                course_title = row[2]
-                course_subject = row[3]
-        
-        # Use LLM to modify
-        llm_provider = create_llm_provider(
-            provider_type=settings.llm_provider,
-            aws_access_key_id=settings.aws_access_key_id,
-            aws_secret_access_key=settings.aws_secret_access_key,
-            aws_region=settings.aws_region,
-            openai_api_key=settings.openai_api_key,
-            model=settings.aws_bedrock_model if settings.llm_provider == "aws" else settings.default_classification_model
-        )
-        
-        system_prompt = "Tu es un expert pédagogique. Tu dois modifier le contenu d'un cours selon les instructions de l'utilisateur tout en conservant la structure et la qualité du cours."
-        user_prompt = f"""COURS ACTUEL:
-Titre: {course_title}
-Sujet: {course_subject}
-
-{course_content}
-
----
-
-INSTRUCTION: {instruction}
-
-Modifie le cours en suivant cette instruction. Retourne UNIQUEMENT le contenuen markdown modifié, sans commentaires additionnels."""
-        
-        modified_content, usage = await llm_provider.generate(
-            prompt=user_prompt,
-            system_prompt=system_prompt,
-            max_tokens=10000,
-            temperature=0.7
-        )
-        
-        # Update course
-        with db.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE courses SET content = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
-                    (modified_content, course_id)
-                )
-                conn.commit()
-        
-        tokens_used = usage.get("total_tokens", 0)
-        cost = llm_provider.calculate_cost(usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
-        
-        return {
-            "message": "Course modified successfully",
-            "course_id": course_id,
-            "tokens_used": tokens_used,
-            "cost": cost
-        }
-    except Exception as e:
-        logger.error(f"Error modifying course: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@api_router.delete("/courses/{course_id}")
-async def delete_course(course_id: int):
-    """Delete a course."""
-    try:
-        db = DatabaseManager(settings.database_url)
-        with db.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("DELETE FROM courses WHERE id = %s RETURNING id", (course_id,))
-                deleted = cur.fetchone()
-                if not deleted:
-                    raise HTTPException(status_code=404, detail="Course not found")
-                conn.commit()
-        
-        return {"message": "Course deleted successfully", "course_id": course_id}
-    except Exception as e:
-        logger.error(f"Error deleting course: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@api_router.get("/courses/{course_id}/export/markdown")
-async def export_course_markdown(course_id: int):
-    """Export course as Markdown file."""
-    try:
-        db = DatabaseManager(settings.database_url)
-        with db.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT title, content FROM courses WHERE id = %s", (course_id,))
-                row = cur.fetchone()
-                if not row:
-                    raise HTTPException(status_code=404, detail="Course not found")
-                
-                title, content = row
-        
-        from fastapi.responses import Response
-        filename = f"{title.replace(' ', '_')}.md"
-        
-        return Response(
-            content=content,
-            media_type="text/markdown",
-            headers={"Content-Disposition": f"attachment; filename={filename}"}
-        )
-    except Exception as e:
-        logger.error(f"Error exporting markdown: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@api_router.get("/courses/{course_id}/export/pdf")
-async def export_course_pdf(course_id: int):
-    """Export course as PDF file."""
-    try:
-        db = DatabaseManager(settings.database_url)
-        with db.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT title, content FROM courses WHERE id = %s", (course_id,))
-                row = cur.fetchone()
-                if not row:
-                    raise HTTPException(status_code=404, detail="Course not found")
-                
-                title, content = row
-        
-        # Import markdown library for conversion
-        import markdown
-        from fastapi.responses import Response
-        
-        # Check if pre-generated PDF exists
-        from mcp_server.services.pdf_generator import get_pdf_path, generate_html_export
-        from pathlib import Path
-        
-        pdf_path = get_pdf_path(course_id)
-        
-        if pdf_path and pdf_path.exists():
-            # Serve pre-generated PDF
-            logger.info(f"📄 Serving pre-generated PDF for course {course_id}")
-            filename = f"{title.replace(' ', '_')}.pdf"
-            
-            with open(pdf_path, 'rb') as f:
-                pdf_content = f.read()
-            
-            return Response(
-                content=pdf_content,
-                media_type="application/pdf",
-                headers={
-                    "Content-Disposition": f"attachment; filename={filename}",
-                    "Content-Type": "application/pdf"
-                }
-            )
-        
-        # Fallback: Generate HTML on-the-fly
-        logger.warning(f"⚠️ No PDF found for course {course_id}, generating HTML fallback")
-        html_content = generate_html_export(title, content)
-        filename = f"{title.replace(' ', '_')}.html"
-        
-        return Response(
-            content=html_content,
-            media_type="text/html",
-            headers={
-                "Content-Disposition": f"attachment; filename={filename}",
-                "Content-Type": "text/html; charset=utf-8"
-            }
-        )
-    except Exception as e:
-        logger.error(f"Error exporting PDF: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@api_router.patch("/courses/{course_id}/validate")
-async def validate_course(course_id: int):
-    """Mark course as validated/approved."""
-    try:
-        db = DatabaseManager(settings.database_url)
-        with db.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE courses SET status = 'review', updated_at = CURRENT_TIMESTAMP WHERE id = %s RETURNING id",
-                    (course_id,)
-                )
-                updated = cur.fetchone()
-                if not updated:
-                    raise HTTPException(status_code=404, detail="Course not found")
-                conn.commit()
-        
-        return {"message": "Course validated successfully", "course_id": course_id, "status": "review"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error validating course: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ============================================
 # RAG Endpoints
 # ============================================
 
@@ -1155,71 +709,53 @@ async def clear_rag_history():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.post("/rag/index-all-courses")
-async def index_all_courses():
-    """Index all published courses in the RAG system."""
+@api_router.post("/rag/index-all-items")
+async def index_all_items():
+    """Index all classified items with a digest into the RAG vector store."""
     try:
         from mcp_server.services.vector_store_singleton import get_vector_store
-        
-        # Use pre-loaded singleton (fast)
+
         vector_store = get_vector_store()
-        
-        # Fetch all published courses
+
         with db.get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT id, item_id, title, subject, content, estimated_duration_minutes, workspace_id
-                    FROM courses
-                    WHERE status = 'published'
+                    SELECT id, title, summary, digest_markdown, workspace_id
+                    FROM items
+                    WHERE classification_status = 'classified'
+                      AND digest_json IS NOT NULL
                     ORDER BY created_at DESC
                 """)
-                
-                courses = []
-                for row in cur.fetchall():
-                    courses.append({
-                        "id": row[0],
-                        "item_id": row[1],
-                        "title": row[2],
-                        "subject": row[3],
-                        "content": row[4],
-                        "duration": row[5],
-                        "workspace_id": row[6]
-                    })
-        
-        if not courses:
-            return {
-                "message": "No published courses to index",
-                "courses_indexed": 0,
-                "total_chunks": 0
-            }
-        
-        # Index each course
+                items = [
+                    {"id": r[0], "title": r[1], "summary": r[2], "content": r[3] or r[2] or "", "workspace_id": r[4]}
+                    for r in cur.fetchall()
+                ]
+
+        if not items:
+            return {"message": "No items to index", "indexed": 0, "total_chunks": 0}
+
         total_chunks = 0
-        indexed_count = 0
+        indexed = 0
         errors = []
-        
-        for course in courses:
+
+        for item in items:
             try:
-                chunks_count = vector_store.index_course(course)
-                total_chunks += chunks_count
-                indexed_count += 1
-                logger.info(f"Indexed course {course['id']}: {chunks_count} chunks")
+                n = vector_store.index_item(item)
+                total_chunks += n
+                indexed += 1
             except Exception as e:
-                logger.error(f"Error indexing course {course['id']}: {e}")
-                errors.append({
-                    "course_id": course['id'],
-                    "error": str(e)
-                })
-        
+                logger.error(f"Error indexing item {item['id']}: {e}")
+                errors.append({"item_id": item["id"], "error": str(e)})
+
         return {
-            "message": f"Indexed {indexed_count} courses with {total_chunks} chunks",
-            "courses_indexed": indexed_count,
+            "message": f"Indexed {indexed} items with {total_chunks} chunks",
+            "indexed": indexed,
             "total_chunks": total_chunks,
-            "errors": errors if errors else None
+            "errors": errors if errors else None,
         }
-        
+
     except Exception as e:
-        logger.error(f"Error indexing courses: {e}")
+        logger.error(f"Error indexing items: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1235,19 +771,18 @@ async def rag_stats():
         )
         
         stats = vector_store.get_stats()
-        
-        # Add course counts from database
+
         with db.get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT COUNT(*) FROM courses WHERE status = 'published'")
-                published_courses = cur.fetchone()[0]
-                
+                cur.execute("SELECT COUNT(*) FROM items WHERE rag_indexed = TRUE")
+                indexed_items = cur.fetchone()[0]
+
                 cur.execute("SELECT COUNT(*) FROM rag_queries")
                 total_queries = cur.fetchone()[0]
-        
+
         return {
             "vector_store": stats,
-            "published_courses": published_courses,
+            "indexed_items": indexed_items,
             "total_queries": total_queries,
             "embedding_model": settings.embedding_model,
             "lancedb_path": str(settings.lancedb_path)
@@ -1255,101 +790,6 @@ async def rag_stats():
         
     except Exception as e:
         logger.error(f"Error fetching RAG stats: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ============================================
-# HITL Endpoints
-# ============================================
-
-@api_router.get("/hitl/pending")
-async def get_pending_decisions():
-    """Get pending HITL decisions."""
-    try:
-        with db.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    SELECT 
-                        id, title, url, source_type, subject,
-                        importance, classification_status,
-                        created_at
-                    FROM items
-                    WHERE validation_status = 'pending'
-                        AND classification_status = 'classified'
-                    ORDER BY created_at DESC
-                    LIMIT 50
-                """)
-                
-                items = []
-                for row in cur.fetchall():
-                    items.append({
-                        "id": row[0],
-                        "title": row[1],
-                        "url": row[2],
-                        "source_type": row[3],
-                        "subject": row[4],
-                        "importance": row[5],
-                        "classification_status": row[6],
-                        "created_at": row[7].isoformat() if row[7] else None
-                    })
-                
-                return {"items": items, "total": len(items)}
-    except Exception as e:
-        logger.error(f"Error fetching pending decisions: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@api_router.post("/hitl/decide")
-async def make_decision(request: Dict[str, Any]):
-    """Make a HITL decision."""
-    try:
-        item_id = request.get("item_id")
-        decision = request.get("decision")  # approve, reject, modify
-        
-        if not item_id or not decision:
-            raise HTTPException(status_code=400, detail="item_id and decision are required")
-        
-        with db.get_connection() as conn:
-            with conn.cursor() as cur:
-                # Record the decision
-                cur.execute("""
-                    INSERT INTO decisions (
-                        decision_type, item_id, decision, decided_by
-                    ) VALUES (%s, %s, %s, %s)
-                """, ("item_validation", item_id, decision, "admin"))
-                
-                # Update item validation status
-                validation_status = "approved" if decision == "approve" else "rejected"
-                cur.execute("""
-                    UPDATE items
-                    SET validation_status = %s,
-                        validated_at = CURRENT_TIMESTAMP,
-                        validated_by = %s
-                    WHERE id = %s
-                """, (validation_status, "admin", item_id))
-                
-                conn.commit()
-        
-        return {"message": "Decision recorded successfully", "item_id": item_id, "decision": decision}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error making decision: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@api_router.get("/hitl/bot-status")
-async def get_bot_status():
-    """Get Telegram bot status."""
-    try:
-        # Placeholder for bot status
-        return {
-            "running": False,
-            "last_check": None,
-            "pending_count": 0
-        }
-    except Exception as e:
-        logger.error(f"Error fetching bot status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1737,17 +1177,10 @@ async def check_source_monitor(source_id: int, background_tasks: BackgroundTasks
     """
     try:
         from mcp_server.services.site_monitor import get_site_monitor, SiteMonitorService
-        from mcp_server.services.teams_bot import get_teams_bot
-        from mcp_server.config import settings as app_settings
 
         monitor = get_site_monitor()
         if monitor is None:
-            # Initialisation à la volée si le serveur ne l'a pas fait
-            teams_bot = get_teams_bot(app_settings.teams_webhook_url)
-            monitor = SiteMonitorService(
-                db_manager=db,
-                teams_bot=teams_bot,
-            )
+            monitor = SiteMonitorService(db_manager=db)
 
         async def _run():
             result = await monitor.check_source(source_id)
@@ -1771,13 +1204,10 @@ async def check_all_monitors(background_tasks: BackgroundTasks):
     """
     try:
         from mcp_server.services.site_monitor import get_site_monitor, SiteMonitorService
-        from mcp_server.services.teams_bot import get_teams_bot
-        from mcp_server.config import settings as app_settings
 
         monitor = get_site_monitor()
         if monitor is None:
-            teams_bot = get_teams_bot(app_settings.teams_webhook_url)
-            monitor = SiteMonitorService(db_manager=db, teams_bot=teams_bot)
+            monitor = SiteMonitorService(db_manager=db)
 
         async def _run():
             results = await monitor.check_all_sources()
@@ -1990,5 +1420,130 @@ async def admin_rag_diag(
         }
     except Exception as e:
         logger.error(f"Error in admin RAG diag: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===========================================
+# Web Tools Endpoints — REST wrappers for web.browse / web.search / web.digest
+# ===========================================
+
+@api_router.post("/web/browse")
+async def web_browse(request: Dict[str, Any]):
+    """Fetch a URL with headless browser (Playwright + stealth)."""
+    try:
+        from mcp_server.tools.web_tools import tool_browse
+        from mcp_server.services.llm_provider import create_llm_provider
+
+        result = await tool_browse(params=request, db=db)
+        return result
+    except Exception as e:
+        logger.error(f"Error in web browse: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/web/search")
+async def web_search(request: Dict[str, Any]):
+    """Search the web without API keys (DuckDuckGo / Bing)."""
+    try:
+        from mcp_server.tools.web_tools import tool_search
+
+        result = await tool_search(params=request, db=db)
+        return result
+    except Exception as e:
+        logger.error(f"Error in web search: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/web/digest")
+async def web_digest(request: Dict[str, Any]):
+    """Browse a URL and generate a markdown + JSON digest via LLM."""
+    try:
+        from mcp_server.tools.web_tools import tool_digest
+        from mcp_server.services.llm_provider import create_llm_provider
+
+        try:
+            llm = create_llm_provider(
+                provider_type=settings.llm_provider,
+                openai_api_key=settings.openai_api_key,
+                aws_access_key_id=settings.aws_access_key_id,
+                aws_secret_access_key=settings.aws_secret_access_key,
+                aws_region=settings.aws_region,
+                model=settings.aws_bedrock_model if settings.llm_provider == "aws" else settings.default_classification_model
+            )
+        except Exception:
+            llm = None
+
+        result = await tool_digest(params=request, db=db, llm_provider=llm)
+        return result
+    except Exception as e:
+        logger.error(f"Error in web digest: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/web/browse/history")
+async def web_browse_history(
+    workspace_id: Optional[int] = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=100)
+):
+    """Recent browse sessions."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                args = []
+                where = ""
+                if workspace_id is not None:
+                    where = "WHERE workspace_id = %s"
+                    args.append(workspace_id)
+                cur.execute(
+                    f"""SELECT id, url, status, title, content_length, engine, duration_ms, created_at
+                        FROM browse_sessions {where}
+                        ORDER BY created_at DESC LIMIT %s""",
+                    args + [limit]
+                )
+                rows = cur.fetchall()
+        return [
+            {
+                "id": r[0], "url": r[1], "status": r[2], "title": r[3],
+                "content_length": r[4], "engine": r[5], "duration_ms": r[6],
+                "created_at": r[7].isoformat() if r[7] else None,
+            }
+            for r in rows
+        ]
+    except Exception as e:
+        logger.error(f"Error fetching browse history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/web/search/history")
+async def web_search_history(
+    workspace_id: Optional[int] = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=100)
+):
+    """Recent search sessions."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                args = []
+                where = ""
+                if workspace_id is not None:
+                    where = "WHERE workspace_id = %s"
+                    args.append(workspace_id)
+                cur.execute(
+                    f"""SELECT id, query, engine, results_count, duration_ms, created_at
+                        FROM search_sessions {where}
+                        ORDER BY created_at DESC LIMIT %s""",
+                    args + [limit]
+                )
+                rows = cur.fetchall()
+        return [
+            {
+                "id": r[0], "query": r[1], "engine": r[2],
+                "results_count": r[3], "duration_ms": r[4],
+                "created_at": r[5].isoformat() if r[5] else None,
+            }
+            for r in rows
+        ]
+    except Exception as e:
+        logger.error(f"Error fetching search history: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 

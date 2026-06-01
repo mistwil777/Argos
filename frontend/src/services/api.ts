@@ -57,5 +57,5 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ query, user_identifier: 'frontend', workspace_id }),
     }),
-  rebuildRagIndex: () => request<any>('/api/v1/rag/index-all-courses', { method: 'POST' }),
+  rebuildRagIndex: () => request<any>('/api/v1/rag/index-all-items', { method: 'POST' }),
 }

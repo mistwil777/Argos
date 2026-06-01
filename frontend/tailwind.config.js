@@ -5,8 +5,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'Menlo', 'monospace'],
+        sans: ['Space Grotesk', 'system-ui', 'sans-serif'],
+        mono: ['Space Mono', 'Menlo', 'monospace'],
       },
       colors: {
         border: "hsl(var(--border))",
