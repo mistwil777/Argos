@@ -178,7 +178,7 @@ export function FluxMode() {
   };
 
   return (
-    <div className="h-full flex flex-col bg-zinc-950">
+    <div className="h-full flex flex-col overflow-hidden bg-zinc-950">
       <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-white/[0.05] shrink-0">
         <div className="w-8 h-8 rounded-lg bg-white/[0.04] border border-white/[0.06] flex items-center justify-center shrink-0">
           <Layers className="w-4 h-4 text-zinc-500" strokeWidth={1.5} />

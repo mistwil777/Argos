@@ -12,7 +12,7 @@ export function CockpitCanvas() {
   const { activeMode } = useCockpit();
 
   return (
-    <div className="flex-1 overflow-hidden bg-zinc-950">
+    <div className="flex-1 h-full flex flex-col overflow-hidden bg-zinc-950">
       {activeMode === 'home' && <HomeMode />}
       {activeMode === 'flux' && <FluxMode />}
       {activeMode === 'production' && <ProductionMode />}
