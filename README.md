@@ -1,397 +1,111 @@
-# AcademiaOps 🎓🤖
+# OpenWebMCP
 
-**Plateforme intelligente de veille IA et génération de contenus pédagogiques**
+Infrastructure d'accès web pour agents IA — navigation headless, recherche sans API, digests automatiques et RAG.
 
-> Automatisez votre veille technologique, laissez l'IA classifier les nouveautés, et générez des cours structurés pour apprendre efficacement.
+## Pourquoi OpenWebMCP ?
 
----
+Les agents IA ont besoin d'accéder à des informations fraîches sur le web. Les APIs officielles (X, Reddit, etc.) sont coûteuses, limitées et complexes. OpenWebMCP résout ce problème en exposant des outils MCP (Model Context Protocol) qui permettent à n'importe quel agent de naviguer sur le web comme un humain, sans clé API.
 
-## 📋 Vue d'ensemble
+## Fonctionnalités
 
-**AcademiaOps** est un système automatisé qui :
+| Outil MCP | Description |
+|---|---|
+| `web.browse(url)` | Fetch une URL avec Playwright (rendu JS, anti-détection) |
+| `web.search(query)` | Recherche web via DuckDuckGo ou Bing, sans API key |
+| `web.digest(url)` | Génère un digest markdown + JSON structuré depuis une URL |
+| `web.watch(url)` | Surveille une page pour détecter les changements |
+| `web.watched_pages()` | Liste les pages surveillées |
+| `rag.ask(query)` | Q&A sur le corpus indexé |
 
-1. 🔍 **Surveille** automatiquement l'écosystème IA (RSS, APIs, GitHub, blogs)
-2. 🧠 **Analyse et classifie** les nouveautés avec des agents IA (sujet, impact, pertinence)
-3. ✅ **Vous assiste** dans la décision d'adoption (comparaison avec votre stack actuel)
-4. 📚 **Génère automatiquement** des cours pédagogiques structurés par niveau (débutant/intermédiaire/avancé)
-5. 💬 **Offre un chatbot RAG** pour interroger votre base de connaissances
-
-**Le tout avec optimisation des coûts LLM et hébergement sur un simple VPS !**
-
----
-
-## 🎯 Pourquoi ce projet ?
-
-### Problèmes résolus
-
-- **Surcharge informationnelle** : L'IA évolue trop vite (MCP, Agno, nouveaux frameworks chaque semaine...)
-- **Bruit vs Signal** : 90% des annonces sont du "hype", 10% sont réellement utiles
-- **Apprentissage fragmenté** : Tutoriels dispersés, qualité variable, pas de personnalisation
-- **Pas de mémoire** : Vous oubliez ce que vous avez appris il y a 3 mois
-- **Temps limité** : Impossible de tout suivre manuellement
-
-### Objectifs
-
-✅ Réduire le temps de veille de **10h/semaine à 1h/semaine**  
-✅ Avoir des contenus pédagogiques **cohérents et adaptés à votre niveau**  
-✅ Constituer votre **"second cerveau" technique** interrogeable  
-✅ **Apprendre MCP, Agno et n8n** en construisant le système  
-
----
-
-## 🏗️ Architecture
-
-```
-     INTERNET                n8n                MCP Server           Agents Agno
-  (Sources veille)    (Orchestration)      (Tools exposés)      (Logique métier)
-         │                    │                    │                    │
-         ▼                    ▼                    ▼                    ▼
-    ┌─────────┐         ┌──────────┐        ┌───────────┐       ┌─────────────┐
-    │  RSS    │────────▶│ Workflow │───────▶│   Tools   │──────▶│ Classifier  │
-    │  APIs   │         │  Cron    │        │    MCP    │       │ CourseGen   │
-    │ GitHub  │         │ HTTP Req │        │ JSON-RPC  │       │ QA Review   │
-    └─────────┘         └──────────┘        └───────────┘       └─────────────┘
-                                                   │                    │
-                                                   ▼                    ▼
-                                            ┌──────────┐         ┌────────────┐
-                                            │PostgreSQL│         │  LanceDB   │
-                                            │(Metadata)│         │  (RAG)     │
-                                            └──────────┘         └────────────┘
-                                                   │                    │
-                                                   └──────────┬─────────┘
-                                                              ▼
-                                                      ┌──────────────┐
-                                                      │  Dashboard   │
-                                                      │  (Next.js)   │
-                                                      └──────────────┘
-```
-
-**Stack technique** :
-- 🧠 **MCP** (Model Context Protocol) : Exposition de tools structurés pour les LLM
-- 🤖 **Agno** : Orchestration multi-agents (Classifier, Pédago, CourseBuilder, QA Reviewer)
-- 🔄 **n8n** : Automatisation des workflows (collecte, notifications, monitoring)
-- 🗄️ **PostgreSQL** : Stockage des métadonnées (items, cours, décisions)
-- 🔍 **LanceDB** : Base vectorielle pour le RAG (recherche sémantique)
-- 🎨 **Next.js 14** : Dashboard web (validation, consultation, chatbot)
-- 🐳 **Docker Compose** : Orchestration de tous les services
-
----
-
-## 📚 Documentation
-
-Le projet est **abondamment documenté** (c'est aussi un projet pédagogique !) :
-
-| Document | Description |
-|----------|-------------|
-| [📘 Cahier des charges fonctionnel](docs/cahier_des_charges_fonctionnel.md) | Objectifs métier, cas d'usage, fonctionnalités du MVP |
-| [📗 Cahier des charges technique](docs/cahier_des_charges_technique.md) | Choix technologiques, architecture, modèle de données, déploiement |
-| [📙 Architecture du projet](docs/architecture.md) | Arborescence complète avec explications pédagogiques par dossier/fichier |
-| [📕 Guide MCP](docs/mcp_guide.md) | Guide pédagogique sur le Model Context Protocol *(à venir)* |
-| [📔 Guide Agno](docs/agno_guide.md) | Guide pédagogique sur le framework multi-agents Agno *(à venir)* |
-| [📓 Guide n8n](docs/n8n_guide.md) | Guide pédagogique sur n8n (workflows, bonnes pratiques) *(à venir)* |
-
----
-
-## 🚀 Quick Start
+## Démarrage rapide
 
 ### Prérequis
+- Docker & Docker Compose
+- Python 3.11+ (développement local)
 
-- **Docker** et **Docker Compose** installés
-- **8 Go de RAM** minimum (ou VPS équivalent)
-- **Clés API** : Anthropic (Claude) et/ou OpenAI/GlobalGPT
-- **Compte Telegram** (pour les notifications, optionnel)
-
-### Installation
+### Lancement
 
 ```bash
-# 1. Cloner le projet
-git clone https://github.com/<your-username>/academiaops.git
-cd academiaops
-
-# 2. Configurer les variables d'environnement
+# 1. Copier le fichier d'environnement
 cp .env.example .env
-nano .env  # Remplir les secrets (API keys, passwords)
+# Renseigner POSTGRES_PASSWORD et au moins une clé LLM
 
-# 3. Lancer tous les services
-docker-compose up -d postgres n8n mcp-server
+# 2. Démarrer la stack
+docker compose up -d
 
-# 4. Vérifier que tout fonctionne
-docker-compose ps
-curl http://localhost:8000/health  # MCP Server
-open http://localhost:5678         # n8n
-open http://localhost:3000         # Frontend React
+# 3. Accéder à l'interface
+open http://localhost:3000
 
-# 5. Démarrer le frontend (React + Vite)
-cd frontend
-npm install
-npm run dev  # Démarre sur http://localhost:3000
-
-# 6. Importer les workflows n8n
-# - Ouvrir http://localhost:5678
-# - Login avec N8N_USER / N8N_PASSWORD (définis dans .env)
-# - Configurer les credentials Telegram (voir N8N_SETUP.md)
-# - Importer workflows/n8n-hitl-auto-classification.json
-# - Importer workflows/n8n-hitl-auto-course-generation.json
-# - Activer les 2 workflows
-```
-
-### URLs d'accès
-
-Une fois tous les services démarrés :
-
-| Service | URL | Credentials |
-|---------|-----|-------------|
-| **Frontend** | http://localhost:3000 | Aucun (accès direct) |
-| **MCP Server API** | http://localhost:8000/docs | Swagger UI interactif |
-| **n8n Orchestration** | http://localhost:5678 | Voir `.env` → N8N_USER / N8N_PASSWORD |
-| **PostgreSQL** | localhost:5432 | Voir `.env` → POSTGRES_* |
-
-### Premier test
-
-```bash
-# Tester le serveur MCP avec un appel simple
-curl -X POST http://localhost:8000/mcp/v1/tools/execute \
+# 4. Tester un outil MCP
+curl -X POST http://localhost:8000/rpc \
   -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "id": "test_1",
-    "method": "tools/execute",
-    "params": {
-      "tool": "get_pending_items",
-      "input": {"limit": 10}
-    }
-  }'
+  -d '{"jsonrpc":"2.0","id":1,"method":"web.browse","params":{"url":"https://old.reddit.com/r/MachineLearning"}}'
 ```
 
----
+## Architecture
 
-## 🎓 Guides pédagogiques
+```
+openwebmcp/
+├── mcp_server/          # Backend FastAPI + JSON-RPC MCP
+│   ├── services/
+│   │   ├── web_browser.py      # Playwright stealth
+│   │   ├── web_search.py       # DuckDuckGo / Bing
+│   │   ├── digest_generator.py # LLM → markdown + JSON
+│   │   ├── rag.py              # RAG hybride (LanceDB)
+│   │   └── collector.py        # RSS / GitHub / web
+│   └── tools/
+│       └── web_tools.py        # Outils MCP exposés
+├── frontend/            # React + Vite + shadcn/ui (dark mode)
+├── database/            # PostgreSQL schema + migrations
+└── docker-compose.yml
+```
 
-Ce projet est conçu pour **apprendre en faisant**. Chaque composant est largement commenté et expliqué.
+## Intégration avec un agent Claude
 
-### Apprendre MCP (Model Context Protocol)
-
-**Qu'est-ce que MCP ?**  
-MCP est un protocole standardisé (JSON-RPC 2.0) qui permet aux LLM d'interagir avec des outils externes de manière structurée. C'est comme un "menu de restaurant" : au lieu que le LLM invente des appels de fonction, il choisit parmi des "tools" bien définis.
-
-**Dans AcademiaOps** :
-- [server.py](mcp_server/server.py) : Point d'entrée MCP (FastAPI + JSON-RPC)
-- [tools/](mcp_server/tools/) : Tous les tools exposés (`batch_classify_items`, `generate_course`, etc.)
-- Chaque tool a un schéma d'input/output (Pydantic) et une description claire
-
-**Ressources** :
-- [Documentation officielle MCP](https://modelcontextprotocol.io)
-- [Guide MCP du projet](docs/mcp_guide.md) *(à créer ensemble)*
-
----
-
-### Apprendre Agno (Multi-agents)
-
-**Qu'est-ce qu'Agno ?**  
-Agno est un framework pour orchestrer des agents IA spécialisés. Chaque agent a un rôle, des skills (capacités), et peut collaborer avec d'autres agents en "team".
-
-**Dans AcademiaOps** :
-- [agents/classifier.py](mcp_server/agents/classifier.py) : Agent qui classifie les items de veille
-- [agents/course_builder.py](mcp_server/agents/course_builder.py) : Agent qui génère les contenus pédagogiques
-- [agents/qa_reviewer.py](mcp_server/agents/qa_reviewer.py) : Agent qui vérifie la qualité des cours générés
-
-**Pattern utilisé** :
 ```python
-Agent → Skills → LLM → Output structuré → Validation
+import anthropic
+
+client = anthropic.Anthropic()
+
+tools = [
+    {
+        "name": "web_browse",
+        "description": "Fetch une URL et retourne le contenu",
+        "input_schema": {
+            "type": "object",
+            "properties": {"url": {"type": "string"}},
+            "required": ["url"]
+        }
+    }
+]
+
+response = client.messages.create(
+    model="claude-sonnet-4-6",
+    max_tokens=1024,
+    tools=tools,
+    messages=[{"role": "user", "content": "Résume les dernières news IA sur Reddit"}]
+)
 ```
 
-**Ressources** :
-- [Documentation officielle Agno](https://agno.dev)
-- [Guide Agno du projet](docs/agno_guide.md) *(à créer ensemble)*
+## Variables d'environnement
 
----
+| Variable | Description | Défaut |
+|---|---|---|
+| `POSTGRES_PASSWORD` | Mot de passe PostgreSQL | requis |
+| `LLM_PROVIDER` | `aws`, `openai`, `anthropic` | `aws` |
+| `AWS_BEDROCK_MODEL` | Modèle Bedrock | `us.amazon.nova-pro-v1:0` |
+| `OPENAI_API_KEY` | Clé OpenAI (optionnel) | — |
+| `ANTHROPIC_API_KEY` | Clé Anthropic (optionnel) | — |
+| `ADMIN_TOKEN` | Token admin API | requis |
 
-### Apprendre n8n (Automatisation)
+## Documentation
 
-**Qu'est-ce que n8n ?**  
-n8n est une plateforme no-code/low-code pour créer des workflows automatisés (comme Zapier, mais self-hosted et open-source).
+- [Guide utilisateur](docs/user-guide.md)
+- [Référence technique](docs/technical.md)
+- [Outils MCP](docs/mcp-tools.md)
 
-**Dans AcademiaOps** :
-- [n8n_workflows/01_veille_quotidienne.json](n8n_workflows/01_veille_quotidienne.json) : Collecte automatique RSS/APIs
-- Workflow : Cron → HTTP Request → Dedupe → PostgreSQL → MCP Tool → Notification
+L'assistant intégré (page Assistant) répond à toutes vos questions sur l'utilisation de l'outil.
 
-**Pourquoi n8n ?**  
-Interface visuelle, facilite le debugging, connecteurs natifs (RSS, HTTP, PostgreSQL, Telegram), gestion d'erreurs intégrée.
+## Licence
 
-**Ressources** :
-- [Documentation officielle n8n](https://docs.n8n.io)
-- [Guide n8n du projet](docs/n8n_guide.md) *(à créer ensemble)*
-
----
-
-## 🧪 Roadmap d'implémentation
-
-Le projet est conçu pour être implémenté **progressivement**, étape par étape :
-
-### ✅ Phase 1 : Fondations (Semaine 1-2) ✅ COMPLETE
-- Serveur MCP minimal fonctionnel
-- Base PostgreSQL initialisée
-- n8n installé et accessible
-- **Objectif** : Hello World MCP qui répond
-- **Status**: ✅ Completed Feb 20, 2026
-
-### ✅ Phase 2 : Veille et classification (Semaine 3-4) ✅ COMPLETE
-- Workflow n8n de collecte RSS (prêt à implémenter)
-- Agent Classifier opérationnel ✅
-- Tool MCP `classifier.classify_batch` ✅
-- Multi-provider LLM (AWS Bedrock Nova Pro) ✅
-- Cost tracking complet ✅
-- **Objectif** : 100 items réels classifiés automatiquement
-- **Status**: ✅ Completed Feb 23, 2026 - 5 items classifiés ($0.003)
-
-### ✅ Phase 3 : Génération de cours (Semaine 5-6) ✅ COMPLETE
-- Agents CourseGenerator, QA Reviewer ✅
-- Tool MCP `course.generate` ✅
-- Indexation vectorielle (LanceDB) ✅
-- Export PDF/Markdown avec Weasyprint ✅
-- Modification de cours avec instructions ✅
-- **Objectif** : 1 cours complet (3 niveaux) généré
-- **Status**: ✅ Completed Feb 26, 2026
-
-### ✅ Phase 4 : Frontend & UX (Semaine 7-8) ✅ COMPLETE
-- Interface React avec Vite ✅
-- Pages : Dashboard, Items, Courses, HITL, RAG, Sources ✅
-- Toast notifications non-bloquantes ✅
-- Sélection multiple + bulk actions ✅
-- Export PDF fonctionnel ✅
-- **Objectif** : Dashboard fonctionnel et responsive
-- **Status**: ✅ Completed Feb 26, 2026 - **TOUS les popups supprimés** 🎉
-
-### ✅ Phase 5 : Orchestration n8n (Semaine 9) ✅ COMPLETE
-- n8n installé et configuré ✅
-- Credentials Telegram configurées ✅
-- Workflows importés :
-  - Auto-Classification HITL (toutes les 30 min) ✅
-  - Auto-Course Generation (lundis 9h) ✅
-- **Objectif** : Automatisation complète
-- **Status**: ✅ Completed Feb 26, 2026 - n8n opérationnel
-
-### ⬜ Phase 6 : Optimisations (Semaine 10)
-- Batching des appels LLM ✅ (déjà implémenté)
-- Caching des embeddings
-- Monitoring et alertes
-- **Objectif** : Coûts LLM < 5€/mois
-
-**Statut actuel** : 🟢 **Phase 1-5 complètes** ✅ | **Système 100% fonctionnel** 🚀  
-**Interface** : http://localhost:3000  
-**Documentation complète** : 
-- [`N8N_SETUP.md`](N8N_SETUP.md) - Configuration n8n
-- [`TELEGRAM_SETUP.md`](TELEGRAM_SETUP.md) - Bot Telegram
-- [`docs/feature-5-hitl-telegram.md`](docs/feature-5-hitl-telegram.md) - HITL complet
-
----
-
-## 💰 Optimisation des coûts
-
-Le projet est conçu pour fonctionner avec un **budget LLM minimal** (< 20€/mois) :
-
-| Optimisation | Description | Gain estimé |
-|--------------|-------------|-------------|
-| **Batching** | Classifier 20 items en 1 appel vs 20 appels | 8x |
-| **AWS Bedrock Nova Pro** | Modèle ultra-économique ($0.0008/1k tokens) | 10x vs GPT-4 |
-| **Caching** | Cache les embeddings déjà calculés | 3x |
-| **Choix du modèle** | Nova Pro pour classification, Claude pour cours | 5x |
-| **TTL data** | Purge automatique des anciennes données | ∞ |
-
-**Coûts réels mesurés** :
-- Classification : 5 items → **$0.003**
-- Génération cours : 1 cours (5000 mots) → **~$0.10** (avec Claude)
-- RAG : 50 requêtes/semaine × 4 → **~$0.20€**
-- **Total mensuel estimé ≈ 3-5€** (large marge)
-
-**Monitoring** : Tous les coûts sont trackés en temps réel dans la base de données (`cost_tracking` table).
-
----
-
-## 🗂️ Structure du projet
-
-```
-academiaops/
-├── docs/                      # 📚 Documentation complète
-├── database/                  # 🗄️ Scripts SQL (init, migrations, seeds)
-├── mcp_server/                # 🧠 Serveur MCP + Agents Agno
-│   ├── tools/                 # 🔧 Tools MCP exposés
-│   ├── agents/                # 🤖 Agents Agno (Classifier, CourseBuilder, etc.)
-│   ├── database/              # 💾 Accès DB (PostgreSQL, LanceDB)
-│   └── utils/                 # 🛠️ Helpers (embeddings, chunking, LLM clients)
-├── n8n_workflows/             # 🔄 Workflows n8n (JSON exportés)
-├── dashboard/                 # 🎨 Frontend Next.js
-├── scripts/                   # 🔨 Scripts utilitaires (deploy, backup, etc.)
-└── docker-compose.yml         # 🐳 Orchestration de tous les services
-```
-
-**Voir [docs/architecture.md](docs/architecture.md) pour le détail complet de chaque dossier.**
-
----
-
-## 🤝 Contribution
-
-Ce projet est principalement un **projet personnel pédagogique**, mais les contributions sont bienvenues !
-
-**Comment contribuer** :
-1. Fork le projet
-2. Crée une branche (`git checkout -b feature/amazing-feature`)
-3. Commit tes changements (`git commit -m 'Add amazing feature'`)
-4. Push vers la branche (`git push origin feature/amazing-feature`)
-5. Ouvre une Pull Request
-
-**Règles** :
-- Code commenté (en français pour ce projet)
-- Tests pour les fonctionnalités critiques
-- Documentation à jour
-
----
-
-## 📜 Licence
-
-[MIT License](LICENSE)
-
-Vous êtes libre d'utiliser, modifier et distribuer ce projet.
-
----
-
-## 🙏 Remerciements
-
-- **Anthropic** pour Claude et le protocole MCP
-- **Agno** pour le framework multi-agents
-- **n8n** pour la plateforme d'automatisation open-source
-- **LanceDB** pour la base vectorielle légère et performante
-- La communauté IA pour tous les tutoriels et retours d'expérience
-
----
-
-## 📞 Contact & Support
-
-- **Créateur** : [Votre nom]
-- **Email** : [Votre email]
-- **Issues** : [GitHub Issues](https://github.com/<your-username>/academiaops/issues)
-
-**Besoin d'aide ?**  
-Consultez d'abord la [documentation complète](docs/) avant d'ouvrir une issue.
-
----
-
-## 🔮 Roadmap future (post-MVP)
-
-- ❌ Multilingue (EN, ES, etc.)
-- ❌ Multi-utilisateurs (collaboration)
-- ❌ Export NotebookLM (flashcards, scripts vidéo)
-- ❌ Gamification (progression, badges)
-- ❌ API publique documentée
-- ❌ Mobile (React Native ou PWA)
-- ❌ Intelligence sur les sources (détection de qualité, biais)
-
----
-
-<div align="center">
-
-**Construisons ensemble votre second cerveau technique ! 🧠✨**
-
-[📘 Voir la doc complète](docs/) | [🚀 Commencer l'implémentation](docs/architecture.md#5-ordre-dimplémentation-recommandé) | [💬 Poser une question](https://github.com/<your-username>/academiaops/issues)
-
-</div>
+MIT

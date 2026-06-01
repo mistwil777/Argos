@@ -1,63 +1,27 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Layout } from './components/layout/Layout';
-import { Dashboard } from './pages/Dashboard';
-import { Workspaces } from './pages/Workspaces';
-import Items from './pages/Items';
-import Courses from './pages/Courses';
-import RAG from './pages/RAG';
-import Analytics from './pages/Analytics';
-import HITL from './pages/HITL';
-import Admin from './pages/Admin';
-import Sources from './pages/Sources';
-import Guide from './pages/Guide';
-import TestPage from './pages/TestPage';
-import { useToast } from './hooks/useToast';
-import { ToastContainer } from './components/ui/Toast';
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import AppLayout from '@/components/layout/AppLayout'
+import Dashboard from '@/pages/Dashboard'
+import Browse from '@/pages/Browse'
+import WebSearch from '@/pages/WebSearch'
+import Feed from '@/pages/Feed'
+import Assistant from '@/pages/Assistant'
+import Sources from '@/pages/Sources'
+import Settings from '@/pages/Settings'
 
-console.log('📱 App.tsx loaded');
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      retry: 1,
-      staleTime: 5 * 60 * 1000, // 5 minutes
-    },
-  },
-});
-
-console.log('🔧 QueryClient created');
-
-function App() {
-  console.log('🎨 App component rendering');
-  const { toasts, addToast, removeToast } = useToast();
-  console.log('📋 Toasts initialized');
-
+export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Layout>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/test" element={<TestPage />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/workspaces" element={<Workspaces />} />
-            <Route path="/items" element={<Items addToast={addToast} removeToast={removeToast} />} />
-            <Route path="/courses" element={<Courses addToast={addToast} removeToast={removeToast} />} />
-            <Route path="/rag" element={<RAG addToast={addToast} />} />
-            <Route path="/analytics" element={<Analytics />} />
-            <Route path="/hitl" element={<HITL addToast={addToast} />} />
-            <Route path="/sources" element={<Sources addToast={addToast} />} />
-            <Route path="/guide" element={<Guide />} />
-            <Route path="/admin" element={<Admin />} />
-          </Routes>
-        </Layout>
-        <ToastContainer toasts={toasts} onClose={removeToast} />
-      </BrowserRouter>
-    </QueryClientProvider>
-  );
+    <BrowserRouter>
+      <Routes>
+        <Route element={<AppLayout />}>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/browse" element={<Browse />} />
+          <Route path="/search" element={<WebSearch />} />
+          <Route path="/feed" element={<Feed />} />
+          <Route path="/assistant" element={<Assistant />} />
+          <Route path="/sources" element={<Sources />} />
+          <Route path="/settings" element={<Settings />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
+  )
 }
-
-export default App;
-

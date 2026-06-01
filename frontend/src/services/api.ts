@@ -1,372 +1,61 @@
-import axios from 'axios';
-import type { Item, Course, RAGResult, Stats, Decision, TopicStat, TimelineData, CostData } from '../types';
+const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-
-const apiClient = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  timeout: 30000, // 30s for standard requests
-});
-
-// Separate client for long-running LLM operations (generation, classification)
-const llmClient = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  timeout: 600000, // 10 minutes
-});
-
-// Stats API
-export const statsApi = {
-  getGlobal: async (): Promise<Stats> => {
-    const { data } = await apiClient.get('/api/v1/stats/global');
-    return data;
-  },
-  
-  getTimeline: async (days: number = 7): Promise<TimelineData[]> => {
-    const { data } = await apiClient.get(`/api/v1/stats/timeline?days=${days}`);
-    return data;
-  },
-  
-  getTopics: async (limit: number = 10): Promise<TopicStat[]> => {
-    const { data } = await apiClient.get(`/api/v1/stats/topics?limit=${limit}`);
-    return data;
-  },
-  
-  getCosts: async (period: string = 'month'): Promise<CostData[]> => {
-    const { data } = await apiClient.get(`/api/v1/stats/costs?period=${period}`);
-    return data;
-  },
-};
-
-// Items API
-export const itemsApi = {
-  list: async (params?: { page?: number; limit?: number; status?: string; source?: string; workspace_id?: number }): Promise<{ items: Item[]; total: number }> => {
-    const { data } = await apiClient.get('/api/v1/items', { params });
-    return data;
-  },
-  
-  get: async (id: number): Promise<Item> => {
-    const { data } = await apiClient.get(`/api/v1/items/${id}`);
-    return data;
-  },
-  
-  classify: async (id: number): Promise<Item> => {
-    const { data } = await llmClient.post(`/api/v1/items/${id}/classify`);
-    return data;
-  },
-  
-  classifyBatch: async (ids: number[]): Promise<any> => {
-    const { data } = await llmClient.post('/api/v1/items/batch/classify', { item_ids: ids });
-    return data;
-  },
-  
-  delete: async (id: number): Promise<void> => {
-    await apiClient.delete(`/api/v1/items/${id}`);
-  },
-
-  batchAssignWorkspace: async (itemIds: number[], workspaceId: number): Promise<{ updated: number }> => {
-    const { data } = await apiClient.patch('/api/v1/items/batch/workspace', { item_ids: itemIds, workspace_id: workspaceId });
-    return data;
-  },
-};
-
-// Courses API
-export const coursesApi = {
-  list: async (params?: { page?: number; limit?: number; status?: string; topic?: string; workspace_id?: number }): Promise<{ courses: Course[]; total: number }> => {
-    const { data } = await apiClient.get('/api/v1/courses', { params });
-    return data;
-  },
-  
-  get: async (id: number): Promise<Course> => {
-    const { data } = await apiClient.get(`/api/v1/courses/${id}`);
-    return data;
-  },
-  
-  getContent: async (id: number): Promise<any> => {
-    const { data } = await apiClient.get(`/api/v1/courses/${id}/content`);
-    return data;
-  },
-  
-  publish: async (id: number): Promise<Course> => {
-    const { data } = await apiClient.post(`/api/v1/courses/${id}/publish`);
-    return data;
-  },
-  
-  regenerate: async (id: number): Promise<Course> => {
-    const { data } = await apiClient.post(`/api/v1/courses/${id}/regenerate`);
-    return data;
-  },
-  
-  updateStatus: async (id: number, status: string): Promise<Course> => {
-    const { data } = await apiClient.patch(`/api/v1/courses/${id}/status`, { status });
-    return data;
-  },
-  
-  generate: async (itemId: number, durationMinutes: number = 180, contentType: string = 'course'): Promise<{ 
-    course_id: number; 
-    status: string; 
-    tokens_used: number; 
-    cost: number; 
-    content_length: number;
-    rag_enabled?: boolean;
-    rag_sources_count?: number;
-    updated?: boolean;
-  }> => {
-    const { data } = await llmClient.post('/api/v1/courses/generate', { 
-      item_id: itemId,
-      duration_minutes: durationMinutes,
-      content_type: contentType,
-    });
-    return data;
-  },
-  
-  modify: async (id: number, instruction: string): Promise<{ message: string; tokens_used: number; cost: number }> => {
-    const { data } = await apiClient.post(`/api/v1/courses/${id}/modify`, { instruction });
-    return data;
-  },
-  
-  delete: async (id: number): Promise<{ message: string }> => {
-    const { data } = await apiClient.delete(`/api/v1/courses/${id}`);
-    return data;
-  },
-  
-  validate: async (id: number): Promise<{ message: string; status: string }> => {
-    const { data } = await apiClient.patch(`/api/v1/courses/${id}/validate`);
-    return data;
-  },
-  
-  exportMarkdown: async (id: number): Promise<Blob> => {
-    const response = await apiClient.get(`/api/v1/courses/${id}/export/markdown`, {
-      responseType: 'blob'
-    });
-    return response.data;
-  },
-  
-  exportPDF: async (id: number): Promise<Blob> => {
-    const response = await apiClient.get(`/api/v1/courses/${id}/export/pdf`, {
-      responseType: 'blob'
-    });
-    return response.data;
-  },
-};
-
-// RAG API
-export const ragApi = {
-  ask: async (query: string, useHybridSearch: boolean = true, documentContext?: string, workspaceId?: number | null): Promise<RAGResult> => {
-    const { data } = await apiClient.post('/api/v1/rag/ask', { 
-      query,
-      use_hybrid_search: useHybridSearch,
-      ...(documentContext ? { document_context: documentContext } : {}),
-      ...(workspaceId != null ? { workspace_id: workspaceId } : {}),
-    });
-    return data;
-  },
-
-  extractDocument: async (file: File): Promise<{ text: string; method: string; filename: string; char_count: number; truncated: boolean }> => {
-    const form = new FormData();
-    form.append('file', file);
-    form.append('use_vision', 'true');
-    const { data } = await apiClient.post('/api/v1/rag/extract-document', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 60_000, // OCR can be slow
-    });
-    return data;
-  },
-  
-  search: async (query: string, limit: number = 5): Promise<any> => {
-    const { data } = await apiClient.post('/api/v1/rag/search', { query, limit });
-    return data;
-  },
-  
-  feedback: async (queryId: string, positive: boolean): Promise<void> => {
-    await apiClient.post('/api/v1/rag/feedback', { query_id: queryId, positive });
-  },
-  
-  history: async (limit: number = 50): Promise<any[]> => {
-    const { data } = await apiClient.get(`/api/v1/rag/history?limit=${limit}`);
-    return data;
-  },
-
-  clearHistory: async (): Promise<{ message: string; deleted: number }> => {
-    const { data } = await apiClient.delete('/api/v1/rag/history');
-    return data;
-  },
-};
-
-// Sources API
-export interface Source {
-  id: number;
-  name: string;
-  url: string;
-  type: 'rss' | 'github' | 'api' | 'website';
-  category: string;
-  description: string;
-  tags: string[];
-  active: boolean;
-  createdAt: string | null;
-  updatedAt: string | null;
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const resp = await fetch(`${BASE}${path}`, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options,
+  })
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({ detail: resp.statusText }))
+    throw new Error(err.detail || `HTTP ${resp.status}`)
+  }
+  return resp.json()
 }
 
-export interface SourceCreate {
-  name: string;
-  url: string;
-  type: 'rss' | 'github' | 'api' | 'website';
-  category: string;
-  description?: string;
-  tags?: string[];
-  active?: boolean;
-  workspace_id?: number;
+async function rpc(method: string, params: Record<string, any> = {}) {
+  const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method, params })
+  const resp = await fetch(`${BASE}/rpc`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body,
+  })
+  const data = await resp.json()
+  if (data.error) throw new Error(data.error.message || 'RPC error')
+  return data.result
 }
 
-export interface SourceUpdate {
-  name?: string;
-  url?: string;
-  type?: 'rss' | 'github' | 'api' | 'website';
-  category?: string;
-  description?: string;
+export const api = {
+  // Health
+  healthCheck: () => request<any>('/health'),
+
+  // Stats
+  getStats: () => request<any>('/api/v1/stats/global'),
+
+  // Items
+  getItems: (params: Record<string, any> = {}) => {
+    const qs = new URLSearchParams(params as any).toString()
+    return request<any>(`/api/v1/items?${qs}`)
+  },
+
+  // Sources
+  getSources: () => request<any>('/api/v1/sources'),
+  addSource: (body: any) => request<any>('/api/v1/sources', { method: 'POST', body: JSON.stringify(body) }),
+  toggleSource: (id: number) => request<any>(`/api/v1/sources/${id}/toggle`, { method: 'PATCH' }),
+  deleteSource: (id: number) => request<any>(`/api/v1/sources/${id}`, { method: 'DELETE' }),
+
+  // Web tools (via MCP JSON-RPC)
+  browse: (url: string, params?: any) => rpc('web.browse', { url, ...params }),
+  search: (query: string, engine = 'duckduckgo', max_results = 10) =>
+    rpc('web.search', { query, engine, max_results }),
+  digest: (url: string, params?: any) => rpc('web.digest', { url, save_item: true, ...params }),
+  watchUrl: (params: any) => rpc('web.watch', params),
+  watchedPages: () => rpc('web.watched_pages', {}),
+
+  // RAG
+  ragQuery: (query: string, workspace_id?: number) =>
+    request<any>('/api/v1/rag/ask', {
+      method: 'POST',
+      body: JSON.stringify({ query, user_identifier: 'frontend', workspace_id }),
+    }),
+  rebuildRagIndex: () => request<any>('/api/v1/rag/index-all-courses', { method: 'POST' }),
 }
-
-export const sourcesApi = {
-  list: async (params?: { type?: string; category?: string; active?: boolean; workspace_id?: number }): Promise<{ sources: Source[]; total: number }> => {
-    const { data } = await apiClient.get('/api/v1/sources', { params });
-    return data;
-  },
-  get: async (id: number): Promise<Source> => {
-    const { data } = await apiClient.get(`/api/v1/sources/${id}`);
-    return data;
-  },
-  create: async (payload: SourceCreate): Promise<{ id: number; message: string }> => {
-    const { data } = await apiClient.post('/api/v1/sources', payload);
-    return data;
-  },
-  toggle: async (id: number, active: boolean): Promise<{ message: string }> => {
-    const { data } = await apiClient.patch(`/api/v1/sources/${id}/toggle`, { active });
-    return data;
-  },
-  collect: async (id: number): Promise<{ message: string; fetched: number; inserted: number; duplicates: number }> => {
-    const { data } = await apiClient.post(`/api/v1/sources/${id}/collect`);
-    return data;
-  },
-  collectWorkspace: async (workspaceId: number): Promise<{ message: string; fetched: number; inserted: number; duplicates: number; errors: number }> => {
-    const { data } = await apiClient.post(`/api/v1/workspaces/${workspaceId}/collect`);
-    return data;
-  },
-  update: async (id: number, payload: SourceUpdate): Promise<{ message: string }> => {
-    const { data } = await apiClient.put(`/api/v1/sources/${id}`, payload);
-    return data;
-  },
-  delete: async (id: number): Promise<{ message: string }> => {
-    const { data } = await apiClient.delete(`/api/v1/sources/${id}`);
-    return data;
-  },
-};
-
-// Workspaces API (no /api/v1 prefix)
-export interface WorkspaceResponse {
-  id: number;
-  name: string;
-  slug: string;
-  description?: string;
-  domain?: string;
-  icon: string;
-  color: string;
-  is_active: boolean;
-  created_at: string;
-  updated_at?: string;
-  stats?: Record<string, unknown>;
-}
-
-export interface WorkspaceCreate {
-  name: string;
-  description?: string;
-  domain?: string;
-  icon?: string;
-  color?: string;
-}
-
-export interface WorkspaceMember {
-  id: number;
-  workspace_id: number;
-  user_identifier: string;
-  role: 'owner' | 'admin' | 'editor' | 'viewer';
-  can_read: boolean;
-  can_write: boolean;
-  can_delete: boolean;
-  can_generate: boolean;
-  created_at: string;
-}
-
-export interface MemberCreate {
-  user_identifier: string;
-  role?: 'owner' | 'admin' | 'editor' | 'viewer';
-  can_read?: boolean;
-  can_write?: boolean;
-  can_delete?: boolean;
-  can_generate?: boolean;
-}
-
-export const workspacesApi = {
-  list: async (): Promise<WorkspaceResponse[]> => {
-    const { data } = await apiClient.get('/api/v1/workspaces');
-    return data;
-  },
-  create: async (payload: WorkspaceCreate): Promise<WorkspaceResponse> => {
-    const { data } = await apiClient.post('/api/v1/workspaces', payload);
-    return data;
-  },
-  update: async (id: number, payload: Partial<WorkspaceCreate>): Promise<WorkspaceResponse> => {
-    const { data } = await apiClient.patch(`/api/v1/workspaces/${id}`, payload);
-    return data;
-  },
-  delete: async (id: number): Promise<void> => {
-    await apiClient.delete(`/api/v1/workspaces/${id}`);
-  },
-  listMembers: async (workspaceId: number): Promise<WorkspaceMember[]> => {
-    const { data } = await apiClient.get(`/api/v1/workspaces/${workspaceId}/members`);
-    return data;
-  },
-  addMember: async (workspaceId: number, payload: MemberCreate): Promise<WorkspaceMember> => {
-    const { data } = await apiClient.post(`/api/v1/workspaces/${workspaceId}/members`, payload);
-    return data;
-  },
-  removeMember: async (workspaceId: number, userIdentifier: string): Promise<void> => {
-    await apiClient.delete(`/api/v1/workspaces/${workspaceId}/members/${encodeURIComponent(userIdentifier)}`);
-  },
-};
-
-// HITL API
-export const hitlApi = {
-  getPending: async (): Promise<{ items: Item[]; courses: Course[] }> => {
-    const { data } = await apiClient.get('/api/v1/hitl/pending');
-    return data;
-  },
-  
-  getDecisions: async (params?: { page?: number; limit?: number }): Promise<{ decisions: Decision[]; total: number }> => {
-    const { data } = await apiClient.get('/api/v1/hitl/decisions', { params });
-    return data;
-  },
-  
-  decide: async (_type: string, id: number, decision: string): Promise<void> => {
-    await apiClient.post('/api/v1/hitl/decide', { item_id: id, decision });
-  },
-  
-  botStatus: async (): Promise<{ running: boolean; mode?: string }> => {
-    const { data } = await apiClient.get('/api/v1/hitl/bot/status');
-    return data;
-  },
-  
-  startBot: async (): Promise<void> => {
-    await apiClient.post('/api/v1/hitl/bot/start');
-  },
-  
-  stopBot: async (): Promise<void> => {
-    await apiClient.post('/api/v1/hitl/bot/stop');
-  },
-};
-
-export default apiClient;
