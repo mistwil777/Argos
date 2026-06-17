@@ -10,7 +10,7 @@ from typing import Dict, Optional
 from mcp_server.config import settings
 from mcp_server.database import DatabaseManager
 from mcp_server.services.llm_provider import create_llm_provider
-from mcp_server.services.vector_store import VectorStoreService
+from mcp_server.services.vector_store_singleton import get_vector_store
 from mcp_server.services.rag import RAGService
 
 logger = logging.getLogger(__name__)
@@ -38,7 +38,7 @@ def _get_rag_service() -> RAGService:
     
     if _rag_service is None:
         db_manager = _get_db_manager()
-        vector_store = VectorStoreService()
+        vector_store = get_vector_store()
         
         # Use AWS Nova Pro for RAG (cost-effective)
         llm_provider = create_llm_provider(

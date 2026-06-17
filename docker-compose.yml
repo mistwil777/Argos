@@ -54,6 +54,8 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_REGION=${AWS_REGION:-us-east-1}
       - AWS_BEDROCK_MODEL=${AWS_BEDROCK_MODEL:-us.amazon.nova-pro-v1:0}
+      - DEFAULT_CLASSIFICATION_MODEL=${DEFAULT_CLASSIFICATION_MODEL:-us.amazon.nova-pro-v1:0}
+      - DEFAULT_DIGEST_MODEL=${DEFAULT_DIGEST_MODEL:-us.amazon.nova-pro-v1:0}
       - ADMIN_TOKEN=${ADMIN_TOKEN}
       # Cache directories for SentenceTransformer
       - TRANSFORMERS_CACHE=/data/lancedb/transformers_cache
@@ -61,6 +63,7 @@ services:
       - HF_HOME=/data/lancedb/huggingface
       # Playwright
       - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+      - SEARXNG_URL=http://searxng:8080
     volumes:
       - ./mcp_server:/app/mcp_server:ro
       - ./config:/app/config:ro
@@ -84,6 +87,29 @@ services:
       start_period: 60s
     networks:
       - openwebmcp-network
+
+  # ============================================
+  # SearXNG - Moteur de recherche agrégateur
+  # ============================================
+  searxng:
+    image: searxng/searxng:latest
+    container_name: openwebmcp-searxng
+    restart: unless-stopped
+    environment:
+      - SEARXNG_SECRET_KEY=openwebmcp-searxng-secret-2026
+      - SEARXNG_BASE_URL=http://searxng:8080
+    volumes:
+      - ./config/searxng:/etc/searxng:rw
+    ports:
+      - "8888:8080"
+    networks:
+      - openwebmcp-network
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
 
 # ============================================
 # Networks

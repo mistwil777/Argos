@@ -19,33 +19,34 @@ logger = logging.getLogger(__name__)
 # Prompt Templates
 # ============================================
 
-RAG_SYSTEM_PROMPT = """You are an AI assistant specialized in AI, machine learning, and software engineering topics. 
-You help users by answering their questions based on educational courses and technical documentation.
+RAG_SYSTEM_PROMPT = """Tu es un expert en veille technologique, développement logiciel et pédagogie technique.
+Tu aides les utilisateurs à comprendre et exploiter les contenus indexés dans leur base de connaissances.
 
-Guidelines:
-- Answer in French (unless asked in English)
-- Be concise but complete (200-300 words)
-- Cite sources using [Source 1], [Source 2] format
-- If information is insufficient or uncertain, say so explicitly
-- Focus on practical, actionable information
-- Use technical terms accurately"""
+Règles absolues :
+- Réponds TOUJOURS en français, sauf si la question est explicitement en anglais
+- Commence directement par la réponse concrète — jamais par "D'après les sources..." ou "Les sources indiquent..."
+- Donne systématiquement 1 à 2 exemples concrets, analogies ou cas d'usage réels pour illustrer
+- Si tu compares des concepts ou listes des options, utilise une liste structurée ou un tableau
+- Cite les sources de façon discrète en fin de point : (→ Source N)
+- Si les sources sont insuffisantes, dis-le franchement en 1 phrase et propose une piste de recherche complémentaire
+- Longueur cible : 350-600 mots, minimum 3 paragraphes substantiels
+- Style : direct, engagé, pédagogique — comme un collègue expert qui explique à un pair"""
 
 
-RAG_USER_PROMPT_TEMPLATE = """Based on the following sources, answer the user's question.
-
-**Sources:**
+RAG_USER_PROMPT_TEMPLATE = """Voici les sources disponibles dans la base de connaissances :
 
 {sources}
 
-**User Question:** {query}
+Question : {query}
 
-**Instructions:**
-- Synthesize information from the sources above
-- Cite which source(s) support each claim
-- If sources don't fully answer the question, acknowledge this
-- Provide practical examples when relevant
+Consignes :
+- Synthétise les informations pertinentes des sources ci-dessus
+- Illustre avec des exemples concrets tirés des sources ou de ta connaissance du domaine
+- Structure ta réponse de façon lisible (paragraphes, listes si pertinent)
+- Cite les sources utilisées (→ Source N) après chaque point clé
+- Si les sources ne couvrent pas suffisamment le sujet, indique-le clairement
 
-**Answer:**"""
+Réponse :"""
 
 
 class RAGService:
@@ -56,10 +57,10 @@ class RAGService:
         llm_provider: LLMProvider,
         vector_store: VectorStoreService,
         db_manager: DatabaseManager,
-        top_k: int = 5,
-        temperature: float = 0.5,
-        max_tokens: int = 1500,
-        top_p: float = 0.5
+        top_k: int = 8,
+        temperature: float = 0.75,
+        max_tokens: int = 2500,
+        top_p: float = 0.9
     ):
         """
         Initialize RAGService.
@@ -128,15 +129,19 @@ class RAGService:
         start_time = datetime.now()
         
         # 1. Retrieve relevant chunks (hybrid search by default)
+        # Run synchronous vector store calls in a thread to avoid blocking the event loop
+        import asyncio
         if use_hybrid_search:
-            search_results = self.vector_store.hybrid_search(
+            search_results = await asyncio.to_thread(
+                self.vector_store.hybrid_search,
                 query=query,
                 limit=self.top_k,
                 filter_source_type=filter_source_type,
                 workspace_id=workspace_id
             )
         else:
-            search_results = self.vector_store.search(
+            search_results = await asyncio.to_thread(
+                self.vector_store.search,
                 query=query,
                 limit=self.top_k,
                 filter_source_type=filter_source_type,
@@ -239,15 +244,18 @@ class RAGService:
             List of search results with metadata
         """
         logger.info(f"Search query: {query} (limit={limit}, hybrid={use_hybrid_search})")
-        
+
+        import asyncio
         if use_hybrid_search:
-            results = self.vector_store.hybrid_search(
+            results = await asyncio.to_thread(
+                self.vector_store.hybrid_search,
                 query=query,
                 limit=limit,
                 filter_source_type=filter_source_type
             )
         else:
-            results = self.vector_store.search(
+            results = await asyncio.to_thread(
+                self.vector_store.search,
                 query=query,
                 limit=limit,
                 filter_source_type=filter_source_type

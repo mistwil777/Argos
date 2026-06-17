@@ -1,11 +1,10 @@
 """
-MCP tools for web browsing and search.
+MCP tools for web browsing.
 
 Exposed tools:
-  web.browse       — Fetch and render a URL (JS-aware)
-  web.search       — Search the web without API keys
-  web.digest       — Generate markdown + JSON digest from a URL
-  web.watch        — Register a URL for change monitoring
+  web.browse        — Fetch and render a URL (JS-aware)
+  web.digest        — Generate markdown + JSON digest from a URL
+  web.watch         — Register a URL for change monitoring
   web.watched_pages — List monitored URLs
 """
 import asyncio
@@ -20,11 +19,13 @@ async def tool_browse(params: dict, db=None) -> dict:
     """
     Fetch a URL with headless browser (Playwright + stealth).
     Falls back to requests for simple HTML pages.
+    If the URL ends with '/', crawls all child pages found on that page.
 
     params:
-      url (str)             — URL to fetch
+      url (str)             — URL to fetch (trailing '/' triggers child crawl)
       use_playwright (bool) — default True
       timeout_ms (int)      — default 30000
+      max_crawl (int)       — max child pages to crawl when URL ends with / (default 10)
       workspace_id (int)    — optional
     """
     url = params.get("url", "").strip()
@@ -34,9 +35,84 @@ async def tool_browse(params: dict, db=None) -> dict:
     use_playwright = params.get("use_playwright", True)
     timeout_ms = params.get("timeout_ms", 30000)
     workspace_id = params.get("workspace_id")
+    max_crawl = min(params.get("max_crawl", 10), 30)
 
     from mcp_server.services.web_browser import browse
+    from urllib.parse import urlparse, urljoin
 
+    # ── Crawl mode: URL ends with / ──────────────────────────────────────────
+    if url.endswith("/"):
+        start = time.monotonic()
+        root_result = await browse(url, use_playwright=use_playwright, timeout_ms=timeout_ms)
+
+        # Collect child links that share the same origin + path prefix
+        parsed_root = urlparse(url)
+        base_prefix = parsed_root.scheme + "://" + parsed_root.netloc + parsed_root.path
+        children = []
+        seen = {url}
+        for link in root_result.get("links", []):
+            abs_link = urljoin(url, link)
+            if abs_link not in seen and abs_link.startswith(base_prefix) and abs_link != url:
+                seen.add(abs_link)
+                children.append(abs_link)
+                if len(children) >= max_crawl:
+                    break
+
+        # Fetch all children concurrently
+        child_tasks = [browse(child, use_playwright=use_playwright, timeout_ms=timeout_ms) for child in children]
+        child_results = await asyncio.gather(*child_tasks, return_exceptions=True)
+
+        pages = [root_result]
+        for res in child_results:
+            if isinstance(res, dict) and not res.get("error"):
+                pages.append(res)
+
+        duration_ms = int((time.monotonic() - start) * 1000)
+
+        # Log root + children to DB
+        if db:
+            try:
+                with db.get_connection() as conn:
+                    with conn.cursor() as cur:
+                        for page in pages:
+                            cur.execute(
+                                """INSERT INTO browse_sessions
+                                   (url, status, title, content_text, content_length, links_found,
+                                    duration_ms, engine, workspace_id, error_message)
+                                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                                (
+                                    page["url"], "success",
+                                    page.get("title", "")[:500],
+                                    page.get("content", "")[:10000],
+                                    page.get("content_length", 0),
+                                    len(page.get("links", [])),
+                                    duration_ms, page.get("engine", "playwright"),
+                                    workspace_id, None,
+                                ),
+                            )
+                        conn.commit()
+            except Exception as e:
+                logger.warning(f"Failed to log crawl sessions: {e}")
+
+        return {
+            "success": True,
+            "url": url,
+            "crawl": True,
+            "pages_crawled": len(pages),
+            "pages": [
+                {
+                    "url": p["url"],
+                    "title": p.get("title", ""),
+                    "content": p.get("content", ""),
+                    "content_length": p.get("content_length", 0),
+                    "engine": p.get("engine"),
+                }
+                for p in pages
+            ],
+            "duration_ms": duration_ms,
+        }
+
+    # ── Single page mode ─────────────────────────────────────────────────────
     start = time.monotonic()
     result = await browse(url, use_playwright=use_playwright, timeout_ms=timeout_ms)
     duration_ms = int((time.monotonic() - start) * 1000)
@@ -79,62 +155,6 @@ async def tool_browse(params: dict, db=None) -> dict:
         "engine": result.get("engine"),
         "via_nitter": result.get("via_nitter", False),
         "duration_ms": duration_ms,
-        "error": result.get("error"),
-    }
-
-
-async def tool_search(params: dict, db=None) -> dict:
-    """
-    Search the web without API keys (DuckDuckGo, Bing fallback).
-
-    params:
-      query (str)       — search query
-      engine (str)      — "duckduckgo" | "bing" | "auto" (default: "duckduckgo")
-      max_results (int) — default 10
-      workspace_id (int)
-    """
-    query = params.get("query", "").strip()
-    if not query:
-        return {"success": False, "error": "query parameter is required"}
-
-    engine = params.get("engine", "duckduckgo")
-    max_results = min(params.get("max_results", 10), 50)
-    workspace_id = params.get("workspace_id")
-
-    from mcp_server.services.web_search import search
-
-    result = await search(query, engine=engine, max_results=max_results)
-
-    # Log to DB
-    if db:
-        try:
-            import json
-            with db.get_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """INSERT INTO search_sessions
-                           (query, engine, results_count, results, duration_ms, workspace_id)
-                           VALUES (%s, %s, %s, %s, %s, %s)""",
-                        (
-                            query,
-                            result.get("engine"),
-                            result.get("results_count", 0),
-                            json.dumps(result.get("results", [])),
-                            result.get("duration_ms"),
-                            workspace_id,
-                        ),
-                    )
-                    conn.commit()
-        except Exception as e:
-            logger.warning(f"Failed to log search session: {e}")
-
-    return {
-        "success": result.get("results_count", 0) > 0,
-        "query": query,
-        "engine": result.get("engine"),
-        "results": result.get("results", []),
-        "results_count": result.get("results_count", 0),
-        "duration_ms": result.get("duration_ms"),
         "error": result.get("error"),
     }
 
@@ -314,7 +334,6 @@ async def tool_watched_pages(params: dict, db=None) -> dict:
 # Tool registry — matches server.py registration pattern
 WEB_TOOLS = {
     "web.browse": tool_browse,
-    "web.search": tool_search,
     "web.digest": tool_digest,
     "web.watch": tool_watch,
     "web.watched_pages": tool_watched_pages,

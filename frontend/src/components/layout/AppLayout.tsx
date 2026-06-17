@@ -1,29 +1,100 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Globe, Search, Rss, MessageSquare, Radio,
-  Settings, LayoutDashboard, Zap, Activity
+  Rss, MessageSquare, Radio,
+  Settings, LayoutDashboard, Zap, Activity, Library, Newspaper, TrendingUp
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-const NAV = [
-  { to: '/',          icon: LayoutDashboard, label: 'Dashboard', end: true },
-  { to: '/browse',    icon: Globe,           label: 'Browse'    },
-  { to: '/search',    icon: Search,          label: 'Recherche' },
-  { to: '/feed',      icon: Rss,             label: 'Feed'      },
-  { to: '/assistant', icon: MessageSquare,   label: 'Assistant' },
-  { to: '/sources',   icon: Radio,           label: 'Sources'   },
-  { to: '/settings',  icon: Settings,        label: 'Réglages'  },
+const FLOW = [
+  {
+    to: '/sources',
+    icon: Radio,
+    label: 'Sources',
+    step: '1',
+    tip: 'Configurez vos sources de collecte : RSS, GitHub, APIs',
+  },
+  {
+    to: '/feed',
+    icon: Rss,
+    label: 'Contenus',
+    step: '2',
+    tip: 'Parcourez, enrichissez et indexez vos contenus collectés ou ajoutés manuellement',
+  },
+  {
+    to: '/assistant',
+    icon: MessageSquare,
+    label: 'Assistant',
+    step: '3',
+    tip: 'Interrogez votre base de connaissances en langage naturel',
+  },
 ]
 
-const META: Record<string, { title: string; badge?: string }> = {
-  '/':          { title: 'Dashboard'  },
-  '/browse':    { title: 'Browse',    badge: 'Playwright' },
-  '/search':    { title: 'Recherche', badge: 'DDG + Bing' },
-  '/feed':      { title: 'Feed'       },
-  '/assistant': { title: 'Assistant', badge: 'RAG' },
-  '/sources':   { title: 'Sources'    },
-  '/settings':  { title: 'Réglages'  },
+const TOOLS = [
+  { to: '/briefing', icon: Newspaper,       label: 'Briefing',     tip: 'Synthèse quotidienne automatique des signaux importants' },
+  { to: '/trends',   icon: TrendingUp,      label: 'Tendances',    tip: 'Évolution des concepts clés — signaux faibles et émergents' },
+  { to: '/library',  icon: Library,         label: 'Bibliothèque', tip: 'Vos documents générés — fiches, synthèses, guides, rapports' },
+  { to: '/',         icon: LayoutDashboard, label: 'Dashboard',    tip: 'Vue d\'ensemble — métriques et activité récente', end: true },
+  { to: '/settings', icon: Settings,        label: 'Réglages',     tip: 'Configuration du système' },
+]
+
+const META: Record<string, { title: string; badge?: string; desc?: string }> = {
+  '/':          { title: 'Dashboard',    desc: 'Vue d\'ensemble — métriques et activité récente' },
+  '/feed':      { title: 'Contenus',     desc: 'Collectez, enrichissez, indexez — depuis des sources ou des URLs manuelles' },
+  '/assistant': { title: 'Assistant',    badge: 'RAG',        desc: 'Interrogez votre base de connaissances indexée' },
+  '/sources':   { title: 'Sources',      desc: 'Configurez les sources de collecte automatique' },
+  '/briefing':  { title: 'Briefing',     desc: 'Synthèse quotidienne automatique des signaux importants de veille' },
+  '/trends':    { title: 'Tendances',    desc: 'Évolution des concepts clés détectés dans vos contenus — signaux faibles' },
+  '/library':   { title: 'Bibliothèque', desc: 'Vos documents générés — fiches, synthèses, guides, rapports' },
+  '/settings':  { title: 'Réglages',     desc: 'Configuration du système et des intégrations' },
+}
+
+function NavItem({ to, icon: Icon, label, step, tip, end }: {
+  to: string; icon: any; label: string; step?: string; tip: string; end?: boolean
+}) {
+  return (
+    <NavLink to={to} end={end} className="block group relative">
+      {({ isActive }) => (
+        <>
+          <div className={cn('nav-item', isActive && 'active')}>
+            {isActive && (
+              <motion.div
+                layoutId="nav-bg"
+                className="absolute inset-0 rounded-[var(--radius)] bg-[hsl(var(--accent-dim))] border border-[hsl(var(--accent-line))]"
+                transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+              />
+            )}
+            <Icon className="w-3.5 h-3.5 flex-shrink-0 relative z-10" strokeWidth={isActive ? 2.5 : 2} />
+            <span className="relative z-10 flex-1">{label}</span>
+            {step && (
+              <span className={cn(
+                'relative z-10 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0',
+                isActive
+                  ? 'bg-[hsl(var(--accent))] text-white'
+                  : 'bg-[hsl(var(--bg-3))] text-[hsl(var(--text-3))]'
+              )}>{step}</span>
+            )}
+            {!step && isActive && (
+              <motion.div
+                layoutId="nav-dot"
+                className="ml-auto w-1 h-1 rounded-full bg-[hsl(var(--accent))] relative z-10"
+              />
+            )}
+          </div>
+          {/* Tooltip */}
+          <div className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 z-50
+                          opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+            <div className="whitespace-nowrap bg-[hsl(var(--bg-2))] border border-[hsl(var(--line-bright))]
+                            text-[11px] text-[hsl(var(--text-2))] px-2.5 py-1.5 rounded-md shadow-lg">
+              {tip}
+              <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent
+                              border-r-[hsl(var(--line-bright))]" />
+            </div>
+          </div>
+        </>
+      )}
+    </NavLink>
+  )
 }
 
 export default function AppLayout() {
@@ -35,9 +106,7 @@ export default function AppLayout() {
 
       {/* ─── Sidebar ────────────────────────────────────────────────── */}
       <aside className="relative w-52 flex-shrink-0 flex flex-col">
-        {/* Dot grid fabric */}
         <div className="absolute inset-0 dot-grid opacity-30 pointer-events-none" />
-        {/* right border with accent glow at top */}
         <div className="absolute right-0 top-0 bottom-0 w-px bg-gradient-to-b from-[hsl(var(--accent-line))] via-[hsl(var(--line))] to-transparent" />
 
         {/* Logo */}
@@ -55,35 +124,27 @@ export default function AppLayout() {
           </div>
         </div>
 
-        {/* Divider */}
         <div className="mx-5 h-px bg-gradient-to-r from-[hsl(var(--accent-line))] to-transparent" />
 
         {/* Nav */}
         <nav className="relative flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-          {/* Section label */}
-          <p className="text-[9.5px] font-mono text-[hsl(var(--text-3))] uppercase tracking-[.12em] px-2 mb-2">Navigation</p>
-          {NAV.map(({ to, icon: Icon, label, end }) => (
-            <NavLink key={to} to={to} end={end} className="block">
-              {({ isActive }) => (
-                <div className={cn('nav-item', isActive && 'active')}>
-                  {isActive && (
-                    <motion.div
-                      layoutId="nav-bg"
-                      className="absolute inset-0 rounded-[var(--radius)] bg-[hsl(var(--accent-dim))] border border-[hsl(var(--accent-line))]"
-                      transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                    />
-                  )}
-                  <Icon className="w-3.5 h-3.5 flex-shrink-0 relative z-10" strokeWidth={isActive ? 2.5 : 2} />
-                  <span className="relative z-10">{label}</span>
-                  {isActive && (
-                    <motion.div
-                      layoutId="nav-dot"
-                      className="ml-auto w-1 h-1 rounded-full bg-[hsl(var(--accent))] relative z-10"
-                    />
-                  )}
-                </div>
-              )}
-            </NavLink>
+
+          {/* Section flux */}
+          <p className="text-[9.5px] font-mono text-[hsl(var(--text-3))] uppercase tracking-[.12em] px-2 mb-2">
+            Flux de travail
+          </p>
+          {FLOW.map(item => (
+            <NavItem key={item.to} {...item} />
+          ))}
+
+          <div className="mx-2 my-3 h-px bg-[hsl(var(--line))]" />
+
+          {/* Section outils */}
+          <p className="text-[9.5px] font-mono text-[hsl(var(--text-3))] uppercase tracking-[.12em] px-2 mb-2">
+            Outils
+          </p>
+          {TOOLS.map(item => (
+            <NavItem key={item.to} {...item} />
           ))}
         </nav>
 
@@ -111,11 +172,13 @@ export default function AppLayout() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 8 }}
                 transition={{ duration: 0.15 }}
-                className="flex items-center gap-3"
               >
-                <h1 className="text-[16px] font-bold text-[hsl(var(--text))] tracking-tight leading-none">{meta.title}</h1>
-                {meta.badge && (
-                  <span className="pill pill-accent">{meta.badge}</span>
+                <div className="flex items-center gap-3">
+                  <h1 className="text-[16px] font-bold text-[hsl(var(--text))] tracking-tight leading-none">{meta.title}</h1>
+                  {meta.badge && <span className="pill pill-accent">{meta.badge}</span>}
+                </div>
+                {meta.desc && (
+                  <p className="text-[11px] font-mono text-[hsl(var(--text-3))] mt-0.5">{meta.desc}</p>
                 )}
               </motion.div>
             </AnimatePresence>
@@ -131,7 +194,6 @@ export default function AppLayout() {
 
         {/* Content */}
         <main className="flex-1 overflow-auto bg-[hsl(var(--bg))]">
-          {/* Dot grid in content area — subtle */}
           <div className="fixed inset-0 dot-grid opacity-[0.15] pointer-events-none" style={{ left: 208 }} />
           <AnimatePresence mode="wait">
             <motion.div

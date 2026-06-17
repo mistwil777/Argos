@@ -208,15 +208,14 @@ async def get_topics_stats(limit: int = Query(default=10, ge=1, le=50)):
     try:
         with db.get_connection() as conn:
             with conn.cursor() as cur:
-                # Get topic counts from subject column
                 cur.execute("""
-                    SELECT 
-                        subject as topic,
+                    SELECT
+                        item_type as topic,
                         COUNT(*) as item_count,
                         COUNT(DISTINCT CASE WHEN classification_status = 'classified' THEN id END) as classified_count
                     FROM items
-                    WHERE subject IS NOT NULL
-                    GROUP BY subject
+                    WHERE item_type IS NOT NULL
+                    GROUP BY item_type
                     ORDER BY item_count DESC
                     LIMIT %s
                 """, (limit,))
@@ -232,6 +231,117 @@ async def get_topics_stats(limit: int = Query(default=10, ge=1, le=50)):
                 return results
     except Exception as e:
         logger.error(f"Error fetching topics stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/stats/trends")
+async def get_trends(
+    window: int = Query(default=7, ge=1, le=90),
+    limit: int = Query(default=30, ge=5, le=100),
+    workspace_id: Optional[int] = Query(default=None),
+):
+    """
+    Keyword trend analysis over a sliding window.
+    Returns top keywords with frequency in current window vs previous window,
+    plus a daily timeline for sparklines.
+    """
+    try:
+        ws_filter = "AND workspace_id = %(ws)s" if workspace_id is not None else ""
+        params = {"window": window, "limit": limit, "ws": workspace_id}
+
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                # Current window frequency
+                cur.execute(f"""
+                    SELECT lower(kw) as keyword, COUNT(*) as freq
+                    FROM items, unnest(keywords) AS kw
+                    WHERE classification_status = 'classified'
+                      AND created_at > NOW() - INTERVAL '%(window)s days'
+                      {ws_filter}
+                    GROUP BY lower(kw)
+                    ORDER BY freq DESC
+                    LIMIT %(limit)s
+                """, params)
+                current = {r[0]: r[1] for r in cur.fetchall()}
+
+                # Previous window (same duration, just before)
+                cur.execute(f"""
+                    SELECT lower(kw) as keyword, COUNT(*) as freq
+                    FROM items, unnest(keywords) AS kw
+                    WHERE classification_status = 'classified'
+                      AND created_at BETWEEN NOW() - INTERVAL '%(double)s days'
+                                         AND NOW() - INTERVAL '%(window)s days'
+                      {ws_filter}
+                    GROUP BY lower(kw)
+                """, {**params, "double": window * 2})
+                previous = {r[0]: r[1] for r in cur.fetchall()}
+
+                # Daily timeline for top 5 keywords (sparkline data)
+                top5 = list(current.keys())[:5]
+                timeline = []
+                if top5:
+                    cur.execute(f"""
+                        SELECT DATE(created_at) as day,
+                               lower(kw) as keyword,
+                               COUNT(*) as freq
+                        FROM items, unnest(keywords) AS kw
+                        WHERE classification_status = 'classified'
+                          AND created_at > NOW() - INTERVAL '%(window)s days'
+                          AND lower(kw) = ANY(%(top5)s)
+                          {ws_filter}
+                        GROUP BY day, lower(kw)
+                        ORDER BY day ASC
+                    """, {**params, "top5": top5})
+                    for r in cur.fetchall():
+                        timeline.append({
+                            "date": r[0].strftime("%Y-%m-%d"),
+                            "keyword": r[1],
+                            "freq": r[2],
+                        })
+
+                # Item count per day for volume chart
+                cur.execute(f"""
+                    SELECT DATE(created_at) as day, COUNT(*) as count
+                    FROM items
+                    WHERE classification_status = 'classified'
+                      AND created_at > NOW() - INTERVAL '%(window)s days'
+                      {ws_filter}
+                    GROUP BY day ORDER BY day ASC
+                """, params)
+                daily_volume = [{"date": r[0].strftime("%Y-%m-%d"), "count": r[1]} for r in cur.fetchall()]
+
+        # Build trend objects with delta
+        trends = []
+        all_keywords = set(current.keys()) | set(previous.keys())
+        for kw in sorted(all_keywords, key=lambda k: current.get(k, 0), reverse=True)[:limit]:
+            cur_freq = current.get(kw, 0)
+            prev_freq = previous.get(kw, 0)
+            if cur_freq == 0:
+                continue
+            if prev_freq == 0:
+                delta = "new"
+                delta_pct = None
+            else:
+                pct = round(((cur_freq - prev_freq) / prev_freq) * 100)
+                delta = "up" if pct > 10 else "down" if pct < -10 else "stable"
+                delta_pct = pct
+            trends.append({
+                "keyword": kw,
+                "freq": cur_freq,
+                "prev_freq": prev_freq,
+                "delta": delta,
+                "delta_pct": delta_pct,
+            })
+
+        return {
+            "window_days": window,
+            "trends": trends,
+            "timeline": timeline,
+            "daily_volume": daily_volume,
+            "total_keywords": len(current),
+        }
+    except Exception as e:
+        logger.error(f"Error fetching trends: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -272,6 +382,111 @@ async def get_costs_stats(period: str = Query(default="month", regex="^(week|mon
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@api_router.get("/stats/tools")
+async def get_tools_list():
+    """Return all registered MCP tools with metadata + source code."""
+    try:
+        import inspect as _inspect
+        from mcp_server.server import tool_registry
+
+        tools = []
+        for meta in tool_registry.list_tools():
+            name = meta.get("name", "")
+            func = tool_registry.get_tool(name)
+            source = None
+            source_file = None
+            # Unwrap wrappers to get to the real function
+            real_func = func
+            for _ in range(5):  # max 5 levels of wrapping
+                if real_func is None:
+                    break
+                try:
+                    source = _inspect.getsource(real_func)
+                    source_file = _inspect.getfile(real_func)
+                    # Strip venv paths to show only project-relative
+                    if "mcp_server" in (source_file or ""):
+                        idx = source_file.find("mcp_server")
+                        source_file = source_file[idx:]
+                    else:
+                        source_file = None  # don't expose external lib paths
+                    break
+                except (TypeError, OSError):
+                    # Try to unwrap one level
+                    wrapped = getattr(real_func, "__wrapped__", None) or getattr(real_func, "func", None)
+                    if wrapped and wrapped is not real_func:
+                        real_func = wrapped
+                    else:
+                        break
+            tools.append({**meta, "source": source, "source_file": source_file})
+
+        categorized: dict = {}
+        for t in tools:
+            cat = t["name"].split(".")[0] if "." in t["name"] else "other"
+            categorized.setdefault(cat, []).append(t)
+
+        return {"tools": tools, "by_category": categorized, "total": len(tools)}
+    except Exception as e:
+        logger.error(f"Error listing tools: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/stats/costs/detail")
+async def get_costs_detail():
+    """Cost breakdown by model and operation type."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT model, operation_type,
+                           COUNT(*) as calls,
+                           SUM(tokens_used) as total_tokens,
+                           SUM(cost_usd) as total_cost
+                    FROM llm_usage
+                    GROUP BY model, operation_type
+                    ORDER BY total_cost DESC
+                """)
+                rows = cur.fetchall()
+                cur.execute("SELECT SUM(cost_usd) FROM llm_usage WHERE created_at >= date_trunc('month', NOW())")
+                month_cost = float(cur.fetchone()[0] or 0)
+                cur.execute("SELECT SUM(cost_usd) FROM llm_usage")
+                total_cost = float(cur.fetchone()[0] or 0)
+        return {
+            "breakdown": [
+                {"model": r[0], "operation": r[1], "calls": r[2],
+                 "tokens": r[3] or 0, "cost_usd": float(r[4] or 0)}
+                for r in rows
+            ],
+            "month_total": month_cost,
+            "all_time_total": total_cost,
+        }
+    except Exception as e:
+        logger.error(f"Error fetching cost detail: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/stats/rag-queries")
+async def get_rag_queries(limit: int = Query(default=20, ge=1, le=100)):
+    """Recent RAG queries with answers."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT id, query, answer, confidence_score, created_at
+                       FROM rag_queries ORDER BY created_at DESC LIMIT %s""",
+                    (limit,)
+                )
+                rows = cur.fetchall()
+        return [
+            {"id": r[0], "query": r[1], "answer": r[2],
+             "confidence": float(r[3] or 0),
+             "created_at": r[4].isoformat() if r[4] else None}
+            for r in rows
+        ]
+    except Exception as e:
+        logger.error(f"Error fetching RAG queries: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============================================
 # Items Endpoints
 # ============================================
@@ -280,6 +495,7 @@ async def get_costs_stats(period: str = Query(default="month", regex="^(week|mon
 async def list_items(
     status: str = Query(default="all", description="Filter by status: all, pending, classified"),
     source: str = Query(default="all", description="Filter by source"),
+    importance: str = Query(default="all", description="Filter by importance: all, critical, high, medium, low"),
     workspace_id: Optional[int] = Query(default=None, description="Filter by workspace ID"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0)
@@ -295,8 +511,11 @@ async def list_items(
                 if status != "all":
                     where_conditions.append("classification_status = %s")
                     params.append(status)
-                
-                
+
+                if importance != "all":
+                    where_conditions.append("importance = %s")
+                    params.append(importance)
+
                 if source != "all":
                     where_conditions.append("source_type = %s")
                     params.append(source)
@@ -308,20 +527,20 @@ async def list_items(
                 where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
                 
                 query = f"""
-                    SELECT 
+                    SELECT
                         id, title, summary, url, source_type, source_url,
-                        subject, importance, classification_status,
+                        item_type, importance, classification_status,
                         published_at, created_at, workspace_id,
-                        keywords
+                        keywords, digest_markdown, rag_indexed
                     FROM items
                     WHERE {where_clause}
                     ORDER BY created_at DESC
                     LIMIT %s OFFSET %s
                 """
-                
+
                 params.extend([limit, offset])
                 cur.execute(query, params)
-                
+
                 items = []
                 for row in cur.fetchall():
                     items.append({
@@ -332,13 +551,16 @@ async def list_items(
                         "source_type": row[4],
                         "source_url": row[5],
                         "subject": row[6],
+                        "item_type": row[6],
                         "importance": row[7],
                         "classification_status": row[8],
-                        "status": row[8],  # backward compat alias
+                        "status": row[8],
                         "published_at": row[9].isoformat() if row[9] else None,
                         "created_at": row[10].isoformat() if row[10] else None,
                         "workspace_id": row[11],
-                        "topics": row[12] or []
+                        "topics": row[12] or [],
+                        "digest_markdown": row[13],
+                        "rag_indexed": bool(row[14]),
                     })
                 
                 # Get total count
@@ -407,6 +629,33 @@ async def batch_assign_workspace(data: Dict[str, Any]):
                 return {"updated": updated, "workspace_id": target_workspace_id}
     except Exception as e:
         logger.error(f"Error batch-assigning workspace: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/items/lookup")
+async def lookup_item_by_url(url: str = Query(...)):
+    """Check if a URL already exists in the database. Returns item metadata or null."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT id, title, digest_markdown IS NOT NULL, rag_indexed, created_at
+                       FROM items WHERE url = %s LIMIT 1""",
+                    (url,)
+                )
+                row = cur.fetchone()
+        if not row:
+            return {"exists": False}
+        return {
+            "exists": True,
+            "id": row[0],
+            "title": row[1],
+            "has_digest": bool(row[2]),
+            "rag_indexed": bool(row[3]),
+            "created_at": row[4].isoformat() if row[4] else None,
+        }
+    except Exception as e:
+        logger.error(f"Error in lookup: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -516,6 +765,609 @@ async def classify_item(item_id: int):
         raise HTTPException(status_code=500, detail=f"Classification failed: {str(e)}")
 
 
+@api_router.get("/items/{item_id}/raw-content")
+async def get_item_raw_content(item_id: int, translate: bool = Query(default=False)):
+    """Fetch the raw scraped content of an item URL. translate=true runs LLM translation to French."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT url, title FROM items WHERE id = %s", (item_id,))
+                row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Item not found")
+        url, title = row
+
+        from mcp_server.services.web_browser import browse_with_requests
+        from urllib.parse import urljoin, urlparse
+        import asyncio as _asyncio
+        import re as _re
+
+        def _find_pdf_links(html_links: list, base_url: str) -> list:
+            """Extract PDF URLs from a list of links."""
+            pdfs = []
+            seen = set()
+            for link in html_links:
+                abs_link = urljoin(base_url, link)
+                if abs_link.lower().endswith(".pdf") and abs_link not in seen:
+                    seen.add(abs_link)
+                    pdfs.append(abs_link)
+            return pdfs[:10]
+
+        async def _translate_if_needed(text: str) -> str:
+            """Translate text to French via LLM if it's not already in French."""
+            if not translate or not text or len(text) < 50:
+                return text
+            # Quick heuristic: if >30% of words are French, skip translation
+            french_markers = {'le','la','les','de','du','des','et','en','un','une','est','pour','avec','par','sur','dans','que','qui','il','elle','ils','elles','nous','vous','mais','ou','donc','car'}
+            words = set(text.lower().split()[:100])
+            if len(words & french_markers) / max(len(words), 1) > 0.1:
+                return text
+            from mcp_server.services.llm_provider import create_llm_provider
+            llm = create_llm_provider(
+                provider_type=settings.llm_provider,
+                openai_api_key=settings.openai_api_key,
+                aws_access_key_id=settings.aws_access_key_id,
+                aws_secret_access_key=settings.aws_secret_access_key,
+                aws_region=settings.aws_region,
+                model=settings.aws_bedrock_model,
+            )
+            translated, _ = await llm.generate(
+                prompt=f"Traduis fidèlement ce texte en français. Conserve la mise en forme. Retourne uniquement le texte traduit, rien d'autre.\n\n{text[:8000]}",
+                system_prompt="Tu es un traducteur professionnel. Tu traduis des contenus techniques en français naturel et précis.",
+                temperature=0.2, max_tokens=4000, top_p=0.9,
+            )
+            return translated
+
+        if url.endswith("/"):
+            root = await browse_with_requests(url)
+            root_links = root.get("links", [])
+            parsed_root = urlparse(url)
+            base_prefix = parsed_root.scheme + "://" + parsed_root.netloc + parsed_root.path
+            children = []
+            seen = {url}
+            for link in root_links:
+                abs_link = urljoin(url, link)
+                if abs_link not in seen and abs_link.startswith(base_prefix):
+                    seen.add(abs_link)
+                    children.append(abs_link)
+                    if len(children) >= 10:
+                        break
+            child_results = await _asyncio.gather(
+                *[browse_with_requests(c) for c in children],
+                return_exceptions=True
+            )
+            pages = [root] + [r for r in child_results if isinstance(r, dict) and r.get("content")]
+            sections = []
+            for page in pages:
+                t = (page.get("title") or page.get("url", "")).strip()
+                c = page.get("content", "").strip()
+                if c:
+                    c_final = await _translate_if_needed(c)
+                    sections.append({"title": t, "url": page.get("url", ""), "content": c_final})
+            return {"item_id": item_id, "url": url, "pages": sections, "pages_count": len(sections), "translated": translate}
+        elif url.startswith("upload://"):
+            # Uploaded document — content is in the digest_markdown/summary in DB
+            with db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT summary, digest_markdown FROM items WHERE id = %s", (item_id,))
+                    row = cur.fetchone()
+            text = (row[1] or row[0] or "Contenu non disponible (document uploadé)") if row else "Contenu non disponible"
+            text = await _translate_if_needed(text)
+            return {
+                "item_id": item_id, "url": url,
+                "pages": [{"title": title, "url": url, "content": text}],
+                "pages_count": 1, "translated": translate, "pdf_links": [], "is_upload": True,
+            }
+        elif url.lower().endswith(".pdf"):
+            # URL is a direct PDF — extract text instead of browsing HTML
+            import requests as _req
+            from mcp_server.services.document_extractor import extract_pdf
+            resp = _req.get(url, timeout=30, verify=False, headers={"User-Agent": "OpenWebMCP/1.0"})
+            text = extract_pdf(resp.content) if resp.status_code == 200 else ""
+            text = await _translate_if_needed(text)
+            return {
+                "item_id": item_id,
+                "url": url,
+                "pages": [{"title": title, "url": url, "content": text}],
+                "pages_count": 1,
+                "translated": translate,
+                "pdf_links": [],
+                "is_pdf": True,
+            }
+        else:
+            result = await browse_with_requests(url)
+            content = await _translate_if_needed(result.get("content", ""))
+            pdf_links = _find_pdf_links(result.get("links", []), url)
+            return {
+                "item_id": item_id,
+                "url": url,
+                "pages": [{"title": result.get("title", title), "url": url, "content": content}],
+                "pages_count": 1,
+                "translated": translate,
+                "pdf_links": pdf_links,
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching raw content for item {item_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def _auto_rag_index(item_id: int, title: str, summary: str):
+    """Index an item into LanceDB immediately after creation."""
+    try:
+        import asyncio as _asyncio
+        from mcp_server.services.vector_store_singleton import get_vector_store
+        vs = get_vector_store()
+        item_data = {"id": item_id, "title": title, "summary": summary[:2000], "workspace_id": None}
+        await _asyncio.to_thread(vs.index_item, item_data)
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE items SET rag_indexed=TRUE, rag_indexed_at=NOW() WHERE id=%s", (item_id,))
+                conn.commit()
+        logger.info(f"Auto-indexed item {item_id} into RAG")
+    except Exception as e:
+        logger.warning(f"Auto-RAG indexing failed for item {item_id}: {e}")
+
+
+@api_router.post("/items/preview-pdf-url")
+async def preview_pdf_url(data: Dict[str, Any]):
+    """Download and extract a PDF for preview — does NOT save anything."""
+    try:
+        pdf_url = (data.get("url") or "").strip()
+        if not pdf_url:
+            raise HTTPException(status_code=400, detail="url required")
+
+        import requests as _req
+        from mcp_server.services.document_extractor import extract_pdf
+
+        resp = _req.get(pdf_url, timeout=30, verify=False,
+                        headers={"User-Agent": "OpenWebMCP/1.0"}, stream=True)
+        if resp.status_code != 200:
+            raise HTTPException(status_code=422, detail=f"HTTP {resp.status_code}")
+
+        pdf_bytes = resp.content
+        if len(pdf_bytes) > 50 * 1024 * 1024:
+            raise HTTPException(status_code=422, detail="PDF trop volumineux (>50MB)")
+
+        text = extract_pdf(pdf_bytes)
+        filename = pdf_url.split("/")[-1]
+
+        return {
+            "url": pdf_url,
+            "filename": filename,
+            "text": text,
+            "char_count": len(text),
+            "truncated": len(text) >= 12000,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error previewing PDF {data.get('url')}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/items/ingest-pdf-url")
+async def ingest_pdf_from_url(data: Dict[str, Any]):
+    """
+    Download a PDF from a URL, extract its text (pdfplumber + OCR fallback),
+    generate a digest, and save as an item. No manual download needed.
+    """
+    try:
+        pdf_url = (data.get("url") or "").strip()
+        workspace_id = data.get("workspace_id")
+        if not pdf_url or not pdf_url.lower().endswith(".pdf"):
+            raise HTTPException(status_code=400, detail="url must point to a .pdf file")
+
+        import requests as _req
+        import json as _json
+        from mcp_server.services.document_extractor import extract_pdf
+        from mcp_server.services.digest_generator import generate_digest
+        from mcp_server.services.llm_provider import create_llm_provider
+
+        # Check if already in base
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id, title FROM items WHERE url = %s", (pdf_url,))
+                existing = cur.fetchone()
+        if existing:
+            return {"success": True, "already_exists": True, "item_id": existing[0], "title": existing[1]}
+
+        # Download PDF
+        resp = _req.get(pdf_url, timeout=30, verify=False,
+                        headers={"User-Agent": "OpenWebMCP/1.0"},
+                        stream=True)
+        if resp.status_code != 200:
+            raise HTTPException(status_code=422, detail=f"Could not download PDF (HTTP {resp.status_code})")
+
+        pdf_bytes = resp.content
+        if len(pdf_bytes) > 50 * 1024 * 1024:  # 50MB limit
+            raise HTTPException(status_code=422, detail="PDF too large (>50MB)")
+
+        # Extract text
+        text = extract_pdf(pdf_bytes)
+        if not text or len(text.strip()) < 50:
+            raise HTTPException(status_code=422, detail="Could not extract text from PDF (may be image-only — use the upload feature with OCR)")
+
+        # Filename as title fallback
+        filename = pdf_url.split("/")[-1].replace(".pdf", "").replace("-", " ").replace("_", " ").title()
+
+        # Generate digest
+        llm = create_llm_provider(
+            provider_type=settings.llm_provider,
+            openai_api_key=settings.openai_api_key,
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            aws_region=settings.aws_region,
+            model=settings.aws_bedrock_model,
+        )
+        digest = await generate_digest(pdf_url, filename, text, workspace_id, llm)
+        json_data = digest.get("json", {})
+
+        # Save item
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO items
+                       (source_type, source_url, url, title, summary,
+                        digest_markdown, digest_json, digest_generated_at,
+                        importance, item_type, keywords, classification_status, workspace_id)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,NOW(),%s,%s,%s,'classified',%s)
+                       ON CONFLICT (url) DO UPDATE SET
+                         digest_markdown = EXCLUDED.digest_markdown,
+                         digest_json = EXCLUDED.digest_json,
+                         updated_at = NOW()
+                       RETURNING id, title""",
+                    (
+                        "browse", pdf_url, pdf_url,
+                        (json_data.get("title") or filename)[:500],
+                        json_data.get("summary", "")[:2000],
+                        digest.get("markdown", ""),
+                        _json.dumps(json_data),
+                        json_data.get("importance", "medium"),
+                        json_data.get("content_type", "research"),
+                        json_data.get("tags", []),
+                        workspace_id,
+                    ),
+                )
+                row = cur.fetchone()
+                conn.commit()
+
+        await _auto_rag_index(row[0], row[1], json_data.get("summary", ""))
+
+        return {
+            "success": True,
+            "item_id": row[0],
+            "title": row[1],
+            "char_count": len(text),
+            "rag_indexed": True,
+            "error": digest.get("error"),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error ingesting PDF from URL {data.get('url')}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/items/llm-filter")
+async def llm_filter_items(data: Dict[str, Any]):
+    """
+    Evaluate a list of items against a natural language prompt using LLM.
+    Returns a score + reason per item. Does NOT persist anything.
+    """
+    try:
+        prompt = (data.get("prompt") or "").strip()
+        item_ids: list = data.get("item_ids") or []
+        if not prompt:
+            raise HTTPException(status_code=400, detail="prompt is required")
+        if not item_ids:
+            raise HTTPException(status_code=400, detail="item_ids is required")
+
+        from mcp_server.services.llm_provider import create_llm_provider
+        import asyncio, json as _json
+
+        llm = create_llm_provider(
+            provider_type=settings.llm_provider,
+            openai_api_key=settings.openai_api_key,
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            aws_region=settings.aws_region,
+            model=settings.aws_bedrock_model,
+        )
+
+        # Fetch items
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, title, summary FROM items WHERE id = ANY(%s)",
+                    (item_ids,)
+                )
+                rows = {r[0]: {"id": r[0], "title": r[1], "summary": r[2] or ""} for r in cur.fetchall()}
+
+        EVAL_SYSTEM = (
+            "Tu es un assistant qui évalue si un article correspond à un critère donné "
+            "et réécrit son résumé en tenant compte de ce critère. "
+            "Réponds UNIQUEMENT en JSON valide, sans aucun texte autour."
+        )
+
+        async def eval_one(item_id: int):
+            item = rows.get(item_id)
+            if not item:
+                return {"item_id": item_id, "keep": False, "score": 0.0, "reason": "Item introuvable", "updated_summary": None}
+            user_prompt = (
+                f"Critère utilisateur : {prompt}\n\n"
+                f"Article :\nTitre : {item['title']}\nRésumé actuel : {item['summary'][:800]}\n\n"
+                "1. Évalue si cet article correspond au critère.\n"
+                "2. Si keep=true, réécris le résumé en mettant en avant uniquement les éléments pertinents par rapport au critère.\n"
+                "3. Si keep=false, garde le résumé tel quel.\n"
+                'Réponds en JSON : {"keep": true/false, "score": 0.0-1.0, "reason": "une phrase", "updated_summary": "résumé réécrit ou null"}'
+            )
+            try:
+                text, _ = await llm.generate(
+                    prompt=user_prompt,
+                    system_prompt=EVAL_SYSTEM,
+                    temperature=0.2,
+                    max_tokens=500,
+                )
+                start = text.find("{")
+                end = text.rfind("}") + 1
+                parsed = _json.loads(text[start:end]) if start >= 0 else {}
+                keep = bool(parsed.get("keep", False))
+                updated_summary = parsed.get("updated_summary") or None
+
+                # Auto-save updated summary in DB if keep=true and summary changed
+                if keep and updated_summary and updated_summary != item["summary"]:
+                    try:
+                        with db.get_connection() as conn:
+                            with conn.cursor() as cur:
+                                cur.execute(
+                                    "UPDATE items SET summary = %s, updated_at = NOW() WHERE id = %s",
+                                    (updated_summary, item_id)
+                                )
+                                conn.commit()
+                    except Exception as db_err:
+                        logger.warning(f"Failed to auto-save summary for item {item_id}: {db_err}")
+
+                return {
+                    "item_id": item_id,
+                    "keep": keep,
+                    "score": float(parsed.get("score", 0.0)),
+                    "reason": str(parsed.get("reason", "")),
+                    "updated_summary": updated_summary if keep else None,
+                }
+            except Exception as e:
+                logger.warning(f"LLM filter failed for item {item_id}: {e}")
+                return {"item_id": item_id, "keep": False, "score": 0.0, "reason": f"Erreur : {e}", "updated_summary": None}
+
+        results = await asyncio.gather(*[eval_one(iid) for iid in item_ids])
+        return list(results)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in llm-filter: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/items/{item_id}/ingest-preview")
+async def ingest_preview(item_id: int):
+    """
+    Step 1 of ingestion: fetch URL, generate digest via LLM, return preview WITHOUT saving.
+    The user can review the content before confirming.
+    """
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT url, title, summary FROM items WHERE id = %s", (item_id,))
+                row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Item not found")
+        url, title, current_summary = row
+
+        from mcp_server.services.web_browser import browse
+        from mcp_server.services.digest_generator import generate_digest
+        from mcp_server.services.llm_provider import create_llm_provider
+
+        llm = create_llm_provider(
+            provider_type=settings.llm_provider,
+            openai_api_key=settings.openai_api_key,
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            aws_region=settings.aws_region,
+            model=settings.aws_bedrock_model,
+        )
+
+        # If URL ends with /, crawl child pages and aggregate content
+        if url.endswith("/"):
+            from mcp_server.tools.web_tools import tool_browse
+            import asyncio as _asyncio
+            from urllib.parse import urljoin, urlparse
+
+            # Fetch root page (requests fallback — Playwright may not be available)
+            root = await browse(url, use_playwright=False)
+            root_links = root.get("links", [])
+            parsed_root = urlparse(url)
+            base_prefix = parsed_root.scheme + "://" + parsed_root.netloc + parsed_root.path
+
+            children = []
+            seen = {url}
+            for link in root_links:
+                abs_link = urljoin(url, link)
+                if abs_link not in seen and abs_link.startswith(base_prefix) and abs_link != url:
+                    seen.add(abs_link)
+                    children.append(abs_link)
+                    if len(children) >= 10:
+                        break
+
+            # Fetch children concurrently
+            child_results = await _asyncio.gather(
+                *[browse(c, use_playwright=False) for c in children],
+                return_exceptions=True
+            )
+
+            pages = [root] + [r for r in child_results if isinstance(r, dict) and r.get("content")]
+            fetched_title = root.get("title") or title
+            content_parts = []
+            for page in pages:
+                page_title = page.get("title", page.get("url", "")).strip()
+                page_content = page.get("content", "").strip()
+                if page_content:
+                    content_parts.append(f"### {page_title}\n\n{page_content[:3000]}")
+            content = "\n\n---\n\n".join(content_parts)
+            pages_crawled = len(pages)
+        else:
+            browse_result = await browse(url, use_playwright=False)
+            content = browse_result.get("content", "")
+            fetched_title = browse_result.get("title") or title
+            pages_crawled = 1
+
+        digest = await generate_digest(url, fetched_title, content[:50000], None, llm)
+
+        return {
+            "item_id": item_id,
+            "url": url,
+            "title": fetched_title,
+            "current_summary": current_summary,
+            "markdown": digest.get("markdown", ""),
+            "json": digest.get("json", {}),
+            "content_length": len(content),
+            "pages_crawled": pages_crawled,
+            "error": digest.get("error"),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in ingest-preview for item {item_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/items/{item_id}/ingest-confirm")
+async def ingest_confirm(item_id: int, data: Dict[str, Any]):
+    """
+    Step 2 of ingestion: save the (possibly edited) digest to DB and index into RAG.
+    data: { markdown: str, summary: str (optional override) }
+    """
+    try:
+        markdown = data.get("markdown", "")
+        summary_override = data.get("summary", "").strip() or None
+
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT url, title FROM items WHERE id = %s", (item_id,))
+                row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Item not found")
+        url, title = row
+
+        import json as _json
+        digest_json = data.get("json", {})
+
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """UPDATE items SET
+                        digest_markdown = %s,
+                        digest_json = %s::jsonb,
+                        digest_generated_at = NOW(),
+                        summary = COALESCE(%s, summary),
+                        rag_indexed = TRUE,
+                        rag_indexed_at = NOW(),
+                        updated_at = NOW()
+                       WHERE id = %s""",
+                    (markdown, _json.dumps(digest_json), summary_override, item_id)
+                )
+                conn.commit()
+
+        # Index into vector store
+        try:
+            from mcp_server.services.vector_store_singleton import get_vector_store
+            vs = get_vector_store()
+            item_data = {
+                "id": item_id, "title": title,
+                "summary": summary_override or "",
+                "workspace_id": None,
+            }
+            import asyncio
+            await asyncio.to_thread(vs.index_item, item_data)
+        except Exception as vs_err:
+            logger.warning(f"Vector store indexing failed for item {item_id}: {vs_err}")
+
+        return {"success": True, "item_id": item_id, "rag_indexed": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in ingest-confirm for item {item_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/items/{item_id}/ingest")
+async def ingest_item(item_id: int):
+    """Legacy one-shot ingest (no preview). Kept for backward compat."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT url, title FROM items WHERE id = %s", (item_id,))
+                row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Item not found")
+        url, title = row
+
+        from mcp_server.tools.web_tools import tool_digest
+        from mcp_server.services.llm_provider import create_llm_provider
+
+        llm = create_llm_provider(
+            provider_type=settings.llm_provider,
+            openai_api_key=settings.openai_api_key,
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            aws_region=settings.aws_region,
+            model=settings.aws_bedrock_model,
+        )
+        result = await tool_digest(params={"url": url, "save_item": True}, db=db, llm_provider=llm)
+
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE items SET rag_indexed = TRUE, rag_indexed_at = NOW() WHERE id = %s",
+                    (item_id,)
+                )
+                conn.commit()
+
+        return {"success": True, "item_id": item_id, "title": title, "rag_indexed": True, "error": result.get("error")}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error ingesting item {item_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.patch("/items/{item_id}/summary")
+async def update_item_summary(item_id: int, data: Dict[str, Any]):
+    """Update the summary of an item (pre-ingestion editing)."""
+    try:
+        summary = data.get("summary", "").strip()
+        if not summary:
+            raise HTTPException(status_code=400, detail="summary is required")
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE items SET summary = %s, updated_at = NOW() WHERE id = %s RETURNING id",
+                    (summary, item_id)
+                )
+                if not cur.fetchone():
+                    raise HTTPException(status_code=404, detail="Item not found")
+                conn.commit()
+        return {"success": True, "item_id": item_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating summary for item {item_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+
 @api_router.delete("/items/{item_id}")
 async def delete_item(item_id: int):
     """Delete an item."""
@@ -532,6 +1384,148 @@ async def delete_item(item_id: int):
         raise
     except Exception as e:
         logger.error(f"Error deleting item {item_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/items/preview-upload")
+async def preview_upload(file: UploadFile = File(...)):
+    """Extract text from uploaded document for preview — does NOT save."""
+    try:
+        from mcp_server.services.document_extractor import extract_document, SUPPORTED_MIME_TYPES
+        mime_type = file.content_type or "application/octet-stream"
+        filename = file.filename or "document"
+        file_bytes = await file.read()
+        if len(file_bytes) > 50 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Fichier trop volumineux (>50MB)")
+        if mime_type == "application/octet-stream":
+            ext = filename.lower().rsplit(".", 1)[-1]
+            ext_map = {"pdf": "application/pdf", "png": "image/png", "jpg": "image/jpeg",
+                       "jpeg": "image/jpeg", "webp": "image/webp", "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                       "txt": "text/plain", "md": "text/markdown"}
+            mime_type = ext_map.get(ext, "text/plain")
+        extraction = await extract_document(file_bytes, mime_type, filename, use_vision_for_images=True)
+        return {
+            "filename": filename,
+            "text": extraction.get("text", ""),
+            "char_count": extraction.get("char_count", 0),
+            "truncated": extraction.get("truncated", False),
+            "method": extraction.get("method", "unknown"),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/items/upload-document")
+async def upload_document_as_item(
+    file: UploadFile = File(...),
+    workspace_id: Optional[int] = None,
+):
+    """
+    Upload a document (PDF, image, DOCX, TXT), extract its text,
+    generate a digest via LLM, and save as a classified item.
+    """
+    try:
+        import json as _json
+        from mcp_server.services.document_extractor import extract_document, SUPPORTED_MIME_TYPES
+        from mcp_server.services.digest_generator import generate_digest
+        from mcp_server.services.llm_provider import create_llm_provider
+
+        mime_type = file.content_type or "application/octet-stream"
+        filename = file.filename or "document"
+
+        # Read file
+        file_bytes = await file.read()
+        if len(file_bytes) > 50 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Fichier trop volumineux (>50MB)")
+
+        # Determine MIME from extension if needed
+        if mime_type == "application/octet-stream":
+            ext = filename.lower().rsplit(".", 1)[-1]
+            ext_map = {"pdf": "application/pdf", "png": "image/png", "jpg": "image/jpeg",
+                       "jpeg": "image/jpeg", "webp": "image/webp", "tiff": "image/tiff",
+                       "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                       "txt": "text/plain", "md": "text/markdown"}
+            mime_type = ext_map.get(ext, "text/plain")
+
+        if mime_type not in SUPPORTED_MIME_TYPES and not any(mime_type.startswith(m.split("/")[0]) for m in SUPPORTED_MIME_TYPES):
+            raise HTTPException(status_code=415, detail=f"Format non supporté: {mime_type}")
+
+        # Extract text
+        extraction = await extract_document(file_bytes, mime_type, filename, use_vision_for_images=True)
+        text = extraction.get("text", "")
+        method = extraction.get("method", "unknown")
+
+        if not text or len(text.strip()) < 30:
+            raise HTTPException(status_code=422,
+                detail=f"Impossible d'extraire du texte (méthode: {method}). Le document est peut-être vide ou protégé.")
+
+        # Pseudo-URL for dedup
+        import hashlib
+        doc_hash = hashlib.md5(file_bytes).hexdigest()[:12]
+        pseudo_url = f"upload://{doc_hash}/{filename}"
+
+        # Check if already ingested
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id, title FROM items WHERE url = %s", (pseudo_url,))
+                existing = cur.fetchone()
+        if existing:
+            return {"success": True, "already_exists": True, "item_id": existing[0], "title": existing[1]}
+
+        # Generate digest
+        llm = create_llm_provider(
+            provider_type=settings.llm_provider,
+            openai_api_key=settings.openai_api_key,
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            aws_region=settings.aws_region,
+            model=settings.aws_bedrock_model,
+        )
+        title_hint = filename.rsplit(".", 1)[0].replace("-", " ").replace("_", " ").title()
+        digest = await generate_digest(pseudo_url, title_hint, text, workspace_id, llm)
+        json_data = digest.get("json", {})
+
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO items
+                       (source_type, source_url, url, title, summary,
+                        digest_markdown, digest_json, digest_generated_at,
+                        importance, item_type, keywords, classification_status, workspace_id)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,NOW(),%s,%s,%s,'classified',%s)
+                       RETURNING id, title""",
+                    (
+                        "manual", pseudo_url, pseudo_url,
+                        (json_data.get("title") or title_hint)[:500],
+                        json_data.get("summary", "")[:2000],
+                        digest.get("markdown", ""),
+                        _json.dumps(json_data),
+                        json_data.get("importance", "medium"),
+                        json_data.get("content_type", "research"),
+                        json_data.get("tags", []),
+                        workspace_id,
+                    ),
+                )
+                row = cur.fetchone()
+                conn.commit()
+
+        await _auto_rag_index(row[0], row[1], json_data.get("summary", ""))
+
+        return {
+            "success": True,
+            "item_id": row[0],
+            "title": row[1],
+            "method": method,
+            "char_count": len(text),
+            "truncated": extraction.get("truncated", False),
+            "rag_indexed": True,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading document: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -625,8 +1619,10 @@ async def rag_ask(request: Dict[str, Any]):
             llm_provider=llm_provider,
             vector_store=vector_store,
             db_manager=db,
-            top_k=5,
-            temperature=0.6
+            top_k=8,
+            temperature=0.75,
+            max_tokens=2500,
+            top_p=0.9,
         )
         
         # Optionally prepend extracted document context to the query
@@ -763,13 +1759,9 @@ async def index_all_items():
 async def rag_stats():
     """Get RAG system statistics."""
     try:
-        from mcp_server.services.vector_store import VectorStoreService
-        
-        vector_store = VectorStoreService(
-            db_path=str(settings.lancedb_path),
-            model_name=settings.embedding_model
-        )
-        
+        from mcp_server.services.vector_store_singleton import get_vector_store
+
+        vector_store = get_vector_store()
         stats = vector_store.get_stats()
 
         with db.get_connection() as conn:
@@ -1441,19 +2433,6 @@ async def web_browse(request: Dict[str, Any]):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.post("/web/search")
-async def web_search(request: Dict[str, Any]):
-    """Search the web without API keys (DuckDuckGo / Bing)."""
-    try:
-        from mcp_server.tools.web_tools import tool_search
-
-        result = await tool_search(params=request, db=db)
-        return result
-    except Exception as e:
-        logger.error(f"Error in web search: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @api_router.post("/web/digest")
 async def web_digest(request: Dict[str, Any]):
     """Browse a URL and generate a markdown + JSON digest via LLM."""
@@ -1514,36 +2493,1178 @@ async def web_browse_history(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.get("/web/search/history")
-async def web_search_history(
+@api_router.get("/recent-activity")
+async def get_recent_activity(
+    limit: int = Query(default=20, ge=1, le=100),
     workspace_id: Optional[int] = Query(default=None),
-    limit: int = Query(default=20, ge=1, le=100)
 ):
-    """Recent search sessions."""
+    """Unified recent activity feed: items + browse_sessions + search_sessions."""
     try:
         with db.get_connection() as conn:
             with conn.cursor() as cur:
-                args = []
-                where = ""
-                if workspace_id is not None:
-                    where = "WHERE workspace_id = %s"
-                    args.append(workspace_id)
-                cur.execute(
-                    f"""SELECT id, query, engine, results_count, duration_ms, created_at
-                        FROM search_sessions {where}
-                        ORDER BY created_at DESC LIMIT %s""",
-                    args + [limit]
-                )
+                ws_filter = "AND workspace_id = %(ws)s" if workspace_id is not None else ""
+                params = {"limit": limit, "ws": workspace_id}
+                cur.execute(f"""
+                    SELECT * FROM (
+                        SELECT
+                            id, title, url AS ref, 'item' AS kind,
+                            item_type AS sub, created_at
+                        FROM items
+                        WHERE 1=1 {ws_filter}
+                        UNION ALL
+                        SELECT
+                            id, COALESCE(NULLIF(title,''), url) AS title,
+                            url AS ref, 'browse' AS kind,
+                            engine AS sub, created_at
+                        FROM browse_sessions
+                        WHERE 1=1 {ws_filter}
+                        UNION ALL
+                        SELECT
+                            id, query AS title,
+                            NULL AS ref, 'search' AS kind,
+                            engine AS sub, created_at
+                        FROM search_sessions
+                        WHERE 1=1 {ws_filter}
+                    ) combined
+                    ORDER BY created_at DESC
+                    LIMIT %(limit)s
+                """, params)
                 rows = cur.fetchall()
         return [
             {
-                "id": r[0], "query": r[1], "engine": r[2],
-                "results_count": r[3], "duration_ms": r[4],
+                "id": r[0], "title": r[1], "ref": r[2],
+                "kind": r[3], "sub": r[4],
                 "created_at": r[5].isoformat() if r[5] else None,
             }
             for r in rows
         ]
     except Exception as e:
-        logger.error(f"Error fetching search history: {e}")
+        logger.error(f"Error fetching recent activity: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+
+
+# ============================================
+# Documents — Bibliothèque
+# ============================================
+
+_DOC_SYSTEM = """Tu es un expert en veille technologique et rédaction structurée.
+Génère un document professionnel en français, bien structuré en markdown.
+Utilise des exemples concrets, des analogies, des listes numérotées quand pertinent.
+Ne fabrique pas d'informations qui ne sont pas dans les sources fournies."""
+
+_DOC_PROMPTS = {
+    "fiche": """Génère une fiche de veille concise à partir des sources suivantes.
+
+THÈME : {prompt}
+
+SOURCES :
+{sources}
+
+Structure obligatoire :
+## Résumé
+(3 phrases qui capturent l'essentiel)
+
+## Points clés
+(5 bullets max, concrets et actionnables)
+
+## Pourquoi c'est important
+(1 paragraphe avec exemples ou analogies)
+
+## Sources
+(liste des titres avec URLs)""",
+
+    "synthese": """Génère une synthèse thématique approfondie à partir des sources suivantes.
+
+THÈME : {prompt}
+
+SOURCES :
+{sources}
+
+Structure obligatoire :
+## Introduction
+(contexte et périmètre de la synthèse)
+
+## [2-4 sections thématiques]
+(chaque section = un aspect du thème, avec exemples concrets)
+
+## Tendances identifiées
+(ce qui émerge des sources)
+
+## Conclusion
+(points de retenue et perspectives)
+
+## Sources
+(liste des titres avec URLs)""",
+
+    "guide": """Génère un guide pratique et opérationnel à partir des sources suivantes.
+
+THÈME : {prompt}
+
+SOURCES :
+{sources}
+
+Structure obligatoire :
+## Contexte
+(pourquoi ce guide, à qui il s'adresse)
+
+## Prérequis
+(ce qu'il faut savoir ou avoir avant de commencer)
+
+## Étapes
+(étapes numérotées, avec exemples de code ou commandes si pertinent)
+
+## Pièges à éviter
+(erreurs fréquentes et comment les éviter)
+
+## Pour aller plus loin
+(ressources complémentaires)
+
+## Sources
+(liste des titres avec URLs)""",
+
+    "rapport": """Génère un rapport de veille complet et structuré à partir des sources suivantes.
+
+THÈME : {prompt}
+
+SOURCES :
+{sources}
+
+Structure obligatoire :
+## Résumé exécutif
+(5-7 lignes, pour un lecteur pressé)
+
+## Contexte et périmètre
+(cadre de la veille, période couverte)
+
+## Analyse des contenus
+(analyse détaillée avec sous-sections par axe)
+
+## Tendances et signaux faibles
+(ce qui émerge, ce qui est à surveiller)
+
+## Recommandations
+(actions concrètes suggérées, priorisées)
+
+## Annexes / Sources
+(liste complète des sources utilisées)"""
+}
+
+_MAX_TOKENS = {"fiche": 1500, "synthese": 3500, "guide": 3500, "rapport": 4500}
+
+
+@api_router.post("/documents/{doc_id}/ai-edit")
+async def ai_edit_document(doc_id: int, data: Dict[str, Any]):
+    """
+    Apply an AI instruction to an existing document content.
+    Returns the rewritten markdown without saving.
+    """
+    try:
+        instruction = (data.get("instruction") or "").strip()
+        current_content = (data.get("current_content") or "").strip()
+        if not instruction:
+            raise HTTPException(status_code=400, detail="instruction is required")
+        if not current_content:
+            raise HTTPException(status_code=400, detail="current_content is required")
+
+        from mcp_server.services.llm_provider import create_llm_provider
+
+        llm = create_llm_provider(
+            provider_type=settings.llm_provider,
+            openai_api_key=settings.openai_api_key,
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            aws_region=settings.aws_region,
+            model=settings.aws_bedrock_model,
+        )
+
+        system = (
+            "Tu es un éditeur de documents markdown professionnel. "
+            "Tu reçois un document existant et une instruction de modification. "
+            "Applique UNIQUEMENT ce qui est demandé — ne modifie pas ce qui n'est pas mentionné. "
+            "Conserve la structure markdown et la langue du document. "
+            "Retourne UNIQUEMENT le document modifié, sans explication ni commentaire."
+        )
+
+        prompt = (
+            f"Document actuel :\n\n{current_content}\n\n"
+            f"---\n\n"
+            f"Instruction : {instruction}\n\n"
+            f"Retourne le document modifié :"
+        )
+
+        rewritten, usage = await llm.generate(
+            prompt=prompt,
+            system_prompt=system,
+            temperature=0.5,
+            max_tokens=4000,
+            top_p=0.9,
+        )
+
+        return {
+            "markdown": rewritten,
+            "tokens_used": usage.get("total_tokens", 0),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in ai-edit for doc {doc_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/documents/generate")
+async def generate_document(data: Dict[str, Any]):
+    """Generate a document from selected items + free prompt. Does NOT save."""
+    try:
+        doc_type = data.get("doc_type", "fiche")
+        prompt = (data.get("prompt") or data.get("title") or "").strip()
+        item_ids = data.get("item_ids") or []
+
+        if doc_type not in _DOC_PROMPTS:
+            raise HTTPException(status_code=400, detail=f"doc_type must be one of: {list(_DOC_PROMPTS.keys())}")
+        if not prompt and not item_ids:
+            raise HTTPException(status_code=400, detail="prompt or item_ids required")
+
+        from mcp_server.services.llm_provider import create_llm_provider
+        import json as _json
+
+        llm = create_llm_provider(
+            provider_type=settings.llm_provider,
+            openai_api_key=settings.openai_api_key,
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            aws_region=settings.aws_region,
+            model=settings.aws_bedrock_model,
+        )
+
+        # Fetch item summaries
+        sources_text = ""
+        if item_ids:
+            with db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT id, title, summary, url FROM items WHERE id = ANY(%s) ORDER BY importance DESC NULLS LAST",
+                        (item_ids,)
+                    )
+                    rows = cur.fetchall()
+            parts = []
+            for r in rows:
+                title_s = r[1] or ""
+                summary_s = (r[2] or "")[:600]
+                url_s = r[3] or ""
+                parts.append(f"### {title_s}\n{summary_s}\nURL: {url_s}")
+            sources_text = "\n\n".join(parts)
+
+        user_prompt = _DOC_PROMPTS[doc_type].format(
+            prompt=prompt or "Synthèse des contenus sélectionnés",
+            sources=sources_text or "Aucune source — génère à partir du thème uniquement."
+        )
+
+        markdown, usage = await llm.generate(
+            prompt=user_prompt,
+            system_prompt=_DOC_SYSTEM,
+            temperature=0.75,
+            max_tokens=_MAX_TOKENS[doc_type],
+            top_p=0.9,
+        )
+
+        return {
+            "markdown": markdown,
+            "doc_type": doc_type,
+            "tokens_used": usage.get("total_tokens", 0),
+            "cost_usd": llm.calculate_cost(usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
+            if hasattr(llm, "calculate_cost") else 0.0,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating document: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/documents")
+async def create_document(data: Dict[str, Any]):
+    """Save a generated document to the library."""
+    try:
+        title = (data.get("title") or "").strip()
+        doc_type = data.get("doc_type", "fiche")
+        content_markdown = (data.get("content_markdown") or "").strip()
+        if not title or not content_markdown:
+            raise HTTPException(status_code=400, detail="title and content_markdown required")
+
+        import json as _json
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO documents
+                       (title, doc_type, content_markdown, content_json, source_item_ids, source_prompt, workspace_id)
+                       VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s)
+                       RETURNING id, created_at""",
+                    (
+                        title, doc_type, content_markdown,
+                        _json.dumps(data.get("content_json") or {}),
+                        data.get("source_item_ids") or [],
+                        data.get("source_prompt", ""),
+                        data.get("workspace_id"),
+                    )
+                )
+                row = cur.fetchone()
+                conn.commit()
+        return {"id": row[0], "title": title, "doc_type": doc_type, "created_at": row[1].isoformat()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error saving document: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/documents/search")
+async def search_documents(
+    q: str = Query(..., min_length=1),
+    semantic: bool = Query(default=False),
+    doc_type: Optional[str] = Query(default=None),
+    rag_indexed: Optional[bool] = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=100),
+):
+    """
+    Search documents.
+    - Default: PostgreSQL fulltext (tsvector/tsquery, French stemming)
+    - semantic=true: LanceDB vector search on indexed documents (requires rag_indexed=true)
+    Results from both modes are merged and deduplicated when both fire.
+    """
+    try:
+        results = []
+
+        # ── 1. Fulltext PostgreSQL ──────────────────────────────────────
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                conditions = [
+                    "to_tsvector('french', coalesce(title,'') || ' ' || coalesce(source_prompt,'') || ' ' || coalesce(content_markdown,'')) "
+                    "@@ plainto_tsquery('french', %s)"
+                ]
+                params: list = [q]
+                if doc_type:
+                    conditions.append("doc_type = %s"); params.append(doc_type)
+                if rag_indexed is not None:
+                    conditions.append("rag_indexed = %s"); params.append(rag_indexed)
+                where = " AND ".join(conditions)
+                cur.execute(
+                    f"""SELECT id, title, doc_type, source_prompt,
+                               array_length(source_item_ids, 1) AS nb_sources,
+                               rag_indexed, created_at,
+                               LEFT(content_markdown, 300) AS excerpt,
+                               ts_rank(
+                                   to_tsvector('french', coalesce(title,'') || ' ' || coalesce(source_prompt,'') || ' ' || coalesce(content_markdown,'')),
+                                   plainto_tsquery('french', %s)
+                               ) AS rank
+                        FROM documents WHERE {where}
+                        ORDER BY rank DESC LIMIT %s""",
+                    [q] + params + [limit]
+                )
+                rows = cur.fetchall()
+
+        seen_ids = set()
+        for r in rows:
+            seen_ids.add(r[0])
+            results.append({
+                "id": r[0], "title": r[1], "doc_type": r[2],
+                "source_prompt": r[3], "nb_sources": r[4] or 0,
+                "rag_indexed": bool(r[5]),
+                "created_at": r[6].isoformat() if r[6] else None,
+                "excerpt": r[7],
+                "score": float(r[8]),
+                "match_type": "fulltext",
+            })
+
+        # ── 2. Semantic LanceDB (opt-in) ────────────────────────────────
+        if semantic:
+            try:
+                from mcp_server.services.vector_store_singleton import get_vector_store
+                import asyncio as _asyncio
+
+                vs = get_vector_store()
+                semantic_results = await _asyncio.to_thread(
+                    vs.search, q, limit=limit, filter_source_type=None
+                )
+                # semantic_results contain items; we need to match back to documents
+                # via source_item_ids. For documents, source_type was set to 'item' in index_item
+                # We'll also search directly by checking doc content in LanceDB source_type filtering
+                # Simpler: re-query DB for docs whose id matches any semantic hit
+                doc_ids_from_semantic = [
+                    r.get("source_id") for r in semantic_results
+                    if r.get("source_type") == "item"
+                ]
+                if doc_ids_from_semantic:
+                    with db.get_connection() as conn:
+                        with conn.cursor() as cur:
+                            extra_conds = ["id = ANY(%s)", "rag_indexed = TRUE"]
+                            extra_params: list = [doc_ids_from_semantic]
+                            if doc_type:
+                                extra_conds.append("doc_type = %s"); extra_params.append(doc_type)
+                            cur.execute(
+                                f"""SELECT id, title, doc_type, source_prompt,
+                                           array_length(source_item_ids, 1),
+                                           rag_indexed, created_at,
+                                           LEFT(content_markdown, 300)
+                                    FROM documents WHERE {' AND '.join(extra_conds)}
+                                    LIMIT %s""",
+                                extra_params + [limit]
+                            )
+                            for r in cur.fetchall():
+                                if r[0] not in seen_ids:
+                                    seen_ids.add(r[0])
+                                    results.append({
+                                        "id": r[0], "title": r[1], "doc_type": r[2],
+                                        "source_prompt": r[3], "nb_sources": r[4] or 0,
+                                        "rag_indexed": bool(r[5]),
+                                        "created_at": r[6].isoformat() if r[6] else None,
+                                        "excerpt": r[7],
+                                        "score": 0.5,
+                                        "match_type": "semantic",
+                                    })
+            except Exception as sem_err:
+                logger.warning(f"Semantic search failed, fulltext only: {sem_err}")
+
+        return {"results": results, "total": len(results), "query": q, "semantic": semantic}
+
+    except Exception as e:
+        logger.error(f"Error searching documents: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/documents")
+async def list_documents(
+    doc_type: Optional[str] = Query(default=None),
+    workspace_id: Optional[int] = Query(default=None),
+    rag_indexed: Optional[bool] = Query(default=None),
+    sort: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+):
+    """List documents in the library."""
+    try:
+        conditions = []
+        params: list = []
+        if doc_type:
+            conditions.append("doc_type = %s"); params.append(doc_type)
+        if workspace_id is not None:
+            conditions.append("workspace_id = %s"); params.append(workspace_id)
+        if rag_indexed is not None:
+            conditions.append("rag_indexed = %s"); params.append(rag_indexed)
+        where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+        order = "created_at DESC"
+        if sort == "created_at ASC":
+            order = "created_at ASC"
+        elif sort == "title ASC":
+            order = "title ASC"
+
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""SELECT id, title, doc_type, source_prompt,
+                               array_length(source_item_ids, 1) AS nb_sources,
+                               rag_indexed, created_at, updated_at,
+                               LEFT(content_markdown, 300) AS excerpt
+                        FROM documents {where}
+                        ORDER BY {order}
+                        LIMIT %s OFFSET %s""",
+                    params + [limit, offset]
+                )
+                rows = cur.fetchall()
+                cur.execute(f"SELECT COUNT(*) FROM documents {where}", params)
+                total = cur.fetchone()[0]
+
+        return {
+            "documents": [
+                {
+                    "id": r[0], "title": r[1], "doc_type": r[2],
+                    "source_prompt": r[3], "nb_sources": r[4] or 0,
+                    "rag_indexed": bool(r[5]),
+                    "created_at": r[6].isoformat() if r[6] else None,
+                    "updated_at": r[7].isoformat() if r[7] else None,
+                    "excerpt": r[8],
+                }
+                for r in rows
+            ],
+            "total": total,
+        }
+    except Exception as e:
+        logger.error(f"Error listing documents: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/documents/{doc_id}")
+async def get_document(doc_id: int):
+    """Get a single document."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT id, title, doc_type, content_markdown, content_json,
+                              source_item_ids, source_prompt, workspace_id,
+                              rag_indexed, created_at, updated_at
+                       FROM documents WHERE id = %s""",
+                    (doc_id,)
+                )
+                row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Document not found")
+        return {
+            "id": row[0], "title": row[1], "doc_type": row[2],
+            "content_markdown": row[3], "content_json": row[4],
+            "source_item_ids": row[5] or [], "source_prompt": row[6],
+            "workspace_id": row[7], "rag_indexed": bool(row[8]),
+            "created_at": row[9].isoformat() if row[9] else None,
+            "updated_at": row[10].isoformat() if row[10] else None,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching document {doc_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.patch("/documents/{doc_id}")
+async def update_document(doc_id: int, data: Dict[str, Any]):
+    """Update a document (title, content, etc.)."""
+    try:
+        fields = []
+        params = []
+        if "title" in data:
+            fields.append("title = %s"); params.append(data["title"])
+        if "content_markdown" in data:
+            fields.append("content_markdown = %s"); params.append(data["content_markdown"])
+        if not fields:
+            raise HTTPException(status_code=400, detail="Nothing to update")
+        fields.append("updated_at = NOW()")
+        params.append(doc_id)
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"UPDATE documents SET {', '.join(fields)} WHERE id = %s RETURNING id",
+                    params
+                )
+                if not cur.fetchone():
+                    raise HTTPException(status_code=404, detail="Document not found")
+                conn.commit()
+        return {"success": True, "id": doc_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating document {doc_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.delete("/documents/{doc_id}")
+async def delete_document(doc_id: int):
+    """Delete a document from the library and remove its vectors from LanceDB."""
+    try:
+        # Check if document was RAG indexed before deleting
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT rag_indexed FROM documents WHERE id = %s", (doc_id,))
+                row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Document not found")
+        was_indexed = bool(row[0])
+
+        # Delete from DB
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM documents WHERE id = %s", (doc_id,))
+                conn.commit()
+
+        # Clean up LanceDB vectors if document was indexed
+        if was_indexed:
+            try:
+                from mcp_server.services.vector_store_singleton import get_vector_store
+                import asyncio as _asyncio
+                vs = get_vector_store()
+                await _asyncio.to_thread(vs.delete_item, doc_id)
+                logger.info(f"Removed vectors for document {doc_id} from LanceDB")
+            except Exception as ve:
+                logger.warning(f"Could not remove vectors for document {doc_id}: {ve}")
+
+        return {"success": True, "vectors_cleaned": was_indexed}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting document {doc_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.delete("/documents")
+async def delete_documents_batch(data: Dict[str, Any]):
+    """Delete multiple documents and clean up their LanceDB vectors."""
+    try:
+        doc_ids: list = data.get("ids") or []
+        if not doc_ids:
+            raise HTTPException(status_code=400, detail="ids required")
+
+        # Fetch indexed status for all
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id, rag_indexed FROM documents WHERE id = ANY(%s)", (doc_ids,))
+                rows = {r[0]: bool(r[1]) for r in cur.fetchall()}
+                # Delete all
+                cur.execute("DELETE FROM documents WHERE id = ANY(%s)", (doc_ids,))
+                deleted = cur.rowcount
+                conn.commit()
+
+        # Clean LanceDB for indexed ones
+        indexed_ids = [iid for iid, was_indexed in rows.items() if was_indexed]
+        if indexed_ids:
+            try:
+                from mcp_server.services.vector_store_singleton import get_vector_store
+                import asyncio as _asyncio
+                vs = get_vector_store()
+                for iid in indexed_ids:
+                    await _asyncio.to_thread(vs.delete_item, iid)
+                logger.info(f"Removed vectors for {len(indexed_ids)} documents from LanceDB")
+            except Exception as ve:
+                logger.warning(f"Vector cleanup partial error: {ve}")
+
+        return {"success": True, "deleted": deleted, "vectors_cleaned": len(indexed_ids)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in batch delete documents: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/documents/{doc_id}/index")
+async def index_document(doc_id: int):
+    """Index a document into the RAG vector store."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT title, content_markdown FROM documents WHERE id = %s", (doc_id,))
+                row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Document not found")
+        title, content = row
+
+        from mcp_server.services.vector_store_singleton import get_vector_store
+        import asyncio as _asyncio
+        vs = get_vector_store()
+        doc_data = {"id": doc_id, "title": title, "summary": content[:2000], "workspace_id": None}
+        await _asyncio.to_thread(vs.index_item, doc_data)
+
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE documents SET rag_indexed=TRUE, rag_indexed_at=NOW() WHERE id=%s", (doc_id,))
+                conn.commit()
+
+        return {"success": True, "id": doc_id, "rag_indexed": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error indexing document {doc_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+# ============================================
+# Veille à la demande
+# ============================================
+
+@api_router.post("/veille/on-demand")
+async def veille_on_demand(data: Dict[str, Any], background_tasks: BackgroundTasks):
+    """
+    Lance une veille ciblée sur un sujet à la demande.
+    Flow : recherche web → digest LLM en parallèle → classification → retourne les items créés.
+    """
+    try:
+        subject = (data.get("subject") or "").strip()
+        max_results = min(int(data.get("max_results", 5)), 10)
+        workspace_id = data.get("workspace_id")
+        if not subject:
+            raise HTTPException(status_code=400, detail="subject is required")
+
+        from mcp_server.services.web_search import search as web_search, search_with_searxng
+        from mcp_server.services.web_browser import browse_with_requests, browse_with_crawl4ai
+        from mcp_server.services.digest_generator import generate_digest
+        from mcp_server.services.llm_provider import create_llm_provider
+        from mcp_server.services.classifier import ClassifierService
+        import asyncio as _asyncio
+
+        llm = create_llm_provider(
+            provider_type=settings.llm_provider,
+            openai_api_key=settings.openai_api_key,
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            aws_region=settings.aws_region,
+            model=settings.aws_bedrock_model,
+        )
+
+        # 1. SearXNG cherche en temps réel (agrège Google, Bing, DuckDuckGo, ArXiv...)
+        import json as _json
+
+        searxng_results = await search_with_searxng(
+            query=subject,
+            max_results=max_results * 3,  # fetch plus, on filtre ensuite
+            searxng_url=settings.searxng_url,
+        )
+
+        source_meta: dict = {}
+        candidate_urls: list = []
+
+        if searxng_results:
+            # LLM filtre les résultats les plus pertinents parmi les vrais résultats SearXNG
+            candidates_text = "\n".join([
+                f"{i+1}. [{r['engine']}] {r['title']}\n   URL: {r['url']}\n   {r.get('content','')[:150]}"
+                for i, r in enumerate(searxng_results[:max_results * 2])
+            ])
+
+            FILTER_SYSTEM = (
+                "Tu es un expert en veille informationnelle. "
+                "Sélectionne les résultats les plus pertinents, récents et substantiels. "
+                "Réponds UNIQUEMENT avec un objet JSON valide."
+            )
+            FILTER_PROMPT = f"""Sujet : {subject}
+
+Voici {len(searxng_results[:max_results*2])} résultats de recherche réels :
+
+{candidates_text}
+
+Sélectionne exactement {max_results} URLs en JSON :
+{{"selected": [1, 3, 5, ...]}}  (numéros des résultats à garder)
+
+Critères : pertinence au sujet, contenu substantiel, sources diversifiées, éviter doublons."""
+
+            selected_indices = list(range(min(max_results, len(searxng_results))))  # fallback: prendre les premiers
+            try:
+                raw, _ = await llm.generate(
+                    prompt=FILTER_PROMPT,
+                    system_prompt=FILTER_SYSTEM,
+                    temperature=0.2,
+                    max_tokens=200,
+                    top_p=0.9,
+                )
+                start = raw.find("{"); end = raw.rfind("}") + 1
+                parsed = _json.loads(raw[start:end]) if start >= 0 else {}
+                indices = [int(i) - 1 for i in parsed.get("selected", []) if str(i).isdigit()]
+                if indices:
+                    selected_indices = [i for i in indices if 0 <= i < len(searxng_results)][:max_results]
+            except Exception as e:
+                logger.debug(f"LLM filter failed, using top results: {e}")
+
+            for i in selected_indices:
+                r = searxng_results[i]
+                url = r["url"]
+                candidate_urls.append(url)
+                source_meta[url] = r.get("engine", "searxng")
+
+        if not candidate_urls:
+            # Fallback : HN + ArXiv si SearXNG indisponible
+            logger.warning(f"SearXNG returned no results for '{subject}', using fallback")
+            import urllib.parse as _uparse, requests as _req
+            q = _uparse.quote_plus(subject)
+            try:
+                hn = _req.get(f"https://hn.algolia.com/api/v1/search?query={q}&tags=story&hitsPerPage={max_results}",
+                              headers={"User-Agent": "OpenWebMCP/1.0"}, timeout=8)
+                if hn.status_code == 200:
+                    for h in hn.json().get("hits", [])[:max_results]:
+                        u = h.get("url") or f"https://news.ycombinator.com/item?id={h.get('objectID')}"
+                        if u and u not in candidate_urls:
+                            candidate_urls.append(u); source_meta[u] = "Hacker News"
+            except Exception: pass
+
+        urls = candidate_urls[:max_results]
+        logger.info(f"Veille '{subject}': {len(urls)} URLs — engines: {list(set(source_meta.values()))}")
+
+        if not urls:
+            return {"success": False, "subject": subject, "message": "Aucune URL trouvée — SearXNG et fallbacks indisponibles", "items": []}
+
+        # 2. Digest en parallèle (skip URLs déjà en base)
+        existing_urls: set = set()
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT url FROM items WHERE url = ANY(%s)", (urls,))
+                existing_urls = {r[0] for r in cur.fetchall()}
+
+        new_urls = [u for u in urls if u not in existing_urls]
+
+        async def digest_url(url: str):
+            try:
+                # Crawl4AI > requests pour une extraction LLM-ready de qualité
+                browse = await browse_with_crawl4ai(url, timeout=30)
+                if not browse.get("content"):
+                    return None
+                title = browse.get("title") or url
+                content = browse.get("content", "")
+                digest = await generate_digest(url, title, content[:40000], workspace_id, llm)
+                if digest.get("error") and not digest.get("markdown"):
+                    return None
+                import json as _json
+                json_data = digest.get("json", {})
+                with db.get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """INSERT INTO items
+                               (source_type, source_url, url, title, summary,
+                                digest_markdown, digest_json, digest_generated_at,
+                                importance, item_type, keywords, classification_status, workspace_id)
+                               VALUES (%s,%s,%s,%s,%s,%s,%s,NOW(),%s,%s,%s,'pending',%s)
+                               ON CONFLICT (url) DO UPDATE SET
+                                 digest_markdown = EXCLUDED.digest_markdown,
+                                 digest_json = EXCLUDED.digest_json,
+                                 digest_generated_at = NOW()
+                               RETURNING id""",
+                            (
+                                "browse", url, url,
+                                (title or url)[:500],
+                                json_data.get("summary", "")[:2000],
+                                digest.get("markdown", ""),
+                                _json.dumps(json_data),
+                                json_data.get("importance", "medium"),
+                                json_data.get("content_type", "other"),
+                                json_data.get("tags", []),
+                                workspace_id,
+                            ),
+                        )
+                        row = cur.fetchone()
+                        conn.commit()
+                        return row[0] if row else None
+            except Exception as e:
+                logger.warning(f"on-demand digest failed for {url}: {e}")
+                return None
+
+        item_ids_raw = await _asyncio.gather(*[digest_url(u) for u in new_urls])
+        item_ids = [i for i in item_ids_raw if i]
+
+        # 3. Classification en arrière-plan
+        if item_ids:
+            classifier = ClassifierService(llm_provider=llm, db_manager=db, temperature=0.5, max_tokens=800)
+            async def classify_all():
+                for iid in item_ids:
+                    try: await classifier.classify_item(iid)
+                    except Exception as e: logger.warning(f"classify failed for {iid}: {e}")
+            background_tasks.add_task(classify_all)
+
+        # 4. Retourner les items créés
+        created_items = []
+        if item_ids:
+            with db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """SELECT id, title, summary, url, item_type, importance, classification_status
+                           FROM items WHERE id = ANY(%s) ORDER BY created_at DESC""",
+                        (item_ids,)
+                    )
+                    created_items = [
+                        {"id": r[0], "title": r[1], "summary": r[2], "url": r[3],
+                         "item_type": r[4], "importance": r[5], "status": r[6]}
+                        for r in cur.fetchall()
+                    ]
+
+        # Add source label to items
+        for item in created_items:
+            item["source_label"] = source_meta.get(item["url"], "web")
+
+        return {
+            "success": True,
+            "subject": subject,
+            "searched": len(urls),
+            "already_known": len(existing_urls & set(urls)),
+            "new_items": len(item_ids),
+            "items": created_items,
+            "sources_used": list(set(source_meta.values())),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in veille on-demand: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# Briefing Quotidien
+# ============================================
+
+_BRIEFING_SYSTEM = """Tu es un analyste de veille technologique senior.
+Tu rédiges des briefings matinaux concis, factuels et actionnables.
+Ton style : direct, informatif, structuré. Pas de jargon inutile.
+Réponds UNIQUEMENT en français."""
+
+_BRIEFING_PROMPT = """Voici les items de veille collectés sur les dernières {hours}h classifiés high ou critical :
+
+{items_text}
+
+Génère un briefing de veille structuré avec EXACTEMENT ce format markdown :
+
+## Résumé exécutif
+(3-4 phrases maximum qui capturent l'essentiel de ce qui s'est passé)
+
+## Signaux importants
+(Liste de 3-6 bullets, chacun sur une ligne, format : **Sujet** — ce qui se passe et pourquoi c'est important)
+
+## Tendances émergentes
+(2-3 tendances détectées dans ces contenus, avec leur potentiel d'impact)
+
+## À surveiller
+(1-2 sujets à suivre de près dans les prochains jours)"""
+
+
+async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int] = None) -> dict:
+    """Core briefing generation logic — reused by both on-demand and scheduled."""
+    import json as _json
+    from mcp_server.services.llm_provider import create_llm_provider
+
+    # Fetch high/critical items from the period
+    window_filter = "AND created_at > NOW() - INTERVAL '%s hours'" % hours
+    ws_filter = f"AND workspace_id = {workspace_id}" if workspace_id is not None else ""
+
+    with db.get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"""
+                SELECT id, title, summary, url, importance, item_type, keywords, source_type
+                FROM items
+                WHERE classification_status = 'classified'
+                  AND importance IN ('high', 'critical')
+                  {window_filter}
+                  {ws_filter}
+                ORDER BY importance DESC, created_at DESC
+                LIMIT 30
+            """)
+            rows = cur.fetchall()
+
+    if not rows:
+        # Fallback: take most recent classified items regardless of time
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"""
+                    SELECT id, title, summary, url, importance, item_type, keywords, source_type
+                    FROM items
+                    WHERE classification_status = 'classified'
+                      AND importance IN ('high', 'critical')
+                      {ws_filter}
+                    ORDER BY created_at DESC
+                    LIMIT 15
+                """)
+                rows = cur.fetchall()
+
+    items = [
+        {"id": r[0], "title": r[1], "summary": (r[2] or "")[:300],
+         "url": r[3], "importance": r[4], "item_type": r[5],
+         "keywords": r[6] or [], "source_type": r[7]}
+        for r in rows
+    ]
+
+    if not items:
+        return {"error": "no_items", "message": "Aucun item high/critical disponible pour générer un briefing"}
+
+    # Build prompt
+    items_text = "\n\n".join([
+        f"**{i['importance'].upper()}** — {i['title']}\n{i['summary']}\nSource: {i['url']}"
+        for i in items
+    ])
+
+    llm = create_llm_provider(
+        provider_type=settings.llm_provider,
+        openai_api_key=settings.openai_api_key,
+        aws_access_key_id=settings.aws_access_key_id,
+        aws_secret_access_key=settings.aws_secret_access_key,
+        aws_region=settings.aws_region,
+        model=settings.aws_bedrock_model,
+    )
+
+    prompt = _BRIEFING_PROMPT.format(hours=hours, items_text=items_text[:12000])
+    markdown, usage = await llm.generate(
+        prompt=prompt,
+        system_prompt=_BRIEFING_SYSTEM,
+        temperature=0.6,
+        max_tokens=2000,
+        top_p=0.9,
+    )
+
+    # Extract trends from keywords
+    from collections import Counter
+    kw_counter: Counter = Counter()
+    for item in items:
+        for kw in (item.get("keywords") or []):
+            kw_counter[kw.lower()] += 1
+    top_trends = [{"keyword": kw, "count": cnt} for kw, cnt in kw_counter.most_common(8)]
+
+    # Stats
+    stats = {
+        "total_items": len(items),
+        "critical": sum(1 for i in items if i["importance"] == "critical"),
+        "high": sum(1 for i in items if i["importance"] == "high"),
+        "sources": list({i["source_type"] for i in items}),
+        "period_hours": hours,
+    }
+
+    return {
+        "markdown": markdown,
+        "top_items": items[:10],
+        "trends": top_trends,
+        "stats": stats,
+        "tokens_used": usage.get("total_tokens", 0),
+        "cost_usd": llm.calculate_cost(usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
+        if hasattr(llm, "calculate_cost") else 0.0,
+    }
+
+
+@api_router.post("/briefing/generate")
+async def generate_briefing(data: Dict[str, Any] = {}):
+    """Generate and save a briefing for today (or custom period)."""
+    try:
+        import datetime as _dt
+        import json as _json
+
+        hours = int(data.get("hours", 24))
+        workspace_id = data.get("workspace_id")
+        force = bool(data.get("force", False))
+        today = _dt.date.today()
+
+        # Check if briefing already exists for today
+        if not force:
+            with db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT id FROM daily_briefings WHERE briefing_date = %s", (today,)
+                    )
+                    existing = cur.fetchone()
+            if existing:
+                return {"already_exists": True, "date": str(today), "id": existing[0]}
+
+        result = await _generate_briefing_content(hours, workspace_id)
+        if "error" in result:
+            raise HTTPException(status_code=422, detail=result["message"])
+
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO daily_briefings
+                       (briefing_date, executive_summary, top_items, trends, stats, workspace_id, tokens_used, cost_usd)
+                       VALUES (%s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s, %s)
+                       ON CONFLICT (briefing_date) DO UPDATE SET
+                         executive_summary = EXCLUDED.executive_summary,
+                         top_items = EXCLUDED.top_items,
+                         trends = EXCLUDED.trends,
+                         stats = EXCLUDED.stats,
+                         tokens_used = EXCLUDED.tokens_used,
+                         generated_at = NOW()
+                       RETURNING id""",
+                    (
+                        today,
+                        result["markdown"],
+                        _json.dumps(result["top_items"]),
+                        _json.dumps(result["trends"]),
+                        _json.dumps(result["stats"]),
+                        workspace_id,
+                        result["tokens_used"],
+                        result["cost_usd"],
+                    )
+                )
+                briefing_id = cur.fetchone()[0]
+                conn.commit()
+
+        return {
+            "success": True,
+            "id": briefing_id,
+            "date": str(today),
+            "markdown": result["markdown"],
+            "top_items": result["top_items"],
+            "trends": result["trends"],
+            "stats": result["stats"],
+            "tokens_used": result["tokens_used"],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating briefing: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/briefing/list")
+async def list_briefings(limit: int = Query(default=30, ge=1, le=90)):
+    """List past briefings (most recent first)."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT id, briefing_date, stats, tokens_used, generated_at,
+                              LEFT(executive_summary, 300)
+                       FROM daily_briefings
+                       ORDER BY briefing_date DESC LIMIT %s""",
+                    (limit,)
+                )
+                rows = cur.fetchall()
+        return [
+            {
+                "id": r[0],
+                "date": str(r[1]),
+                "stats": r[2],
+                "tokens_used": r[3],
+                "generated_at": r[4].isoformat() if r[4] else None,
+                "excerpt": r[5],
+            }
+            for r in rows
+        ]
+    except Exception as e:
+        logger.error(f"Error listing briefings: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/briefing/{briefing_id}")
+async def get_briefing(briefing_id: int):
+    """Get a single briefing by ID."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT id, briefing_date, executive_summary, top_items, trends, stats,
+                              tokens_used, cost_usd, generated_at
+                       FROM daily_briefings WHERE id = %s""",
+                    (briefing_id,)
+                )
+                row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Briefing not found")
+        return {
+            "id": row[0], "date": str(row[1]),
+            "markdown": row[2], "top_items": row[3],
+            "trends": row[4], "stats": row[5],
+            "tokens_used": row[6], "cost_usd": float(row[7] or 0),
+            "generated_at": row[8].isoformat() if row[8] else None,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching briefing: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/briefing/today")
+async def get_today_briefing():
+    """Get today's briefing if it exists."""
+    try:
+        import datetime as _dt
+        today = _dt.date.today()
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT id, briefing_date, executive_summary, top_items, trends, stats,
+                              tokens_used, cost_usd, generated_at
+                       FROM daily_briefings WHERE briefing_date = %s""",
+                    (today,)
+                )
+                row = cur.fetchone()
+        if not row:
+            return {"exists": False, "date": str(today)}
+        return {
+            "exists": True,
+            "id": row[0], "date": str(row[1]),
+            "markdown": row[2], "top_items": row[3],
+            "trends": row[4], "stats": row[5],
+            "tokens_used": row[6], "cost_usd": float(row[7] or 0),
+            "generated_at": row[8].isoformat() if row[8] else None,
+        }
+    except Exception as e:
+        logger.error(f"Error fetching today briefing: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

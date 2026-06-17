@@ -39,15 +39,68 @@ def _is_mostly_empty(text: str, threshold: float = 0.3) -> bool:
 # ── PDF extraction ─────────────────────────────────────────────────────────
 
 def _extract_pdf_digital(pdf_bytes: bytes) -> str:
-    """Extract text from a digital (non-scanned) PDF using pdfplumber."""
+    """
+    Extract text from a digital PDF using pdfplumber with adaptive spacing.
+    Reconstructs word spacing from character positions to fix fused-word issues
+    common in academic PDFs with complex fonts.
+    """
     try:
         import pdfplumber
+
+        def _page_to_text(page) -> str:
+            """Reconstruct text from character positions with correct spacing."""
+            chars = page.chars
+            if not chars:
+                return page.extract_text(x_tolerance=3, y_tolerance=3) or ""
+
+            # Group by line (rounded y position)
+            lines_dict: dict = {}
+            for c in chars:
+                y = round(float(c.get('top', 0)), 0)
+                lines_dict.setdefault(y, []).append(c)
+
+            result_lines = []
+            for y in sorted(lines_dict.keys()):
+                line_chars = sorted(lines_dict[y], key=lambda c: float(c.get('x0', 0)))
+                text = ''
+                prev_x1 = None
+                for c in line_chars:
+                    char = c.get('text', '')
+                    if not char.strip() and char != ' ':
+                        continue
+                    x0 = float(c.get('x0', 0))
+                    x1 = float(c.get('x1', x0 + 1))
+                    char_w = max(x1 - x0, 1.0)
+                    gap = (x0 - prev_x1) if prev_x1 is not None else 0
+                    # Insert space if gap > 25% of current char width
+                    if prev_x1 is not None and gap > char_w * 0.25:
+                        text += ' '
+                    text += char
+                    prev_x1 = x1
+
+                line = text.strip()
+                if line:
+                    result_lines.append(line)
+
+            # Filter lines where >60% of "words" are single chars (broken font rendering)
+            import re as _re
+            clean_lines = []
+            for line in result_lines:
+                words = line.split()
+                if not words:
+                    continue
+                single_char_ratio = sum(1 for w in words if len(w) == 1) / len(words)
+                if single_char_ratio > 0.6 and len(words) > 3:
+                    continue  # skip decorative/broken title lines
+                clean_lines.append(line)
+
+            return '\n'.join(clean_lines)
+
         with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-            pages = []
-            for page in pdf.pages:
-                text = page.extract_text() or ""
-                pages.append(text)
-        return "\n\n".join(pages)
+            pages = [_page_to_text(page) for page in pdf.pages]
+
+        return "\n\n".join(p for p in pages if p.strip())
+
     except ImportError:
         logger.warning("pdfplumber not installed, skipping digital PDF extraction")
         return ""

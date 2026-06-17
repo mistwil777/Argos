@@ -426,14 +426,14 @@ class CollectorService:
                 # Insert into database with ON CONFLICT (url) DO NOTHING for dedup
                 query = """
                     INSERT INTO items (
-                        source_type, source_url, url, title, content, summary,
+                        source_type, source_url, url, title, summary,
                         author, published_at, workspace_id
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (url) DO NOTHING
                     RETURNING id
                 """
-                
+
                 with self.db.get_connection() as conn:
                     with conn.cursor() as cur:
                         cur.execute(
@@ -443,8 +443,7 @@ class CollectorService:
                                 item["source_url"],
                                 item["url"],
                                 item["title"],
-                                item.get("summary", ""),   # content (NOT NULL legacy column)
-                                item.get("summary", ""),   # summary
+                                item.get("summary", ""),
                                 item.get("author"),
                                 item.get("published_at"),
                                 workspace_id,

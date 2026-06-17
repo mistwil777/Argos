@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { RefreshCw, Server, Database, Terminal, Loader2, CheckCircle, AlertCircle } from 'lucide-react'
+import { RefreshCw, Database, Terminal, Loader2 } from 'lucide-react'
 import { api } from '@/services/api'
 
 type Status = 'ok' | 'error' | 'not_installed' | string
@@ -24,7 +24,7 @@ function StatusDot({ status }: { status: Status }) {
   )
 }
 
-const TOOLS = ['web.browse','web.search','web.digest','web.watch','web.watched_pages','rag.ask','rag.search','rag.index_item','collector.fetch_rss','classifier.classify']
+const TOOLS = ['web.browse','web.digest','web.watch','web.watched_pages','rag.ask','rag.search','rag.index_item','collector.fetch_rss','classifier.classify']
 
 export default function Settings() {
   const [health, setHealth]     = useState<any>(null)
@@ -47,52 +47,6 @@ export default function Settings() {
 
   return (
     <div className="p-8 max-w-2xl mx-auto space-y-5">
-
-      {/* ── Services ── */}
-      <Panel title="Services" icon={Server}
-        action={
-          <motion.button whileHover={{ rotate: 180 }} transition={{ duration: 0.4 }} onClick={fetchHealth} disabled={loading}
-            className="w-7 h-7 flex items-center justify-center rounded border border-[hsl(var(--line))] hover:border-[hsl(var(--line-bright))] text-[hsl(var(--text-2))] transition-colors">
-            {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-          </motion.button>
-        }
-      >
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-[hsl(var(--line))] bg-[hsl(var(--bg-2))]">
-              {['Service', 'Statut', 'Info'].map(h => (
-                <th key={h} className="text-left px-4 py-2.5 text-[10.5px] font-mono text-[hsl(var(--text-3))] uppercase tracking-[.08em] font-normal">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[hsl(var(--line))]">
-            {[
-              { label: 'API MCP',         status: health?.status,     info: `http://localhost:8000` },
-              { label: 'Base de données', status: health?.database,   info: 'PostgreSQL 16' },
-              { label: 'Playwright',      status: health?.playwright, info: 'Browser stealth engine' },
-            ].map(({ label, status, info }) => (
-              <tr key={label} className="hover:bg-[hsl(var(--bg-2))] transition-colors">
-                <td className="px-4 py-3.5 text-[13px] font-semibold text-[hsl(var(--text))]">{label}</td>
-                <td className="px-4 py-3.5">
-                  {loading
-                    ? <div className="h-5 w-16 skeleton" />
-                    : <StatusDot status={status ?? 'error'} />
-                  }
-                </td>
-                <td className="px-4 py-3.5 text-[11px] font-mono text-[hsl(var(--text-3))]">{info}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {health?.tools_registered && (
-          <div className="px-4 py-2.5 border-t border-[hsl(var(--line))] bg-[hsl(var(--bg-2))]">
-            <p className="text-[11px] font-mono text-[hsl(var(--text-3))]">
-              <span className="text-[hsl(var(--accent))]">{health.tools_registered}</span> outils enregistrés ·{' '}
-              env: <span className="text-[hsl(var(--text-2))]">{health.environment}</span>
-            </p>
-          </div>
-        )}
-      </Panel>
 
       {/* ── RAG ── */}
       <Panel title="Index RAG" icon={Database}>

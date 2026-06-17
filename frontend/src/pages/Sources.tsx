@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, Globe, Rss, Github, Radio, Trash2, ToggleLeft, ToggleRight, Eye, X, Loader2 } from 'lucide-react'
 import { api } from '@/services/api'
 import { timeAgo } from '@/lib/utils'
+import PageHint from '@/components/ui/PageHint'
 
 const TYPE_ICON: Record<string, any> = { rss: Rss, website: Globe, github: Github, api: Radio }
 const TYPE_STYLE: Record<string, string> = {
@@ -11,7 +12,23 @@ const TYPE_STYLE: Record<string, string> = {
   github:  'text-purple-400 bg-purple-500/10 border-purple-500/25',
   api:     'text-emerald-400 bg-emerald-500/10 border-emerald-500/25',
 }
-const INIT = { name: '', url: '', type: 'website', category: 'general', interval: 60, monitor: false }
+const INIT = { name: '', url: '', type: 'rss', category: 'general', interval: 60, monitor: false }
+
+const RSS_EXAMPLES = [
+  { name: 'Hacker News (top)',     url: 'https://hnrss.org/frontpage',                         category: 'tech' },
+  { name: 'Anthropic Blog',        url: 'https://www.anthropic.com/rss.xml',                   category: 'ai' },
+  { name: 'Simon Willison',        url: 'https://simonwillison.net/atom/everything/',           category: 'ai' },
+  { name: 'ArXiv cs.AI',           url: 'https://rss.arxiv.org/rss/cs.ai',                     category: 'research' },
+  { name: 'The Verge Tech',        url: 'https://www.theverge.com/rss/index.xml',               category: 'tech' },
+  { name: 'GitHub trending (RSS)', url: 'https://github.com/trending?since=daily.atom',         category: 'dev' },
+]
+
+const TYPE_EXPLAIN: Record<string, { what: string; format: string }> = {
+  rss:     { what: 'Flux RSS/Atom : le site publie automatiquement chaque nouvel article dans ce flux. Le backend le lit à intervalles réguliers.', format: 'URL du flux, se termine souvent par /rss.xml, /feed, /atom.xml' },
+  website: { what: 'Scraping d\'une page web : Playwright charge la page et extrait le contenu visible.', format: 'URL de la page à scraper, ex: une page de blog sans RSS' },
+  github:  { what: 'Repo GitHub : surveille les releases, commits, issues d\'un repository.', format: 'https://github.com/owner/repo' },
+  api:     { what: 'Endpoint JSON : appelle une API publique et indexe la réponse.', format: 'URL d\'API retournant du JSON' },
+}
 
 export default function Sources() {
   const [sources, setSources]   = useState<any[]>([])
@@ -39,11 +56,10 @@ export default function Sources() {
     finally { setSaving(false) }
   }
 
-  async function toggle(id: number) {
-    try { await api.toggleSource(id); await loadSources() } catch {}
+  async function toggle(id: number, currentActive: boolean) {
+    try { await api.toggleSource(id, !currentActive); await loadSources() } catch {}
   }
   async function del(id: number) {
-    if (!confirm('Supprimer cette source ?')) return
     try { await api.deleteSource(id); setSources(s => s.filter(x => x.id !== id)) } catch {}
   }
 
@@ -51,6 +67,10 @@ export default function Sources() {
 
   return (
     <div className="p-8 max-w-3xl mx-auto space-y-5">
+      <PageHint id="sources" steps={[
+        { title: 'Types de sources', body: 'RSS/Atom pour les blogs et médias, GitHub pour les repos et releases, Website pour le scraping, API pour les endpoints JSON.' },
+        { title: 'Intervalle de collecte', body: 'L\'intervalle (en minutes) définit la fréquence de vérification automatique. 60 min est un bon défaut pour les flux actifs.' },
+      ]} />
       {/* Header */}
       <div className="flex items-center justify-between">
         <p className="text-[12px] font-mono text-[hsl(var(--text-3))]">
@@ -85,14 +105,43 @@ export default function Sources() {
                   placeholder="Nom (optionnel)" className={inp} />
                 <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
                   className={inp}>
-                  <option value="website">Website</option>
                   <option value="rss">RSS Feed</option>
+                  <option value="website">Website</option>
                   <option value="github">GitHub</option>
                   <option value="api">API</option>
                 </select>
               </div>
+
+              {/* Explication contextuelle du type */}
+              {TYPE_EXPLAIN[form.type] && (
+                <div className="rounded-lg bg-[hsl(var(--bg-3))] border border-[hsl(var(--line))] px-3 py-2.5 space-y-0.5">
+                  <p className="text-[11.5px] text-[hsl(var(--text-2))] leading-snug">{TYPE_EXPLAIN[form.type].what}</p>
+                  <p className="text-[10.5px] font-mono text-[hsl(var(--text-3))]">Format : {TYPE_EXPLAIN[form.type].format}</p>
+                </div>
+              )}
+
               <input value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
                 placeholder="https://..." className={inp} />
+
+              {/* Exemples RSS rapides */}
+              {form.type === 'rss' && (
+                <div className="space-y-1.5">
+                  <p className="text-[10.5px] font-mono text-[hsl(var(--text-3))] uppercase tracking-wider">Exemples de flux RSS</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {RSS_EXAMPLES.map(ex => (
+                      <button
+                        key={ex.url}
+                        type="button"
+                        onClick={() => setForm(f => ({ ...f, url: ex.url, name: f.name || ex.name, category: ex.category }))}
+                        className="text-left px-2.5 py-2 rounded bg-[hsl(var(--bg-3))] hover:bg-[hsl(var(--bg-2))] border border-[hsl(var(--line))] hover:border-[hsl(var(--line-bright))] transition-colors"
+                      >
+                        <p className="text-[11.5px] font-semibold text-[hsl(var(--text-2))] truncate">{ex.name}</p>
+                        <p className="text-[10px] font-mono text-[hsl(var(--text-3))] truncate mt-0.5">{ex.url}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="flex items-center gap-4 flex-wrap">
                 <label className="flex items-center gap-2 text-[12.5px] text-[hsl(var(--text-2))] cursor-pointer select-none font-mono">
                   <input type="checkbox" checked={form.monitor} onChange={e => setForm(f => ({ ...f, monitor: e.target.checked }))} />
@@ -168,8 +217,12 @@ export default function Sources() {
                   )}
                 </div>
                 <div className="flex items-center gap-1">
-                  <motion.button whileTap={{ scale: 0.9 }} onClick={() => toggle(src.id)}
-                    className="p-1 rounded hover:bg-[hsl(var(--bg-3))] transition-colors">
+                  <motion.button
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => toggle(src.id, src.active)}
+                    title={src.active ? 'Désactiver la collecte' : 'Activer la collecte'}
+                    className="p-1 rounded hover:bg-[hsl(var(--bg-3))] transition-colors"
+                  >
                     {src.active
                       ? <ToggleRight className="w-4 h-4 text-[hsl(var(--accent))]" />
                       : <ToggleLeft className="w-4 h-4 text-[hsl(var(--text-3))]" />}

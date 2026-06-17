@@ -156,18 +156,16 @@ async def browse_with_playwright(url: str, timeout_ms: int = 30000) -> dict:
 
             await browser.close()
 
-        extractor = _TextExtractor()
-        extractor.feed(html)
-        content_text = extractor.text
+        extracted_title, content_text, links = _extract_content_from_html(html)
         if not title:
-            title = extractor.title
+            title = extracted_title
 
         return {
             "url": url,
             "final_url": final_url,
             "title": title,
             "content": content_text[:50000],
-            "links": extractor._links[:100],
+            "links": links,
             "content_length": len(content_text),
             "engine": "playwright",
             "status_code": status_code,
@@ -191,10 +189,85 @@ async def browse_with_playwright(url: str, timeout_ms: int = 30000) -> dict:
         }
 
 
+def _extract_content_from_html(html: str) -> tuple:
+    """
+    Extract meaningful text content and links from raw HTML.
+    Tries semantic tags (article, main) first, falls back to full body.
+    Returns (title, text, links).
+    """
+    import re as _re
+
+    # Extract title
+    title_match = _re.search(r'<title[^>]*>(.*?)</title>', html, _re.IGNORECASE | _re.DOTALL)
+    title = _re.sub(r'<[^>]+>', '', title_match.group(1)).strip() if title_match else ""
+
+    # Extract links
+    links = _re.findall(r'href=["\']?(https?://[^"\'>\s]+)', html)
+
+    # Try semantic containers first: article, main, [role=main]
+    content_html = ""
+    for pattern in [
+        r'<article[^>]*>(.*?)</article>',
+        r'<main[^>]*>(.*?)</main>',
+        r'<div[^>]+role=["\']main["\'][^>]*>(.*?)</div>',
+        r'<div[^>]+class=["\'][^"\']*content[^"\']*["\'][^>]*>(.*?)</div>',
+    ]:
+        match = _re.search(pattern, html, _re.DOTALL | _re.IGNORECASE)
+        if match:
+            content_html = match.group(1)
+            break
+
+    if not content_html:
+        body = _re.search(r'<body[^>]*>(.*?)</body>', html, _re.DOTALL | _re.IGNORECASE)
+        content_html = body.group(1) if body else html
+        for tag in ['nav', 'header', 'footer', 'aside', 'script', 'style', 'noscript']:
+            content_html = _re.sub(rf'<{tag}[^>]*>.*?</{tag}>', ' ', content_html, flags=_re.DOTALL | _re.IGNORECASE)
+
+    # Remove noisy inline blocks (buttons, aria-hidden icons, etc.)
+    content_html = _re.sub(r'<(script|style|noscript|button|svg|iframe)[^>]*>.*?</\1>', ' ', content_html, flags=_re.DOTALL | _re.IGNORECASE)
+    # Remove aria-hidden elements (icon anchors like ¶)
+    content_html = _re.sub(r'<[^>]+aria-hidden=["\']true["\'][^>]*>.*?</[a-z]+>', ' ', content_html, flags=_re.DOTALL | _re.IGNORECASE)
+    content_html = _re.sub(r'<[^>]+aria-hidden=["\']true["\'][^>]*/>', ' ', content_html, flags=_re.IGNORECASE)
+
+    # Convert block-level tags to newlines before stripping
+    for block in ['p', 'div', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'br', 'tr', 'blockquote', 'pre']:
+        content_html = _re.sub(rf'</?{block}[^>]*>', '\n', content_html, flags=_re.IGNORECASE)
+
+    # Strip remaining tags
+    text = _re.sub(r'<[^>]+>', '', content_html)
+
+    # Decode HTML entities
+    text = text.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>') \
+               .replace('&quot;', '"').replace('&#39;', "'").replace('&para;', '') \
+               .replace('&nbsp;', ' ').replace('&#x27;', "'").replace('&mdash;', '—') \
+               .replace('&ndash;', '–').replace('&hellip;', '…')
+    # Remove remaining HTML entities
+    text = _re.sub(r'&[a-zA-Z0-9#]+;', '', text)
+
+    # Clean up lines: strip each, remove empty duplicates
+    lines = [l.strip() for l in text.splitlines()]
+    # Remove lines that are just punctuation/symbols or too short to be meaningful
+    lines = [l for l in lines if len(l) > 2 and not _re.match(r'^[¶#\-\*\|]+$', l)]
+    # Collapse more than 2 consecutive blank lines
+    cleaned = []
+    blank_count = 0
+    for line in lines:
+        if line == '':
+            blank_count += 1
+            if blank_count <= 1:
+                cleaned.append('')
+        else:
+            blank_count = 0
+            cleaned.append(line)
+
+    text = '\n'.join(cleaned).strip()
+    return title, text, links[:100]
+
+
 async def browse_with_requests(url: str, timeout: int = 20) -> dict:
     """
     Lightweight fallback using requests (no JS rendering).
-    Used when Playwright is unavailable or for simple HTML pages.
+    Uses semantic HTML extraction to get meaningful content.
     """
     import requests
     import urllib3
@@ -221,16 +294,15 @@ async def browse_with_requests(url: str, timeout: int = 20) -> dict:
         resp.encoding = resp.apparent_encoding or "utf-8"
         html = resp.text
 
-        extractor = _TextExtractor()
-        extractor.feed(html)
+        title, text, links = _extract_content_from_html(html)
 
         return {
             "url": url,
             "final_url": resp.url,
-            "title": extractor.title,
-            "content": extractor.text[:50000],
-            "links": extractor._links[:100],
-            "content_length": len(extractor.text),
+            "title": title,
+            "content": text[:50000],
+            "links": links,
+            "content_length": len(text),
             "engine": "requests",
             "status_code": resp.status_code,
             "via_nitter": nitter_url is not None,
@@ -250,6 +322,60 @@ async def browse_with_requests(url: str, timeout: int = 20) -> dict:
             "via_nitter": False,
             "error": str(e),
         }
+
+
+async def browse_with_crawl4ai(url: str, timeout: int = 30) -> dict:
+    """
+    Extract clean LLM-ready markdown content via Crawl4AI.
+    Supports crawl4ai 0.3.x and 0.8.x. Falls back to requests on error.
+    """
+    try:
+        from crawl4ai import AsyncWebCrawler  # noqa: F401 — import check
+    except (ImportError, Exception):
+        logger.debug("Crawl4AI not available, falling back to requests")
+        return await browse_with_requests(url, timeout)
+
+    try:
+        import crawl4ai as _c4ai
+        version = getattr(_c4ai, "__version__", "0")
+        major = int(version.split(".")[0])
+
+        if major >= 1 or version.startswith("0.8") or version.startswith("0.7") or version.startswith("0.6") or version.startswith("0.5") or version.startswith("0.4"):
+            # New API (0.4+)
+            from crawl4ai import AsyncWebCrawler
+            async with AsyncWebCrawler(verbose=False) as crawler:
+                result = await crawler.arun(url=url)
+            if not getattr(result, "success", False):
+                raise RuntimeError(getattr(result, "error_message", "Crawl4AI failed"))
+            md = getattr(result, "markdown", "") or ""
+            title = ""
+            meta = getattr(result, "metadata", None) or {}
+            if isinstance(meta, dict):
+                title = meta.get("title", "")
+        else:
+            # Legacy API (0.3.x)
+            from crawl4ai import WebCrawler  # type: ignore
+            crawler = WebCrawler(verbose=False)
+            crawler.warmup()
+            result = crawler.run(url=url, word_count_threshold=50)
+            md = getattr(result, "markdown", "") or ""
+            title = getattr(result, "title", "") or ""
+
+        return {
+            "url": url,
+            "final_url": url,
+            "title": title,
+            "content": md[:50000],
+            "links": [],
+            "content_length": len(md),
+            "engine": f"crawl4ai-{version}",
+            "status_code": 200,
+            "via_nitter": False,
+            "error": None,
+        }
+    except Exception as e:
+        logger.warning(f"Crawl4AI failed for {url}: {e}, falling back to requests")
+        return await browse_with_requests(url, timeout)
 
 
 async def browse(url: str, use_playwright: bool = True, timeout_ms: int = 30000) -> dict:

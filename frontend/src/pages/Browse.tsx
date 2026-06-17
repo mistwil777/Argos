@@ -4,11 +4,28 @@ import { Globe, Loader2, ExternalLink, BookOpen, Copy, Check, Zap, FileText, Arr
 import { api } from '@/services/api'
 import { extractDomain } from '@/lib/utils'
 import ReactMarkdown from 'react-markdown'
+import PageHint from '@/components/ui/PageHint'
 
 type Mode = 'digest' | 'browse'
 const MODES = [
-  { id: 'digest' as Mode, icon: BookOpen, label: 'Digest + RAG', desc: 'LLM → markdown + JSON structuré, indexé' },
-  { id: 'browse' as Mode, icon: FileText,  label: 'Contenu brut',  desc: 'HTML extrait, liens, métadonnées' },
+  {
+    id: 'digest' as Mode,
+    icon: BookOpen,
+    label: 'Digest + RAG',
+    desc: 'Le LLM résume le contenu et l\'indexe → interrogeable dans l\'Assistant',
+    what: 'Résumé markdown + tags + importance',
+    when: 'Article, doc, blog post, paper',
+    example: 'https://simonwillison.net/2024/Apr/17/ai-for-data-journalism/',
+  },
+  {
+    id: 'browse' as Mode,
+    icon: FileText,
+    label: 'Contenu brut',
+    desc: 'Playwright charge la page et extrait le texte — sans LLM',
+    what: 'Texte brut + liens extraits',
+    when: 'Scraping, vérifier ce que le crawler voit',
+    example: 'https://api.github.com/repos/anthropics/anthropic-sdk-python',
+  },
 ]
 
 export default function Browse() {
@@ -38,9 +55,15 @@ export default function Browse() {
   return (
     <div className="p-8 max-w-3xl mx-auto space-y-6">
 
+      <PageHint id="browse" steps={[
+        { title: 'Digest + RAG', body: 'Génère un résumé markdown structuré et indexe le contenu dans la base vectorielle pour l\'Assistant.' },
+        { title: 'Contenu brut', body: 'Récupère le HTML rendu par le navigateur sans traitement LLM — utile pour scraper des données.' },
+        { title: 'URL avec /', body: 'Terminer par / déclenche un crawl de toutes les pages enfants du même chemin (max 10 pages).' },
+      ]} />
+
       {/* ── Mode selector ── */}
       <div className="grid grid-cols-2 gap-3">
-        {MODES.map(({ id, icon: Icon, label, desc }) => (
+        {MODES.map(({ id, icon: Icon, label, desc, what, when, example }) => (
           <motion.button
             key={id} type="button" onClick={() => setMode(id)}
             whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}
@@ -57,9 +80,34 @@ export default function Browse() {
               <Icon className={`w-3.5 h-3.5 ${mode === id ? 'text-[hsl(var(--accent))]' : 'text-[hsl(var(--text-2))]'}`} />
               <p className={`text-[13px] font-semibold ${mode === id ? 'text-[hsl(var(--accent))]' : 'text-[hsl(var(--text))]'}`}>{label}</p>
             </div>
-            <p className="text-[11px] text-[hsl(var(--text-3))] leading-snug">{desc}</p>
+            <p className="text-[11px] text-[hsl(var(--text-3))] leading-snug mb-2.5">{desc}</p>
+            <div className="space-y-1 border-t border-[hsl(var(--line))] pt-2.5">
+              <p className="text-[10.5px] font-mono text-[hsl(var(--text-3))]">
+                <span className="text-[hsl(var(--text-2))]">Résultat :</span> {what}
+              </p>
+              <p className="text-[10.5px] font-mono text-[hsl(var(--text-3))]">
+                <span className="text-[hsl(var(--text-2))]">Quand :</span> {when}
+              </p>
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); setUrl(example); setMode(id) }}
+                className="text-[10.5px] font-mono text-[hsl(var(--accent))] hover:underline truncate block w-full text-left mt-1"
+              >
+                ↗ exemple
+              </button>
+            </div>
           </motion.button>
         ))}
+      </div>
+
+      {/* ── Crawl tip ── */}
+      <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-[hsl(var(--bg-2))] border border-[hsl(var(--line))]">
+        <span className="text-[10.5px] font-mono text-[hsl(var(--accent))] flex-shrink-0 mt-0.5">TIP</span>
+        <p className="text-[11px] font-mono text-[hsl(var(--text-3))] leading-snug">
+          URL terminée par <span className="text-[hsl(var(--text-2))]">/</span> → crawl automatique de toutes les sous-pages.
+          Ex : <button type="button" onClick={() => setUrl('https://fastapi.tiangolo.com/tutorial/')}
+            className="text-[hsl(var(--accent))] hover:underline">fastapi.tiangolo.com/tutorial/</button>
+        </p>
       </div>
 
       {/* ── URL input ── */}
@@ -120,7 +168,9 @@ export default function Browse() {
             {/* Meta */}
             <div className="panel-accent p-4 flex items-center justify-between gap-4">
               <div className="min-w-0">
-                <p className="text-[13.5px] font-semibold text-[hsl(var(--text))] truncate">{result.title || 'Sans titre'}</p>
+                <p className="text-[13.5px] font-semibold text-[hsl(var(--text))] truncate">
+                  {result.crawl ? `Crawl — ${result.pages_crawled} pages` : (result.title || 'Sans titre')}
+                </p>
                 <a href={result.url} target="_blank" rel="noreferrer"
                   className="text-[11px] font-mono text-[hsl(var(--accent))] hover:underline flex items-center gap-1 mt-1">
                   <ExternalLink className="w-2.5 h-2.5" />{extractDomain(result.url)}
@@ -169,8 +219,8 @@ export default function Browse() {
               </details>
             )}
 
-            {/* Raw */}
-            {mode === 'browse' && result.content && (
+            {/* Raw — single page */}
+            {mode === 'browse' && !result.crawl && result.content && (
               <div className="panel overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-2.5 border-b border-[hsl(var(--line))] bg-[hsl(var(--bg-2))]">
                   <span className="text-[12px] font-mono text-[hsl(var(--text-2))]">raw content</span>
@@ -179,6 +229,28 @@ export default function Browse() {
                 <pre className="text-[11.5px] text-[hsl(var(--text-2))] whitespace-pre-wrap overflow-auto max-h-[500px] p-5 font-mono leading-relaxed">
                   {result.content}
                 </pre>
+              </div>
+            )}
+
+            {/* Crawl results */}
+            {mode === 'browse' && result.crawl && result.pages && (
+              <div className="panel overflow-hidden space-y-0">
+                <div className="flex items-center justify-between px-4 py-2.5 border-b border-[hsl(var(--line))] bg-[hsl(var(--bg-2))]">
+                  <span className="text-[12px] font-mono text-[hsl(var(--text-2))]">crawl results</span>
+                  <Mono>{result.pages_crawled} pages</Mono>
+                </div>
+                {result.pages.map((page: any, i: number) => (
+                  <details key={i} className={i > 0 ? 'border-t border-[hsl(var(--line))]' : ''}>
+                    <summary className="flex items-center gap-2 px-4 py-3 cursor-pointer hover:bg-[hsl(var(--bg-2))] transition-colors">
+                      <span className="text-[11px] font-mono text-[hsl(var(--accent))] flex-shrink-0">#{i + 1}</span>
+                      <span className="text-[12.5px] font-medium text-[hsl(var(--text))] truncate">{page.title || page.url}</span>
+                      <Mono>{page.content_length?.toLocaleString()} chars</Mono>
+                    </summary>
+                    <pre className="text-[11px] text-[hsl(var(--text-2))] whitespace-pre-wrap overflow-auto max-h-64 p-4 font-mono border-t border-[hsl(var(--line))] bg-[hsl(var(--bg))] leading-relaxed">
+                      {page.content}
+                    </pre>
+                  </details>
+                ))}
               </div>
             )}
           </motion.div>

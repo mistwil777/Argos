@@ -161,14 +161,13 @@ async def generate_digest(
 
 async def _call_llm(llm_provider, system: str, prompt: str, max_tokens: int = 800) -> str:
     """Call LLM via the existing provider factory."""
-    # llm_provider is the LLMProvider instance from services/llm_provider.py
-    response = await llm_provider.generate(
+    text, _ = await llm_provider.generate(
+        prompt=prompt,
         system_prompt=system,
-        user_message=prompt,
         max_tokens=max_tokens,
         temperature=0.3,
     )
-    return response.get("content", "")
+    return text
 
 
 def _parse_json_safe(raw: str) -> dict:

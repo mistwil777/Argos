@@ -24,7 +24,9 @@ RUN apt-get update && apt-get install -y \
 # Copy requirements and install
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir "crawl4ai==0.3.746" --no-deps && \
+    pip install --no-cache-dir "aiosqlite>=0.20" "lxml>=5.3" "cssselect>=1.2" 2>/dev/null || true
 
 # Copy application code
 COPY mcp_server/ ./mcp_server/

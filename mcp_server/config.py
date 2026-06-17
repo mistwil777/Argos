@@ -112,6 +112,11 @@ class Settings(BaseSettings):
         default="gpt-3.5-turbo",
         description="Default model for classification"
     )
+
+    searxng_url: str = Field(
+        default="http://searxng:8080",
+        description="URL of the local SearXNG instance"
+    )
     
     # ============================================
     # Microsoft Teams Bot

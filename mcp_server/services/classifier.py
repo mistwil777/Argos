@@ -406,14 +406,10 @@ class ClassifierService:
         # Get model name from provider
         model_name = getattr(self.llm_provider, 'model', None) or getattr(self.llm_provider, 'model_id', 'unknown')
         
-        # Map importance to correct case (database constraint)
-        importance_map = {
-            "critical": "High",  # Map critical to High for now
-            "high": "High",
-            "medium": "Medium",
-            "low": "Low"
-        }
-        importance_db = importance_map.get(classification["importance"].lower(), "Medium")
+        # Normalize importance to lowercase (DB constraint: critical/high/medium/low)
+        importance_raw = classification["importance"].lower().strip()
+        valid_importance = {"critical", "high", "medium", "low"}
+        importance_db = importance_raw if importance_raw in valid_importance else "medium"
         
         # Update item classification (sets classification_status = 'classified')
         self.db.update_classification(

@@ -361,26 +361,46 @@ async def startup_event():
 
     # ---- Test ----
     from mcp_server.tools.hello import hello_world
-    tool_registry.register("hello.world", hello_world, "Health check tool")
+    tool_registry.register("hello.world", hello_world, "Health check — vérifie que le serveur répond",
+        input_schema={},
+        output_schema={"type":"object","properties":{"status":{"type":"string"},"message":{"type":"string"}}})
 
     # ---- Collector ----
     from mcp_server.tools.collector import (
         fetch_rss, fetch_apis, fetch_all, get_collection_stats, list_sources
     )
-    tool_registry.register("collector.fetch_rss", fetch_rss, "Fetch RSS feeds")
-    tool_registry.register("collector.fetch_apis", fetch_apis, "Fetch GitHub/ArXiv APIs")
-    tool_registry.register("collector.fetch_all", fetch_all, "Fetch all sources")
-    tool_registry.register("collector.get_stats", get_collection_stats, "Collection stats")
-    tool_registry.register("collector.list_sources", list_sources, "List configured sources")
+    tool_registry.register("collector.fetch_rss", fetch_rss,
+        "Collecte les flux RSS configurés et insère les nouveaux items en base",
+        input_schema={"type":"object","properties":{"workspace_id":{"type":"integer","description":"Filtrer par workspace (optionnel)"}}})
+    tool_registry.register("collector.fetch_apis", fetch_apis,
+        "Collecte les APIs GitHub et ArXiv configurées",
+        input_schema={"type":"object","properties":{"workspace_id":{"type":"integer","description":"Filtrer par workspace (optionnel)"}}})
+    tool_registry.register("collector.fetch_all", fetch_all,
+        "Lance la collecte sur toutes les sources actives (RSS + APIs)",
+        input_schema={"type":"object","properties":{"workspace_id":{"type":"integer","description":"Filtrer par workspace (optionnel)"}}})
+    tool_registry.register("collector.get_stats", get_collection_stats,
+        "Retourne les statistiques de collecte (nb items, sources actives, dernière collecte)",
+        input_schema={})
+    tool_registry.register("collector.list_sources", list_sources,
+        "Liste toutes les sources de collecte configurées avec leur statut",
+        input_schema={"type":"object","properties":{"workspace_id":{"type":"integer","description":"Filtrer par workspace (optionnel)"}}})
 
     # ---- Classifier ----
     from mcp_server.tools.classifier import (
         classify_item, classify_batch, get_classification_stats, get_unclassified_items
     )
-    tool_registry.register("classifier.classify", classify_item, "Classify a single item with LLM")
-    tool_registry.register("classifier.classify_batch", classify_batch, "Classify items in batch")
-    tool_registry.register("classifier.stats", get_classification_stats, "Classification stats")
-    tool_registry.register("classifier.get_unclassified", get_unclassified_items, "Get pending items")
+    tool_registry.register("classifier.classify", classify_item,
+        "Classifie un item via LLM : importance (critical/high/medium/low), type, topics, résumé FR",
+        input_schema={"type":"object","properties":{"item_id":{"type":"integer","description":"ID de l'item à classifier"}},"required":["item_id"]})
+    tool_registry.register("classifier.classify_batch", classify_batch,
+        "Classifie plusieurs items en batch (jusqu'à 50 à la fois)",
+        input_schema={"type":"object","properties":{"item_ids":{"type":"array","items":{"type":"integer"},"description":"Liste des IDs"},"limit":{"type":"integer","description":"Nb max si item_ids non fourni","default":10}}})
+    tool_registry.register("classifier.stats", get_classification_stats,
+        "Statistiques de classification : nb pending, classified, rejected, répartition par importance",
+        input_schema={})
+    tool_registry.register("classifier.get_unclassified", get_unclassified_items,
+        "Retourne les items en attente de classification (status=pending)",
+        input_schema={"type":"object","properties":{"limit":{"type":"integer","default":20,"description":"Nombre d'items à retourner"}}})
 
     # ---- RAG ----
     from mcp_server.tools.rag_tools import (
@@ -390,15 +410,32 @@ async def startup_event():
     )
     tool_registry.register(
         "rag.ask", ask_question,
-        "Q&A on indexed content (hybrid semantic+lexical search)",
-        input_schema={"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}
+        "Pose une question en langage naturel sur la base de connaissances indexée (recherche hybride sémantique + lexicale)",
+        input_schema={"type":"object","properties":{
+            "query":{"type":"string","description":"Question en langage naturel"},
+            "filter_source_type":{"type":"string","enum":["course","item"],"description":"Filtrer par type de source (optionnel)"},
+            "use_hybrid_search":{"type":"boolean","default":True,"description":"Utiliser la recherche hybride"},
+            "workspace_id":{"type":"integer","description":"Filtrer par workspace (optionnel)"}
+        },"required":["query"]}
     )
-    tool_registry.register("rag.search", search_content, "Search indexed content")
-    tool_registry.register("rag.index_item", rag_index_item, "Index an item into RAG")
-    tool_registry.register("rag.rebuild_index", rebuild_index, "Rebuild full RAG index")
-    tool_registry.register("rag.stats", get_index_stats, "RAG index statistics")
+    tool_registry.register("rag.search", search_content,
+        "Recherche sémantique dans la base vectorielle sans génération LLM",
+        input_schema={"type":"object","properties":{
+            "query":{"type":"string","description":"Requête de recherche"},
+            "limit":{"type":"integer","default":10,"description":"Nombre de résultats"},
+            "use_hybrid_search":{"type":"boolean","default":True}
+        },"required":["query"]})
+    tool_registry.register("rag.index_item", rag_index_item,
+        "Indexe un item spécifique dans la base vectorielle LanceDB",
+        input_schema={"type":"object","properties":{"item_id":{"type":"integer","description":"ID de l'item à indexer"}},"required":["item_id"]})
+    tool_registry.register("rag.rebuild_index", rebuild_index,
+        "Reconstruit l'intégralité de l'index vectoriel depuis la base de données",
+        input_schema={"type":"object","properties":{"include_items":{"type":"boolean","default":True}}})
+    tool_registry.register("rag.stats", get_index_stats,
+        "Statistiques de l'index RAG : nb chunks, dimension des embeddings, modèle utilisé",
+        input_schema={})
 
-    # ---- Web Tools (new) ----
+    # ---- Web Tools ----
     from mcp_server.tools.web_tools import WEB_TOOLS
     from mcp_server.api.router import db as api_db
     try:
@@ -417,17 +454,69 @@ async def startup_event():
     import functools
 
     def _make_web_tool_wrapper(tool_func, _db, _llm):
-        """Wrap web tools (signature: func(params:dict, db, llm_provider))
-        into the MCP execute_tool interface (func(**kwargs))."""
+        """Wrap web tools into the MCP execute_tool interface (func(**kwargs)).
+        Only passes llm_provider if the function signature accepts it."""
+        import inspect
+        sig = inspect.signature(tool_func)
+        accepts_llm = "llm_provider" in sig.parameters
+
         async def wrapper(**kwargs):
-            return await tool_func(params=kwargs, db=_db, llm_provider=_llm)
+            if accepts_llm:
+                return await tool_func(params=kwargs, db=_db, llm_provider=_llm)
+            else:
+                return await tool_func(params=kwargs, db=_db)
         return wrapper
+
+    WEB_TOOL_META = {
+        "web.browse": {
+            "desc": "Fetche une URL avec Playwright (rendu JS). Si l'URL se termine par '/', crawle toutes les sous-pages.",
+            "schema": {"type":"object","properties":{
+                "url":{"type":"string","description":"URL à fetcher (terminer par / pour crawl enfants)"},
+                "use_playwright":{"type":"boolean","default":True},
+                "timeout_ms":{"type":"integer","default":30000},
+                "max_crawl":{"type":"integer","default":10,"description":"Nb max pages pour le crawl"}
+            },"required":["url"]}
+        },
+        "web.digest": {
+            "desc": "Fetche une URL, génère un résumé markdown structuré + JSON via LLM, et sauvegarde l'item en base.",
+            "schema": {"type":"object","properties":{
+                "url":{"type":"string","description":"URL à digérer"},
+                "save_item":{"type":"boolean","default":True,"description":"Sauvegarder en base"},
+                "workspace_id":{"type":"integer","description":"Workspace cible (optionnel)"}
+            },"required":["url"]}
+        },
+        "web.watch": {
+            "desc": "Enregistre une URL pour surveillance périodique des changements.",
+            "schema": {"type":"object","properties":{
+                "url":{"type":"string"},
+                "name":{"type":"string","description":"Nom affiché"},
+                "interval_minutes":{"type":"integer","default":60},
+                "workspace_id":{"type":"integer"}
+            },"required":["url"]}
+        },
+        "web.watched_pages": {
+            "desc": "Liste toutes les URLs en cours de surveillance avec leur dernier statut.",
+            "schema": {}
+        },
+    }
 
     for name, func in WEB_TOOLS.items():
         wrapper = _make_web_tool_wrapper(func, api_db, llm)
-        tool_registry.register(name, wrapper, f"Web tool: {name}")
+        meta = WEB_TOOL_META.get(name, {})
+        tool_registry.register(name, wrapper,
+            meta.get("desc", f"Web tool: {name}"),
+            input_schema=meta.get("schema", {}))
 
     logger.info(f"Registered {len(tool_registry.tools)} tools")
+
+    # ---- Warmup VectorStore (async, non-blocking) ----
+    try:
+        from mcp_server.services.vector_store_singleton import warmup_vector_store
+        import asyncio
+        asyncio.ensure_future(warmup_vector_store())
+        logger.info("VectorStore warmup scheduled in background")
+    except Exception as exc:
+        logger.warning(f"VectorStore warmup could not be scheduled: {exc}")
 
     # ---- Site Monitor Scheduler ----
     try:
@@ -437,6 +526,57 @@ async def startup_event():
         logger.info("Site monitor scheduler started")
     except Exception as exc:
         logger.warning(f"Site monitor not started: {exc}")
+
+    # ---- Daily Briefing Scheduler ----
+    try:
+        import asyncio as _asyncio
+        from mcp_server.config import settings as _settings
+
+        async def _daily_briefing_job():
+            """Generate daily briefing at configured hour (default 7:00)."""
+            import datetime as _dt
+            briefing_hour = int(getattr(_settings, 'briefing_hour', 7))
+            logger.info(f"Daily briefing scheduler started — fires at {briefing_hour:02d}:00 daily")
+            while True:
+                now = _dt.datetime.now()
+                next_run = now.replace(hour=briefing_hour, minute=0, second=0, microsecond=0)
+                if now >= next_run:
+                    next_run += _dt.timedelta(days=1)
+                wait_seconds = (next_run - now).total_seconds()
+                logger.info(f"Next briefing in {wait_seconds/3600:.1f}h (at {next_run.strftime('%H:%M')})")
+                await _asyncio.sleep(wait_seconds)
+                try:
+                    from mcp_server.api.router import db as _db
+                    from mcp_server.api.router import _generate_briefing_content
+                    import json as _json
+                    import datetime as _dt2
+                    today = _dt2.date.today()
+                    result = await _generate_briefing_content(hours=24)
+                    if "error" not in result:
+                        with _db.get_connection() as conn:
+                            with conn.cursor() as cur:
+                                cur.execute(
+                                    """INSERT INTO daily_briefings
+                                       (briefing_date, executive_summary, top_items, trends, stats, tokens_used, cost_usd)
+                                       VALUES (%s,%s,%s::jsonb,%s::jsonb,%s::jsonb,%s,%s)
+                                       ON CONFLICT (briefing_date) DO NOTHING""",
+                                    (today, result["markdown"],
+                                     _json.dumps(result["top_items"]),
+                                     _json.dumps(result["trends"]),
+                                     _json.dumps(result["stats"]),
+                                     result["tokens_used"], result["cost_usd"])
+                                )
+                                conn.commit()
+                        logger.info(f"Daily briefing generated for {today}")
+                    else:
+                        logger.warning(f"Briefing skipped: {result.get('message')}")
+                except Exception as e:
+                    logger.error(f"Daily briefing generation failed: {e}", exc_info=True)
+
+        _asyncio.ensure_future(_daily_briefing_job())
+        logger.info("Daily briefing scheduler started")
+    except Exception as exc:
+        logger.warning(f"Daily briefing scheduler not started: {exc}")
 
     logger.info("OpenWebMCP Server ready!")
 

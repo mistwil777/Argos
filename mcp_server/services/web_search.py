@@ -157,17 +157,51 @@ async def search_bing(query: str, max_results: int = 10) -> list[dict]:
 
         # Extract results from Bing HTML
         results = []
-        # Pattern for Bing result blocks
+        # Bing wraps URLs via /ck/a? redirects — extract real URL from h2/h3 <a> tags
+        # Try to find direct https URLs first, then decode bing redirect URLs
         block_pattern = re.compile(
-            r'<h2[^>]*><a[^>]+href="(https?://[^"]+)"[^>]*>(.*?)</a></h2>.*?'
-            r'<p[^>]*class="b_lineclamp[^"]*"[^>]*>(.*?)</p>',
+            r'<h2[^>]*>\s*<a\s[^>]*href="([^"]+)"[^>]*>(.*?)</a>\s*</h2>',
             re.IGNORECASE | re.DOTALL,
         )
-        for m in block_pattern.finditer(resp.text):
+        snippet_pattern = re.compile(r'<p\b[^>]*>(.*?)</p>', re.IGNORECASE | re.DOTALL)
+        text = resp.text
+
+        for m in block_pattern.finditer(text):
+            raw_url = m.group(1)
             title = re.sub(r'<[^>]+>', '', m.group(2)).strip()
-            snippet = re.sub(r'<[^>]+>', '', m.group(3)).strip()
-            if title and m.group(1):
-                results.append({"url": m.group(1), "title": title, "snippet": snippet})
+            if not title:
+                continue
+            # Decode Bing redirect URLs
+            real_url = raw_url
+            if "bing.com/ck/a" in raw_url or raw_url.startswith("/ck/"):
+                # Try to extract URL from the u= parameter
+                u_match = re.search(r'[?&]u=([^&]+)', raw_url)
+                if u_match:
+                    try:
+                        decoded = urllib.parse.unquote(u_match.group(1))
+                        # Bing base64-ish encoding: strip leading 'a1' prefix
+                        if decoded.startswith("a1"):
+                            decoded = decoded[2:]
+                        import base64
+                        real_url = base64.b64decode(decoded + "==").decode("utf-8", errors="ignore").strip()
+                        if not real_url.startswith("http"):
+                            real_url = None
+                    except Exception:
+                        real_url = None
+                else:
+                    real_url = None
+            if not real_url or not real_url.startswith("http"):
+                continue
+            # Skip Bing internal pages
+            if "bing.com" in real_url:
+                continue
+            # Get snippet from nearby <p>
+            pos = m.end()
+            snippet = ""
+            snip_m = snippet_pattern.search(text, pos, pos + 800)
+            if snip_m:
+                snippet = re.sub(r'<[^>]+>', '', snip_m.group(1)).strip()[:300]
+            results.append({"url": real_url, "title": title, "snippet": snippet})
             if len(results) >= max_results:
                 break
         return results
@@ -206,3 +240,62 @@ async def search(query: str, engine: str = "duckduckgo", max_results: int = 10) 
         "duration_ms": duration_ms,
         "error": None if results else "No results found",
     }
+
+
+async def search_with_searxng(
+    query: str,
+    max_results: int = 15,
+    language: str = "auto",
+    searxng_url: str = "http://searxng:8080",
+) -> list[dict]:
+    """
+    Search via local SearXNG instance (aggregates Google, Bing, DuckDuckGo, ArXiv...).
+    Returns real URLs with titles and snippets — no hallucination, no API key.
+    Falls back to empty list if SearXNG is unavailable.
+    """
+    import time
+    import urllib.parse
+    import requests as _req
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+    params = {
+        "q": query,
+        "format": "json",
+        "language": language,
+        "pageno": 1,
+    }
+    url = f"{searxng_url}/search?{urllib.parse.urlencode(params)}"
+
+    try:
+        start = time.monotonic()
+        resp = _req.get(url, timeout=15, verify=False,
+                        headers={"User-Agent": "OpenWebMCP/1.0 (internal)"})
+        duration_ms = int((time.monotonic() - start) * 1000)
+
+        if resp.status_code != 200:
+            logger.warning(f"SearXNG returned HTTP {resp.status_code}")
+            return []
+
+        data = resp.json()
+        results = []
+        for r in data.get("results", []):
+            u = r.get("url", "").strip()
+            if not u or not u.startswith("http"):
+                continue
+            results.append({
+                "url": u,
+                "title": r.get("title", ""),
+                "content": r.get("content", ""),
+                "engine": r.get("engine", "searxng"),
+            })
+            if len(results) >= max_results:
+                break
+
+        logger.info(f"SearXNG: {len(results)} results for '{query}' in {duration_ms}ms "
+                    f"(engines: {list({r['engine'] for r in results})})")
+        return results
+
+    except Exception as e:
+        logger.warning(f"SearXNG unavailable ({searxng_url}): {e}")
+        return []

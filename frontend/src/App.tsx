@@ -1,12 +1,13 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import AppLayout from '@/components/layout/AppLayout'
 import Dashboard from '@/pages/Dashboard'
-import Browse from '@/pages/Browse'
-import WebSearch from '@/pages/WebSearch'
 import Feed from '@/pages/Feed'
 import Assistant from '@/pages/Assistant'
 import Sources from '@/pages/Sources'
 import Settings from '@/pages/Settings'
+import Library from '@/pages/Library'
+import Briefing from '@/pages/Briefing'
+import Trends from '@/pages/Trends'
 
 export default function App() {
   return (
@@ -14,11 +15,14 @@ export default function App() {
       <Routes>
         <Route element={<AppLayout />}>
           <Route path="/" element={<Dashboard />} />
-          <Route path="/browse" element={<Browse />} />
-          <Route path="/search" element={<WebSearch />} />
+          <Route path="/browse" element={<Navigate to="/feed" replace />} />
+          <Route path="/search" element={<Navigate to="/feed" replace />} />
           <Route path="/feed" element={<Feed />} />
           <Route path="/assistant" element={<Assistant />} />
           <Route path="/sources" element={<Sources />} />
+          <Route path="/library" element={<Library />} />
+          <Route path="/briefing" element={<Briefing />} />
+          <Route path="/trends" element={<Trends />} />
           <Route path="/settings" element={<Settings />} />
         </Route>
       </Routes>

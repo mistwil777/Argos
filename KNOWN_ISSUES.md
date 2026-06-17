@@ -3,21 +3,19 @@
 ## 🐛 Active Issues
 
 ### 1. RAG Assistant Timeout (Critical)
-**Symptom**: L'assistant RAG timeout après 60 secondes sans réponse.
+**Status**: ✅ **FIXED** (02/06/2026)
 
 **Root Cause**: 
 - `SentenceTransformer` charge le modèle `all-MiniLM-L6-v2` (~100MB) de manière synchrone
-- Premier chargement prend 2-3 minutes
-- Même avec `asyncio.to_thread()`, le timeout curl arrive avant la fin
+- `warmup_vector_store()` existait mais n'était jamais appelé au démarrage
+- `rag_tools.py` instanciait `VectorStoreService()` directement, ignorant le singleton
+- `rag.py` appelait `hybrid_search` / `search` de façon synchrone, bloquant l'event loop
 
-**Solutions Possibles**:
-1. **Pré-charger le modèle au démarrage** du serveur FastAPI (event startup)
-2. **Singleton VectorStoreService** avec lazy loading et caching
-3. **Utiliser une API externe** pour embeddings (OpenAI, Cohere) au lieu de local
-4. **Modèle plus léger** ou quantized version
-5. **Augmenter le timeout** frontend/backend à 180s
-
-**Workaround Temporaire**: RAG désactivé dans auto_course_generator.py (lignes 252-295)
+**Solution Applied**:
+1. `server.py` — `warmup_vector_store()` lancé en background via `asyncio.ensure_future()` au démarrage
+2. `rag_tools.py` — utilise `get_vector_store()` (singleton) au lieu de `VectorStoreService()`
+3. `rag.py` — appels sync wrappés avec `asyncio.to_thread()` dans `ask()` et `search_only()`
+4. `router.py` `rag_stats` — utilise le singleton au lieu de recréer une instance
 
 ---
 

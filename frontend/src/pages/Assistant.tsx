@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Send, Bot, User, Loader2, BookOpen, Zap, Terminal } from 'lucide-react'
 import { api } from '@/services/api'
 import ReactMarkdown from 'react-markdown'
+import PageHint from '@/components/ui/PageHint'
 
 interface Message { id: string; role: 'user' | 'assistant'; content: string; sources?: any[] }
 
@@ -42,6 +43,13 @@ export default function Assistant() {
 
   return (
     <div className="flex flex-col h-full">
+      {/* ── Hint ── */}
+      <div className="px-6 pt-6">
+        <PageHint id="assistant" steps={[
+          { title: 'Recherche hybride', body: 'L\'Assistant combine recherche sémantique (embeddings) et lexicale (BM25) pour trouver les passages les plus pertinents.' },
+          { title: 'Indexer d\'abord', body: 'Pour qu\'un contenu soit trouvé, il doit d\'abord être indexé via Browse > Digest + RAG. Les items du Feed classifiés sont aussi indexables.' },
+        ]} />
+      </div>
       {/* ── Messages ── */}
       <div className="flex-1 overflow-auto px-6 py-6">
         {/* Welcome */}
