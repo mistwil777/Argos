@@ -1,4 +1,4 @@
-# Architecture technique OpenWebMCP
+# Architecture technique Argos
 
 ## Vue d'ensemble
 
@@ -67,7 +67,7 @@ Recherche hybride :
 
 ## Anti-détection
 
-OpenWebMCP implémente plusieurs techniques pour éviter la détection :
+Argos implémente plusieurs techniques pour éviter la détection :
 
 1. **User-agent réaliste** : pool de 20+ UA navigateurs récents (Chrome, Firefox, Safari)
 2. **Fingerprint masqué** : suppression de `navigator.webdriver`, plugins factices

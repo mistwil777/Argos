@@ -7,9 +7,9 @@ Exposes collection functionality via Model Context Protocol (JSON-RPC).
 import logging
 from typing import Dict, Optional
 
-from mcp_server.config import settings
-from mcp_server.database import DatabaseManager
-from mcp_server.services.collector import CollectorService
+from argos.config import settings
+from argos.database import DatabaseManager
+from argos.services.collector import CollectorService
 
 logger = logging.getLogger(__name__)
 

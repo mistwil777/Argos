@@ -1,4 +1,4 @@
-# Cahier des Charges Fonctionnel & Technique — OpenWebMCP
+# Cahier des Charges Fonctionnel & Technique — Argos
 
 **Version :** 1.0  
 **Date :** 1 juin 2026  
@@ -10,11 +10,11 @@
 
 ### 1.1 Contexte
 
-OpenWebMCP est une infrastructure web pour agents IA, forkée de VeilleOps/AcademiaOps en juin 2026. L'objectif est de donner aux agents IA un accès web économique, furtif et sans APIs officielles coûteuses (X/Twitter, Reddit, etc.).
+Argos est une infrastructure web pour agents IA, forkée de VeilleOps/AcademiaOps en juin 2026. L'objectif est de donner aux agents IA un accès web économique, furtif et sans APIs officielles coûteuses (X/Twitter, Reddit, etc.).
 
 ### 1.2 Problème résolu
 
-Les agents IA ont besoin d'informations fraîches. Les APIs officielles sont soit coûteuses (Twitter API : $100+/mois), soit indisponibles, soit limitées. OpenWebMCP résout cela en exposant des outils MCP (Model Context Protocol) qui naviguent comme un humain avec Playwright stealth.
+Les agents IA ont besoin d'informations fraîches. Les APIs officielles sont soit coûteuses (Twitter API : $100+/mois), soit indisponibles, soit limitées. Argos résout cela en exposant des outils MCP (Model Context Protocol) qui naviguent comme un humain avec Playwright stealth.
 
 ### 1.3 Objectifs principaux
 
@@ -53,7 +53,7 @@ Les agents IA ont besoin d'informations fraîches. Les APIs officielles sont soi
 ### 2.2 Architecture des services
 
 ```
-openwebmcp/
+argos/
 ├── mcp_server/
 │   ├── server.py              # FastAPI app + ToolRegistry + JSON-RPC
 │   ├── config.py              # Settings (pydantic-settings)
@@ -368,7 +368,7 @@ print(answer["answer"])
 
 ```bash
 # 1. Cloner et configurer
-git clone <repo> openwebmcp && cd openwebmcp
+git clone <repo> argos && cd argos
 cp .env.example .env
 # Remplir POSTGRES_PASSWORD et clés LLM
 

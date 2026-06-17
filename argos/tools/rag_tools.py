@@ -7,11 +7,11 @@ Tools for asking questions and searching through indexed courses and items.
 import logging
 from typing import Dict, Optional
 
-from mcp_server.config import settings
-from mcp_server.database import DatabaseManager
-from mcp_server.services.llm_provider import create_llm_provider
-from mcp_server.services.vector_store_singleton import get_vector_store
-from mcp_server.services.rag import RAGService
+from argos.config import settings
+from argos.database import DatabaseManager
+from argos.services.llm_provider import create_llm_provider
+from argos.services.vector_store_singleton import get_vector_store
+from argos.services.rag import RAGService
 
 logger = logging.getLogger(__name__)
 

@@ -146,16 +146,16 @@ class Settings(BaseSettings):
     )
     
     # ============================================
-    # MCP Server
+    # Argos Server
     # ============================================
     mcp_server_host: str = Field(
         default="0.0.0.0",
-        description="MCP server host"
+        description="Server host"
     )
-    
+
     mcp_server_port: int = Field(
         default=8000,
-        description="MCP server port"
+        description="Server port"
     )
     
     # ============================================

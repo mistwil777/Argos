@@ -1,10 +1,10 @@
-# OpenWebMCP
+# Argos
 
 Infrastructure d'accès web pour agents IA — navigation headless, recherche sans API, digests automatiques, RAG et veille automatisée.
 
-## Pourquoi OpenWebMCP ?
+## Pourquoi Argos ?
 
-Les agents IA ont besoin d'accéder à des informations fraîches sur le web. Les APIs officielles (X, Reddit, etc.) sont coûteuses, limitées et complexes. OpenWebMCP résout ce problème en exposant des outils MCP (Model Context Protocol) qui permettent à n'importe quel agent de naviguer sur le web comme un humain, sans clé API.
+Les agents IA ont besoin d'accéder à des informations fraîches sur le web. Les APIs officielles (X, Reddit, etc.) sont coûteuses, limitées et complexes. Argos résout ce problème en exposant des outils MCP (Model Context Protocol) qui permettent à n'importe quel agent de naviguer sur le web comme un humain, sans clé API.
 
 ## Fonctionnalités
 
@@ -69,8 +69,8 @@ curl -X POST http://localhost:8000/rpc \
 ## Architecture
 
 ```
-openwebmcp/
-├── mcp_server/          # Backend FastAPI + JSON-RPC MCP
+argos/
+├── argos/               # Backend FastAPI + JSON-RPC
 │   ├── services/
 │   │   ├── web_browser.py      # Playwright stealth
 │   │   ├── web_search.py       # SearXNG / DuckDuckGo / Bing
@@ -80,8 +80,8 @@ openwebmcp/
 │   │   ├── classifier.py       # Classification LLM
 │   │   └── collector.py        # RSS / GitHub / web
 │   ├── tools/
-│   │   ├── web_tools.py        # Outils MCP web (browse, digest, watch)
-│   │   └── rag_tools.py        # Outils MCP RAG
+│   │   ├── web_tools.py        # Outils web (browse, digest, watch)
+│   │   └── rag_tools.py        # Outils RAG
 │   ├── api/
 │   │   └── router.py           # REST API frontend
 │   ├── server.py               # JSON-RPC server + tool registry
@@ -99,7 +99,7 @@ openwebmcp/
 | Service | Port | Description |
 |---|---|---|
 | `frontend` | 3000 | Interface React |
-| `mcp-server` | 8000 | API FastAPI + MCP JSON-RPC |
+| `argos-server` | 8000 | API FastAPI + JSON-RPC |
 | `postgres` | 5432 | Base de données principale |
 | `searxng` | 8888 | Moteur de recherche agrégateur (auto-hébergé) |
 

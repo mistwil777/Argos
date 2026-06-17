@@ -37,7 +37,7 @@ async def tool_browse(params: dict, db=None) -> dict:
     workspace_id = params.get("workspace_id")
     max_crawl = min(params.get("max_crawl", 10), 30)
 
-    from mcp_server.services.web_browser import browse
+    from argos.services.web_browser import browse
     from urllib.parse import urlparse, urljoin
 
     # ── Crawl mode: URL ends with / ──────────────────────────────────────────
@@ -177,7 +177,7 @@ async def tool_digest(params: dict, db=None, llm_provider=None) -> dict:
     workspace_id = params.get("workspace_id")
 
     # Step 1: browse
-    from mcp_server.services.web_browser import browse
+    from argos.services.web_browser import browse
     browse_result = await browse(url)
 
     if browse_result.get("error") and not browse_result.get("content"):
@@ -187,7 +187,7 @@ async def tool_digest(params: dict, db=None, llm_provider=None) -> dict:
     content = browse_result.get("content", "")
 
     # Step 2: generate digest
-    from mcp_server.services.digest_generator import generate_digest
+    from argos.services.digest_generator import generate_digest
     digest = await generate_digest(url, title, content, workspace_id, llm_provider)
 
     item_id = None

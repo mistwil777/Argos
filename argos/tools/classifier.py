@@ -7,10 +7,10 @@ Exposes classification functionality via Model Context Protocol (JSON-RPC).
 import logging
 from typing import Dict, Optional, List
 
-from mcp_server.config import settings
-from mcp_server.database import DatabaseManager
-from mcp_server.services.classifier import ClassifierService
-from mcp_server.services.llm_provider import create_llm_provider
+from argos.config import settings
+from argos.database import DatabaseManager
+from argos.services.classifier import ClassifierService
+from argos.services.llm_provider import create_llm_provider
 
 logger = logging.getLogger(__name__)
 

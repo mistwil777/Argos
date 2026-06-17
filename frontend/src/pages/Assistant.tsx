@@ -11,7 +11,7 @@ const SUGGESTIONS = [
   'Comment fonctionne web.digest ?',
   'Quels outils MCP sont disponibles ?',
   'Comment surveiller une page web ?',
-  'Intégrer OpenWebMCP avec un agent Python ?',
+  'Intégrer Argos avec un agent Python ?',
   'Schéma de la base de données ?',
 ]
 
@@ -73,7 +73,7 @@ export default function Assistant() {
                 <Zap className="w-6 h-6 text-[hsl(var(--accent))]" strokeWidth={2.5} />
               </motion.div>
               <div className="max-w-xs">
-                <h2 className="text-[16px] font-bold text-[hsl(var(--text))] tracking-tight">Assistant OpenWebMCP</h2>
+                <h2 className="text-[16px] font-bold text-[hsl(var(--text))] tracking-tight">Assistant Argos</h2>
                 <p className="text-[12.5px] text-[hsl(var(--text-2))] mt-2 leading-relaxed">
                   Pose des questions sur les contenus collectés, le code source ou l'utilisation des outils MCP.
                 </p>

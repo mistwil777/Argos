@@ -1,5 +1,5 @@
 """
-REST API Router for OpenWebMCP Web Interface
+REST API Router for Argos Web Interface
 
 Provides REST endpoints alongside the existing JSON-RPC interface.
 """
@@ -10,9 +10,9 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
-from mcp_server.database import DatabaseManager
-from mcp_server.config import settings
-from mcp_server.services.llm_provider import create_llm_provider
+from argos.database import DatabaseManager
+from argos.config import settings
+from argos.services.llm_provider import create_llm_provider
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 api_router = APIRouter(prefix="/api/v1", tags=["api"])
 
 # Import and include sub-routers
-from mcp_server.api.workspaces import router as workspaces_router
+from argos.api.workspaces import router as workspaces_router
 api_router.include_router(workspaces_router)
 
 # Database instance
@@ -45,7 +45,7 @@ async def _auto_collect_and_classify(source_id: int):
                     return
                 src_id, src_name, src_url, src_type, src_wid = row
 
-        from mcp_server.services.collector import CollectorService
+        from argos.services.collector import CollectorService
         collector = CollectorService(db_manager=db)
 
         items = []
@@ -81,7 +81,7 @@ async def _auto_collect_and_classify(source_id: int):
             logger.info(f"[auto-classify] no pending items for source={source_id}")
             return
 
-        from mcp_server.services.classifier import ClassifierService
+        from argos.services.classifier import ClassifierService
         llm_provider = create_llm_provider(
             provider_type=settings.llm_provider,
             openai_api_key=settings.openai_api_key,
@@ -387,7 +387,7 @@ async def get_tools_list():
     """Return all registered MCP tools with metadata + source code."""
     try:
         import inspect as _inspect
-        from mcp_server.server import tool_registry
+        from argos.server import tool_registry
 
         tools = []
         for meta in tool_registry.list_tools():
@@ -404,8 +404,8 @@ async def get_tools_list():
                     source = _inspect.getsource(real_func)
                     source_file = _inspect.getfile(real_func)
                     # Strip venv paths to show only project-relative
-                    if "mcp_server" in (source_file or ""):
-                        idx = source_file.find("mcp_server")
+                    if "argos" in (source_file or ""):
+                        idx = source_file.find("argos")
                         source_file = source_file[idx:]
                     else:
                         source_file = None  # don't expose external lib paths
@@ -681,8 +681,8 @@ async def classify_items_batch(data: Dict[str, Any]):
     if not item_ids:
         raise HTTPException(status_code=400, detail="item_ids is required")
     try:
-        from mcp_server.services.classifier import ClassifierService
-        from mcp_server.services.llm_provider import create_llm_provider
+        from argos.services.classifier import ClassifierService
+        from argos.services.llm_provider import create_llm_provider
 
         llm_provider = create_llm_provider(
             provider_type=settings.llm_provider,
@@ -721,8 +721,8 @@ async def classify_items_batch(data: Dict[str, Any]):
 async def classify_item(item_id: int):
     """Classify a single item using LLM."""
     try:
-        from mcp_server.services.classifier import ClassifierService
-        from mcp_server.services.llm_provider import create_llm_provider
+        from argos.services.classifier import ClassifierService
+        from argos.services.llm_provider import create_llm_provider
         
         item = db.get_item_by_id(item_id)
         if not item:
@@ -777,7 +777,7 @@ async def get_item_raw_content(item_id: int, translate: bool = Query(default=Fal
             raise HTTPException(status_code=404, detail="Item not found")
         url, title = row
 
-        from mcp_server.services.web_browser import browse_with_requests
+        from argos.services.web_browser import browse_with_requests
         from urllib.parse import urljoin, urlparse
         import asyncio as _asyncio
         import re as _re
@@ -802,7 +802,7 @@ async def get_item_raw_content(item_id: int, translate: bool = Query(default=Fal
             words = set(text.lower().split()[:100])
             if len(words & french_markers) / max(len(words), 1) > 0.1:
                 return text
-            from mcp_server.services.llm_provider import create_llm_provider
+            from argos.services.llm_provider import create_llm_provider
             llm = create_llm_provider(
                 provider_type=settings.llm_provider,
                 openai_api_key=settings.openai_api_key,
@@ -861,8 +861,8 @@ async def get_item_raw_content(item_id: int, translate: bool = Query(default=Fal
         elif url.lower().endswith(".pdf"):
             # URL is a direct PDF — extract text instead of browsing HTML
             import requests as _req
-            from mcp_server.services.document_extractor import extract_pdf
-            resp = _req.get(url, timeout=30, verify=False, headers={"User-Agent": "OpenWebMCP/1.0"})
+            from argos.services.document_extractor import extract_pdf
+            resp = _req.get(url, timeout=30, verify=False, headers={"User-Agent": "Argos/1.0"})
             text = extract_pdf(resp.content) if resp.status_code == 200 else ""
             text = await _translate_if_needed(text)
             return {
@@ -897,7 +897,7 @@ async def _auto_rag_index(item_id: int, title: str, summary: str):
     """Index an item into LanceDB immediately after creation."""
     try:
         import asyncio as _asyncio
-        from mcp_server.services.vector_store_singleton import get_vector_store
+        from argos.services.vector_store_singleton import get_vector_store
         vs = get_vector_store()
         item_data = {"id": item_id, "title": title, "summary": summary[:2000], "workspace_id": None}
         await _asyncio.to_thread(vs.index_item, item_data)
@@ -919,10 +919,10 @@ async def preview_pdf_url(data: Dict[str, Any]):
             raise HTTPException(status_code=400, detail="url required")
 
         import requests as _req
-        from mcp_server.services.document_extractor import extract_pdf
+        from argos.services.document_extractor import extract_pdf
 
         resp = _req.get(pdf_url, timeout=30, verify=False,
-                        headers={"User-Agent": "OpenWebMCP/1.0"}, stream=True)
+                        headers={"User-Agent": "Argos/1.0"}, stream=True)
         if resp.status_code != 200:
             raise HTTPException(status_code=422, detail=f"HTTP {resp.status_code}")
 
@@ -961,9 +961,9 @@ async def ingest_pdf_from_url(data: Dict[str, Any]):
 
         import requests as _req
         import json as _json
-        from mcp_server.services.document_extractor import extract_pdf
-        from mcp_server.services.digest_generator import generate_digest
-        from mcp_server.services.llm_provider import create_llm_provider
+        from argos.services.document_extractor import extract_pdf
+        from argos.services.digest_generator import generate_digest
+        from argos.services.llm_provider import create_llm_provider
 
         # Check if already in base
         with db.get_connection() as conn:
@@ -975,7 +975,7 @@ async def ingest_pdf_from_url(data: Dict[str, Any]):
 
         # Download PDF
         resp = _req.get(pdf_url, timeout=30, verify=False,
-                        headers={"User-Agent": "OpenWebMCP/1.0"},
+                        headers={"User-Agent": "Argos/1.0"},
                         stream=True)
         if resp.status_code != 200:
             raise HTTPException(status_code=422, detail=f"Could not download PDF (HTTP {resp.status_code})")
@@ -1064,7 +1064,7 @@ async def llm_filter_items(data: Dict[str, Any]):
         if not item_ids:
             raise HTTPException(status_code=400, detail="item_ids is required")
 
-        from mcp_server.services.llm_provider import create_llm_provider
+        from argos.services.llm_provider import create_llm_provider
         import asyncio, json as _json
 
         llm = create_llm_provider(
@@ -1165,9 +1165,9 @@ async def ingest_preview(item_id: int):
             raise HTTPException(status_code=404, detail="Item not found")
         url, title, current_summary = row
 
-        from mcp_server.services.web_browser import browse
-        from mcp_server.services.digest_generator import generate_digest
-        from mcp_server.services.llm_provider import create_llm_provider
+        from argos.services.web_browser import browse
+        from argos.services.digest_generator import generate_digest
+        from argos.services.llm_provider import create_llm_provider
 
         llm = create_llm_provider(
             provider_type=settings.llm_provider,
@@ -1180,7 +1180,7 @@ async def ingest_preview(item_id: int):
 
         # If URL ends with /, crawl child pages and aggregate content
         if url.endswith("/"):
-            from mcp_server.tools.web_tools import tool_browse
+            from argos.tools.web_tools import tool_browse
             import asyncio as _asyncio
             from urllib.parse import urljoin, urlparse
 
@@ -1281,7 +1281,7 @@ async def ingest_confirm(item_id: int, data: Dict[str, Any]):
 
         # Index into vector store
         try:
-            from mcp_server.services.vector_store_singleton import get_vector_store
+            from argos.services.vector_store_singleton import get_vector_store
             vs = get_vector_store()
             item_data = {
                 "id": item_id, "title": title,
@@ -1313,8 +1313,8 @@ async def ingest_item(item_id: int):
             raise HTTPException(status_code=404, detail="Item not found")
         url, title = row
 
-        from mcp_server.tools.web_tools import tool_digest
-        from mcp_server.services.llm_provider import create_llm_provider
+        from argos.tools.web_tools import tool_digest
+        from argos.services.llm_provider import create_llm_provider
 
         llm = create_llm_provider(
             provider_type=settings.llm_provider,
@@ -1391,7 +1391,7 @@ async def delete_item(item_id: int):
 async def preview_upload(file: UploadFile = File(...)):
     """Extract text from uploaded document for preview — does NOT save."""
     try:
-        from mcp_server.services.document_extractor import extract_document, SUPPORTED_MIME_TYPES
+        from argos.services.document_extractor import extract_document, SUPPORTED_MIME_TYPES
         mime_type = file.content_type or "application/octet-stream"
         filename = file.filename or "document"
         file_bytes = await file.read()
@@ -1428,9 +1428,9 @@ async def upload_document_as_item(
     """
     try:
         import json as _json
-        from mcp_server.services.document_extractor import extract_document, SUPPORTED_MIME_TYPES
-        from mcp_server.services.digest_generator import generate_digest
-        from mcp_server.services.llm_provider import create_llm_provider
+        from argos.services.document_extractor import extract_document, SUPPORTED_MIME_TYPES
+        from argos.services.digest_generator import generate_digest
+        from argos.services.llm_provider import create_llm_provider
 
         mime_type = file.content_type or "application/octet-stream"
         filename = file.filename or "document"
@@ -1542,7 +1542,7 @@ async def rag_extract_document(
     Extract text from an uploaded document (PDF, image, DOCX, TXT).
     Returns the extracted text to be passed as document_context to /rag/ask.
     """
-    from mcp_server.services.document_extractor import extract_document, SUPPORTED_MIME_TYPES
+    from argos.services.document_extractor import extract_document, SUPPORTED_MIME_TYPES
 
     mime_type = file.content_type or "application/octet-stream"
     short_mime = mime_type.lower().split(";")[0].strip()
@@ -1593,9 +1593,9 @@ async def rag_ask(request: Dict[str, Any]):
             raise HTTPException(status_code=400, detail="Query is required")
         
         # Import RAG services
-        from mcp_server.services.rag import RAGService
-        from mcp_server.services.vector_store_singleton import get_vector_store
-        from mcp_server.services.llm_provider import create_llm_provider
+        from argos.services.rag import RAGService
+        from argos.services.vector_store_singleton import get_vector_store
+        from argos.services.llm_provider import create_llm_provider
         
         # Get pre-loaded VectorStore singleton (fast, no model loading)
         vector_store = get_vector_store()
@@ -1709,7 +1709,7 @@ async def clear_rag_history():
 async def index_all_items():
     """Index all classified items with a digest into the RAG vector store."""
     try:
-        from mcp_server.services.vector_store_singleton import get_vector_store
+        from argos.services.vector_store_singleton import get_vector_store
 
         vector_store = get_vector_store()
 
@@ -1759,7 +1759,7 @@ async def index_all_items():
 async def rag_stats():
     """Get RAG system statistics."""
     try:
-        from mcp_server.services.vector_store_singleton import get_vector_store
+        from argos.services.vector_store_singleton import get_vector_store
 
         vector_store = get_vector_store()
         stats = vector_store.get_stats()
@@ -2045,7 +2045,7 @@ async def collect_from_source(source_id: int):
                     raise HTTPException(status_code=404, detail="Source not found")
                 src_id, src_name, src_url, src_type, src_wid = row
 
-        from mcp_server.services.collector import CollectorService
+        from argos.services.collector import CollectorService
         collector = CollectorService(db_manager=db)
 
         items: list = []
@@ -2085,7 +2085,7 @@ async def collect_from_source(source_id: int):
 async def collect_workspace_sources(workspace_id: int):
     """Trigger collection for ALL active sources of a workspace."""
     try:
-        from mcp_server.services.collector import CollectorService
+        from argos.services.collector import CollectorService
         collector = CollectorService(db_manager=db)
         stats = collector.fetch_from_db_sources(workspace_id=workspace_id)
         return {
@@ -2168,7 +2168,7 @@ async def check_source_monitor(source_id: int, background_tasks: BackgroundTasks
     pour une source website surveillée.
     """
     try:
-        from mcp_server.services.site_monitor import get_site_monitor, SiteMonitorService
+        from argos.services.site_monitor import get_site_monitor, SiteMonitorService
 
         monitor = get_site_monitor()
         if monitor is None:
@@ -2195,7 +2195,7 @@ async def check_all_monitors(background_tasks: BackgroundTasks):
     avec monitor_enabled=True dont l'intervalle est écoulé.
     """
     try:
-        from mcp_server.services.site_monitor import get_site_monitor, SiteMonitorService
+        from argos.services.site_monitor import get_site_monitor, SiteMonitorService
 
         monitor = get_site_monitor()
         if monitor is None:
@@ -2229,7 +2229,7 @@ def _check_admin(token: Optional[str]):
 # Files to index from the codebase (relative to /app)
 _CODEBASE_EXTENSIONS = {".py", ".ts", ".tsx", ".sql", ".yaml", ".yml", ".md", ".sh", ".json"}
 _CODEBASE_ROOTS = [
-    Path("/app/mcp_server"),
+    Path("/app/argos"),
     Path("/app/docs"),
     Path("/app/database"),
     Path("/app/scripts"),
@@ -2243,7 +2243,7 @@ _CODEBASE_ROOTS = [
 _CODEBASE_ROOT_LEVEL = Path("/app/project_root")
 # Subdirs to skip when walking project_root (already covered by specific roots above)
 _CODEBASE_SKIP_DIRS = {"__pycache__", ".git", "node_modules", "dist", ".venv", "venv", "__snapshots__", ".cache"}
-_CODEBASE_SKIP_DIRS_ROOT = _CODEBASE_SKIP_DIRS | {"mcp_server", "docs", "database", "scripts", "workflows", "migrations", "n8n", "frontend", "config", "data", "logs", "tests", "lancedb"}
+_CODEBASE_SKIP_DIRS_ROOT = _CODEBASE_SKIP_DIRS | {"argos", "docs", "database", "scripts", "workflows", "migrations", "n8n", "frontend", "config", "data", "logs", "tests", "lancedb"}
 _CODEBASE_SKIP_FILES = {"package-lock.json", "yarn.lock", "pnpm-lock.yaml"}
 _CODEBASE_MAX_FILE_BYTES = 300_000  # skip very large files
 
@@ -2317,7 +2317,7 @@ async def admin_ingest_codebase(
     _check_admin(x_admin_token)
 
     async def _run():
-        from mcp_server.services.vector_store_singleton import get_vector_store
+        from argos.services.vector_store_singleton import get_vector_store
         vector_store = get_vector_store()
         # Clear previous codebase index
         vector_store.delete_codebase()
@@ -2343,7 +2343,7 @@ async def admin_codebase_stats(
     """Return stats about the indexed codebase."""
     _check_admin(x_admin_token)
     try:
-        from mcp_server.services.vector_store_singleton import get_vector_store
+        from argos.services.vector_store_singleton import get_vector_store
         vector_store = get_vector_store()
         if vector_store.table_name in vector_store.db.table_names():
             table = vector_store.db.open_table(vector_store.table_name)
@@ -2371,8 +2371,8 @@ async def admin_rag_diag(
     if not query:
         raise HTTPException(status_code=400, detail="query is required")
     try:
-        from mcp_server.services.vector_store_singleton import get_vector_store
-        from mcp_server.services.rag import RAGService
+        from argos.services.vector_store_singleton import get_vector_store
+        from argos.services.rag import RAGService
 
         vector_store = get_vector_store()
         if settings.llm_provider == "aws":
@@ -2423,8 +2423,8 @@ async def admin_rag_diag(
 async def web_browse(request: Dict[str, Any]):
     """Fetch a URL with headless browser (Playwright + stealth)."""
     try:
-        from mcp_server.tools.web_tools import tool_browse
-        from mcp_server.services.llm_provider import create_llm_provider
+        from argos.tools.web_tools import tool_browse
+        from argos.services.llm_provider import create_llm_provider
 
         result = await tool_browse(params=request, db=db)
         return result
@@ -2437,8 +2437,8 @@ async def web_browse(request: Dict[str, Any]):
 async def web_digest(request: Dict[str, Any]):
     """Browse a URL and generate a markdown + JSON digest via LLM."""
     try:
-        from mcp_server.tools.web_tools import tool_digest
-        from mcp_server.services.llm_provider import create_llm_provider
+        from argos.tools.web_tools import tool_digest
+        from argos.services.llm_provider import create_llm_provider
 
         try:
             llm = create_llm_provider(
@@ -2668,7 +2668,7 @@ async def ai_edit_document(doc_id: int, data: Dict[str, Any]):
         if not current_content:
             raise HTTPException(status_code=400, detail="current_content is required")
 
-        from mcp_server.services.llm_provider import create_llm_provider
+        from argos.services.llm_provider import create_llm_provider
 
         llm = create_llm_provider(
             provider_type=settings.llm_provider,
@@ -2726,7 +2726,7 @@ async def generate_document(data: Dict[str, Any]):
         if not prompt and not item_ids:
             raise HTTPException(status_code=400, detail="prompt or item_ids required")
 
-        from mcp_server.services.llm_provider import create_llm_provider
+        from argos.services.llm_provider import create_llm_provider
         import json as _json
 
         llm = create_llm_provider(
@@ -2880,7 +2880,7 @@ async def search_documents(
         # ── 2. Semantic LanceDB (opt-in) ────────────────────────────────
         if semantic:
             try:
-                from mcp_server.services.vector_store_singleton import get_vector_store
+                from argos.services.vector_store_singleton import get_vector_store
                 import asyncio as _asyncio
 
                 vs = get_vector_store()
@@ -3079,7 +3079,7 @@ async def delete_document(doc_id: int):
         # Clean up LanceDB vectors if document was indexed
         if was_indexed:
             try:
-                from mcp_server.services.vector_store_singleton import get_vector_store
+                from argos.services.vector_store_singleton import get_vector_store
                 import asyncio as _asyncio
                 vs = get_vector_store()
                 await _asyncio.to_thread(vs.delete_item, doc_id)
@@ -3117,7 +3117,7 @@ async def delete_documents_batch(data: Dict[str, Any]):
         indexed_ids = [iid for iid, was_indexed in rows.items() if was_indexed]
         if indexed_ids:
             try:
-                from mcp_server.services.vector_store_singleton import get_vector_store
+                from argos.services.vector_store_singleton import get_vector_store
                 import asyncio as _asyncio
                 vs = get_vector_store()
                 for iid in indexed_ids:
@@ -3146,7 +3146,7 @@ async def index_document(doc_id: int):
             raise HTTPException(status_code=404, detail="Document not found")
         title, content = row
 
-        from mcp_server.services.vector_store_singleton import get_vector_store
+        from argos.services.vector_store_singleton import get_vector_store
         import asyncio as _asyncio
         vs = get_vector_store()
         doc_data = {"id": doc_id, "title": title, "summary": content[:2000], "workspace_id": None}
@@ -3183,11 +3183,11 @@ async def veille_on_demand(data: Dict[str, Any], background_tasks: BackgroundTas
         if not subject:
             raise HTTPException(status_code=400, detail="subject is required")
 
-        from mcp_server.services.web_search import search as web_search, search_with_searxng
-        from mcp_server.services.web_browser import browse_with_requests, browse_with_crawl4ai
-        from mcp_server.services.digest_generator import generate_digest
-        from mcp_server.services.llm_provider import create_llm_provider
-        from mcp_server.services.classifier import ClassifierService
+        from argos.services.web_search import search as web_search, search_with_searxng
+        from argos.services.web_browser import browse_with_requests, browse_with_crawl4ai
+        from argos.services.digest_generator import generate_digest
+        from argos.services.llm_provider import create_llm_provider
+        from argos.services.classifier import ClassifierService
         import asyncio as _asyncio
 
         llm = create_llm_provider(
@@ -3264,7 +3264,7 @@ Critères : pertinence au sujet, contenu substantiel, sources diversifiées, év
             q = _uparse.quote_plus(subject)
             try:
                 hn = _req.get(f"https://hn.algolia.com/api/v1/search?query={q}&tags=story&hitsPerPage={max_results}",
-                              headers={"User-Agent": "OpenWebMCP/1.0"}, timeout=8)
+                              headers={"User-Agent": "Argos/1.0"}, timeout=8)
                 if hn.status_code == 200:
                     for h in hn.json().get("hits", [])[:max_results]:
                         u = h.get("url") or f"https://news.ycombinator.com/item?id={h.get('objectID')}"
@@ -3412,7 +3412,7 @@ Génère un briefing de veille structuré avec EXACTEMENT ce format markdown :
 async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int] = None) -> dict:
     """Core briefing generation logic — reused by both on-demand and scheduled."""
     import json as _json
-    from mcp_server.services.llm_provider import create_llm_provider
+    from argos.services.llm_provider import create_llm_provider
 
     # Fetch high/critical items from the period
     window_filter = "AND created_at > NOW() - INTERVAL '%s hours'" % hours

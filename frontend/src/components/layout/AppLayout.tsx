@@ -99,7 +99,7 @@ function NavItem({ to, icon: Icon, label, step, tip, end }: {
 
 export default function AppLayout() {
   const { pathname } = useLocation()
-  const meta = META[pathname] ?? { title: 'OpenWebMCP' }
+  const meta = META[pathname] ?? { title: 'Argos' }
 
   return (
     <div className="flex h-screen bg-[hsl(var(--bg))] overflow-hidden dark">
@@ -119,7 +119,7 @@ export default function AppLayout() {
             <Zap className="w-3.5 h-3.5 text-[hsl(var(--accent))]" strokeWidth={2.5} />
           </motion.div>
           <div>
-            <p className="text-[13.5px] font-bold tracking-tight text-[hsl(var(--text))] leading-none">OpenWebMCP</p>
+            <p className="text-[13.5px] font-bold tracking-tight text-[hsl(var(--text))] leading-none">Argos</p>
             <p className="text-[9.5px] font-mono text-[hsl(var(--text-3))] mt-0.5 tracking-wider uppercase">v1.0.0</p>
           </div>
         </div>

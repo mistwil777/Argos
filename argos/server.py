@@ -1,5 +1,5 @@
 """
-OpenWebMCP Server
+Argos Server
 FastAPI server with JSON-RPC 2.0 protocol implementation
 """
 
@@ -12,8 +12,8 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ValidationError
 
-from mcp_server.config import settings
-from mcp_server.api import api_router
+from argos.config import settings
+from argos.api import api_router
 
 
 # ============================================
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 # FastAPI app
 # ============================================
 app = FastAPI(
-    title="OpenWebMCP Server",
+    title="Argos Server",
     description="Web browsing infrastructure for AI agents — Model Context Protocol",
     version="1.0.0",
     docs_url="/docs" if settings.environment == "development" else None,
@@ -244,7 +244,7 @@ async def rpc_endpoint(request: Request):
         
         elif method == "server.info":
             result = {
-                "name": "OpenWebMCP Server",
+                "name": "Argos Server",
                 "version": "1.0.0",
                 "environment": settings.environment,
                 "tools_count": len(tool_registry.tools),
@@ -307,7 +307,7 @@ async def health_check():
     Health check endpoint for monitoring.
     Checks database connectivity and Playwright availability.
     """
-    from mcp_server.api.router import db as api_db
+    from argos.api.router import db as api_db
 
     # Database check
     database_status = "error"
@@ -342,7 +342,7 @@ async def health_check():
 @app.get("/")
 async def root():
     return {
-        "service": "OpenWebMCP Server",
+        "service": "Argos Server",
         "version": "1.0.0",
         "docs": "/docs" if settings.environment == "development" else None,
         "health": "/health",
@@ -357,16 +357,16 @@ async def root():
 @app.on_event("startup")
 async def startup_event():
     """Register all MCP tools at startup."""
-    logger.info("Starting OpenWebMCP Server...")
+    logger.info("Starting Argos Server...")
 
     # ---- Test ----
-    from mcp_server.tools.hello import hello_world
+    from argos.tools.hello import hello_world
     tool_registry.register("hello.world", hello_world, "Health check — vérifie que le serveur répond",
         input_schema={},
         output_schema={"type":"object","properties":{"status":{"type":"string"},"message":{"type":"string"}}})
 
     # ---- Collector ----
-    from mcp_server.tools.collector import (
+    from argos.tools.collector import (
         fetch_rss, fetch_apis, fetch_all, get_collection_stats, list_sources
     )
     tool_registry.register("collector.fetch_rss", fetch_rss,
@@ -386,7 +386,7 @@ async def startup_event():
         input_schema={"type":"object","properties":{"workspace_id":{"type":"integer","description":"Filtrer par workspace (optionnel)"}}})
 
     # ---- Classifier ----
-    from mcp_server.tools.classifier import (
+    from argos.tools.classifier import (
         classify_item, classify_batch, get_classification_stats, get_unclassified_items
     )
     tool_registry.register("classifier.classify", classify_item,
@@ -403,7 +403,7 @@ async def startup_event():
         input_schema={"type":"object","properties":{"limit":{"type":"integer","default":20,"description":"Nombre d'items à retourner"}}})
 
     # ---- RAG ----
-    from mcp_server.tools.rag_tools import (
+    from argos.tools.rag_tools import (
         ask_question, search_content,
         index_item as rag_index_item,
         rebuild_index, get_index_stats
@@ -436,10 +436,10 @@ async def startup_event():
         input_schema={})
 
     # ---- Web Tools ----
-    from mcp_server.tools.web_tools import WEB_TOOLS
-    from mcp_server.api.router import db as api_db
+    from argos.tools.web_tools import WEB_TOOLS
+    from argos.api.router import db as api_db
     try:
-        from mcp_server.services.llm_provider import create_llm_provider
+        from argos.services.llm_provider import create_llm_provider
         llm = create_llm_provider(
             provider_type=settings.llm_provider,
             openai_api_key=settings.openai_api_key,
@@ -511,7 +511,7 @@ async def startup_event():
 
     # ---- Warmup VectorStore (async, non-blocking) ----
     try:
-        from mcp_server.services.vector_store_singleton import warmup_vector_store
+        from argos.services.vector_store_singleton import warmup_vector_store
         import asyncio
         asyncio.ensure_future(warmup_vector_store())
         logger.info("VectorStore warmup scheduled in background")
@@ -520,7 +520,7 @@ async def startup_event():
 
     # ---- Site Monitor Scheduler ----
     try:
-        from mcp_server.services.site_monitor import init_site_monitor
+        from argos.services.site_monitor import init_site_monitor
         monitor = init_site_monitor(db_manager=api_db, dashboard_url="http://localhost:3000")
         await monitor.start_scheduler(poll_interval_seconds=60)
         logger.info("Site monitor scheduler started")
@@ -530,7 +530,7 @@ async def startup_event():
     # ---- Daily Briefing Scheduler ----
     try:
         import asyncio as _asyncio
-        from mcp_server.config import settings as _settings
+        from argos.config import settings as _settings
 
         async def _daily_briefing_job():
             """Generate daily briefing at configured hour (default 7:00)."""
@@ -546,8 +546,8 @@ async def startup_event():
                 logger.info(f"Next briefing in {wait_seconds/3600:.1f}h (at {next_run.strftime('%H:%M')})")
                 await _asyncio.sleep(wait_seconds)
                 try:
-                    from mcp_server.api.router import db as _db
-                    from mcp_server.api.router import _generate_briefing_content
+                    from argos.api.router import db as _db
+                    from argos.api.router import _generate_briefing_content
                     import json as _json
                     import datetime as _dt2
                     today = _dt2.date.today()
@@ -578,16 +578,16 @@ async def startup_event():
     except Exception as exc:
         logger.warning(f"Daily briefing scheduler not started: {exc}")
 
-    logger.info("OpenWebMCP Server ready!")
+    logger.info("Argos Server ready!")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    logger.info("Shutting down OpenWebMCP Server...")
+    logger.info("Shutting down Argos Server...")
 
     # Arrêter le scheduler de surveillance
     try:
-        from mcp_server.services.site_monitor import get_site_monitor
+        from argos.services.site_monitor import get_site_monitor
         monitor = get_site_monitor()
         if monitor:
             monitor.stop_scheduler()

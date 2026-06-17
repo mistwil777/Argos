@@ -10,8 +10,8 @@ from datetime import datetime
 import logging
 import re
 
-from mcp_server.database import DatabaseManager
-from mcp_server.config import settings
+from argos.database import DatabaseManager
+from argos.config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])

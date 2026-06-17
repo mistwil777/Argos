@@ -17,7 +17,7 @@ import requests
 import yaml
 from dateutil import parser as date_parser
 
-from mcp_server.database import DatabaseManager
+from argos.database import DatabaseManager
 
 logger = logging.getLogger(__name__)
 

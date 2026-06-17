@@ -10,8 +10,8 @@ import re
 from typing import Dict, List, Optional
 from datetime import datetime
 
-from mcp_server.database import DatabaseManager
-from mcp_server.services.llm_provider import LLMProvider
+from argos.database import DatabaseManager
+from argos.services.llm_provider import LLMProvider
 
 logger = logging.getLogger(__name__)
 

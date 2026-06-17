@@ -1,5 +1,5 @@
 # ============================================
-# AcademiaOps MCP Server - Dockerfile
+# Argos - Dockerfile
 # Lightweight production build
 # ============================================
 
@@ -29,7 +29,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir "aiosqlite>=0.20" "lxml>=5.3" "cssselect>=1.2" 2>/dev/null || true
 
 # Copy application code
-COPY mcp_server/ ./mcp_server/
+COPY argos/ ./argos/
 
 # Create data directory for LanceDB and caches
 RUN mkdir -p /data/lancedb && \
@@ -55,4 +55,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
 
 # Run FastAPI with uvicorn
-CMD ["uvicorn", "mcp_server.server:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "argos.server:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,4 +1,4 @@
-# Guide utilisateur OpenWebMCP
+# Guide utilisateur Argos
 
 ## Accès à l'interface
 
@@ -68,13 +68,13 @@ Les docs de l'outil sont indexées automatiquement au démarrage, ce qui en fait
 
 ## Intégration avec un agent IA
 
-OpenWebMCP expose son API via JSON-RPC 2.0. Depuis Claude Desktop ou n'importe quel agent compatible MCP :
+Argos expose son API via JSON-RPC 2.0. Depuis Claude Desktop ou n'importe quel agent compatible MCP :
 
 ```json
 // Dans votre config MCP (claude_desktop_config.json)
 {
   "mcpServers": {
-    "openwebmcp": {
+    "argos": {
       "url": "http://localhost:8000/rpc"
     }
   }

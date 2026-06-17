@@ -270,7 +270,7 @@ async def search_with_searxng(
     try:
         start = time.monotonic()
         resp = _req.get(url, timeout=15, verify=False,
-                        headers={"User-Agent": "OpenWebMCP/1.0 (internal)"})
+                        headers={"User-Agent": "Argos/1.0 (internal)"})
         duration_ms = int((time.monotonic() - start) * 1000)
 
         if resp.status_code != 200:

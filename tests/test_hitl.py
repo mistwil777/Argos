@@ -13,9 +13,9 @@ from pathlib import Path
 # Ajouter le répertoire parent au path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from mcp_server.tools import hitl_tools
-from mcp_server.database import DatabaseManager
-from mcp_server.config import settings
+from argos.tools import hitl_tools
+from argos.database import DatabaseManager
+from argos.config import settings
 from psycopg2.extras import RealDictCursor
 import logging
 

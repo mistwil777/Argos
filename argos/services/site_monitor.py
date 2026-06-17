@@ -27,7 +27,7 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 
-from mcp_server.database import DatabaseManager
+from argos.database import DatabaseManager
 
 logger = logging.getLogger(__name__)
 

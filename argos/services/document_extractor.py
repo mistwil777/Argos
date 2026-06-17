@@ -186,7 +186,7 @@ async def describe_image_with_vision(image_bytes: bytes, mime_type: str = "image
     """
     try:
         import base64
-        from mcp_server.config import settings
+        from argos.config import settings
 
         b64 = base64.standard_b64encode(image_bytes).decode()
 

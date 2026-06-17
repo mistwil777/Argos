@@ -56,7 +56,7 @@ function GettingStarted() {
           <div className="px-6 pt-5 pb-4">
             <div className="flex items-start justify-between mb-4">
               <div>
-                <p className="text-[13px] font-bold text-[hsl(var(--text))]">Bienvenue sur OpenWebMCP</p>
+                <p className="text-[13px] font-bold text-[hsl(var(--text))]">Bienvenue sur Argos</p>
                 <p className="text-[11.5px] text-[hsl(var(--text-3))] mt-0.5">Suivez ces 4 étapes pour démarrer votre veille</p>
               </div>
               <button onClick={dismiss} className="text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))] transition-colors">

@@ -4,8 +4,8 @@ Singleton for VectorStoreService to avoid reloading the embedding model.
 
 import logging
 from typing import Optional
-from mcp_server.services.vector_store import VectorStoreService
-from mcp_server.config import settings
+from argos.services.vector_store import VectorStoreService
+from argos.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ def get_vector_store(
             logger.info("Initializing Amazon Bedrock Titan Embeddings V2...")
             
             # Import BedrockEmbeddingsProvider
-            from mcp_server.services.bedrock_embeddings import BedrockEmbeddingsProvider
+            from argos.services.bedrock_embeddings import BedrockEmbeddingsProvider
             
             # Validate AWS credentials
             if not settings.aws_access_key_id or not settings.aws_secret_access_key:

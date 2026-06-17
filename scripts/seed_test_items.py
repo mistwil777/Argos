@@ -12,8 +12,8 @@ from datetime import datetime
 # Add project root to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from mcp_server.database import DatabaseManager
-from mcp_server.config import settings
+from argos.database import DatabaseManager
+from argos.config import settings
 
 # Test items based on real sources
 TEST_ITEMS = [

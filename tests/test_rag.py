@@ -9,7 +9,7 @@ Tests:
 
 import asyncio
 import logging
-from mcp_server.tools.rag_tools import (
+from argos.tools.rag_tools import (
     _get_rag_service,
     rebuild_index,
     ask_question,

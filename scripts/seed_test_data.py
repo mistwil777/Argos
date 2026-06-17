@@ -10,8 +10,8 @@ import random
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from mcp_server.database import DatabaseManager
-from mcp_server.config import settings
+from argos.database import DatabaseManager
+from argos.config import settings
 
 def seed_items(db: DatabaseManager):
     """Seed test items."""
