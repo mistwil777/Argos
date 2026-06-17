@@ -1,4 +1,4 @@
-# Cahier des Charges Fonctionnel - VeilleOps
+# Cahier des Charges Fonctionnel - Argos
 
 **Version:** 1.0  
 **Date:** 27 février 2026  
@@ -10,7 +10,7 @@
 
 ### 1.1 Contexte
 
-VeilleOps (anciennement AcademiaOps) est une plateforme intelligente de gestion de la veille technologique et de génération automatisée de contenus pédagogiques. Le système utilise l'intelligence artificielle pour automatiser la collecte, l'analyse, la classification et la transformation de contenus techniques en documents structurés.
+Argos (anciennement Argos) est une plateforme intelligente de gestion de la veille technologique et de génération automatisée de contenus pédagogiques. Le système utilise l'intelligence artificielle pour automatiser la collecte, l'analyse, la classification et la transformation de contenus techniques en documents structurés.
 
 ### 1.2 Objectifs Principaux
 
@@ -932,7 +932,7 @@ services:
 
 ```bash
 # Database
-DATABASE_URL=postgresql://user:pass@host:5432/veilleops
+DATABASE_URL=postgresql://user:pass@host:5432/argos
 
 # AWS Bedrock
 AWS_ACCESS_KEY_ID=xxx

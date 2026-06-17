@@ -1,5 +1,5 @@
 """
-RAG Service for AcademiaOps
+RAG Service for Argos
 
 Retrieval-Augmented Generation for answering questions based on courses and items.
 """

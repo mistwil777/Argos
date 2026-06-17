@@ -1,4 +1,4 @@
-# AcademiaOps - Plan de Développement
+# Argos - Plan de Développement
 
 **Last Updated**: February 23, 2026  
 **Current Status**: Feature 3 Complete ✅ 
@@ -7,7 +7,7 @@
 
 ## 🎯 Vision du Projet
 
-**AcademiaOps** est un système complet de veille technologique IA + génération de contenu pédagogique automatisé.
+**Argos** est un système complet de veille technologique IA + génération de contenu pédagogique automatisé.
 
 **Objectif final**: Automatiser la découverte, classification, transformation en contenus éducatifs et diffusion d'informations sur l'IA.
 
@@ -407,7 +407,7 @@ TOTAL: ~2 semaines de dev
 
 ## 🏆 Success Criteria - MVP Final
 
-Un MVP complet d'AcademiaOps sera considéré prêt quand:
+Un MVP complet d'Argos sera considéré prêt quand:
 
 - [x] Feature 1: Infrastructure opérationnelle ✅
 - [x] Feature 2: Classification automatique ✅

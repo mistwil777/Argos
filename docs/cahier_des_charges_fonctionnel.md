@@ -1,9 +1,9 @@
-# Cahier des Charges Fonctionnel - AcademiaOps
+# Cahier des Charges Fonctionnel - Argos
 ## Plateforme de Veille IA et Génération de Contenus Pédagogiques
 
 **Version** : 1.0 MVP  
 **Date** : 20 février 2026  
-**Projet** : AcademiaOps
+**Projet** : Argos
 
 ---
 
@@ -25,7 +25,7 @@
 
 ### 1.1 Vision du projet
 
-AcademiaOps est une plateforme intelligente et automatisée qui permet de :
+Argos est une plateforme intelligente et automatisée qui permet de :
 - **Surveiller en continu** l'écosystème des technologies d'IA (nouveaux frameworks, protocoles, outils)
 - **Analyser et classifier** automatiquement ces innovations
 - **Assister la décision** humaine pour l'adoption de nouvelles technologies
@@ -170,7 +170,7 @@ AcademiaOps est une plateforme intelligente et automatisée qui permet de :
 | Acteur | Nature | Rôle |
 |--------|--------|------|
 | **n8n Workflow Scheduler** | Orchestrateur | Déclenche les collectes de veille à intervalles réguliers |
-| **MCP Server "AcademiaOps"** | Service backend | Expose les tools pour la classification, génération, recherche |
+| **MCP Server "Argos"** | Service backend | Expose les tools pour la classification, génération, recherche |
 | **Agno Agents Team** | Intelligence | Exécute les tâches de classification, comparaison, génération de cours |
 | **PostgreSQL** | Persistence | Stocke les métadonnées, décisions, historique |
 | **LanceDB** | Recherche vectorielle | Permet le RAG sur veille + cours |
@@ -464,7 +464,7 @@ AcademiaOps est une plateforme intelligente et automatisée qui permet de :
 
 ## 📝 Notes finales
 
-Ce cahier des charges fonctionnel pose les bases métier du projet AcademiaOps. Il doit être validé avant de passer au cahier des charges technique.
+Ce cahier des charges fonctionnel pose les bases métier du projet Argos. Il doit être validé avant de passer au cahier des charges technique.
 
 **Points d'attention** :
 - Le MVP est volontairement limité (1 utilisateur, français seulement) pour garantir une mise en production rapide

@@ -1,4 +1,4 @@
-# 🔄 Architecture et Workflow AcademiaOps
+# 🔄 Architecture et Workflow Argos
 
 ## 📊 Flux de données actuel
 
@@ -273,7 +273,7 @@ Endpoints API à ajouter:
 
 ```bash
 # 1. Vérifier les items dans la DB
-docker exec academiaops-postgres psql -U academiaops -d academiaops -c \
+docker exec argos-postgres psql -U argos -d argos -c \
   "SELECT id, title, classification_status FROM items ORDER BY id DESC LIMIT 10;"
 
 # 2. Tester classification d'un item pending

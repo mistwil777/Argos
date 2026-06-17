@@ -9,7 +9,7 @@
 
 ## 🎯 Objectif de la feature
 
-Créer l'infrastructure de base d'AcademiaOps :
+Créer l'infrastructure de base d'Argos :
 - **Docker Compose** pour orchestrer les services (PostgreSQL, n8n, MCP Server)
 - **Base de données PostgreSQL** avec schéma complet et données de test
 - **Serveur MCP** (Model Context Protocol) avec JSON-RPC 2.0
@@ -24,8 +24,8 @@ Créer l'infrastructure de base d'AcademiaOps :
 **Services créés** :
 - **PostgreSQL 16** (Alpine) : Base de données principale
   - Port : 5432
-  - Database : `academiaops`
-  - User : `academiaops_user`
+  - Database : `argos`
+  - User : `argos_user`
   - Healthcheck intégré
   - Volume persistant : `postgres_data`
 
@@ -42,7 +42,7 @@ Créer l'infrastructure de base d'AcademiaOps :
   - Volume pour LanceDB : `lancedb_data`
   - Logs persistants dans `./logs`
 
-**Réseau** : `academiaops-network` (bridge)
+**Réseau** : `argos-network` (bridge)
 
 **Variables d'environnement** : Définies dans `.env` (voir `.env.example`)
 
@@ -99,7 +99,7 @@ Créer l'infrastructure de base d'AcademiaOps :
 - Override de classification (modify)
 
 **3 progressions utilisateur** :
-- demo@academiaops.com : 2 cours (1 completed, 1 in-progress)
+- demo@argos.com : 2 cours (1 completed, 1 in-progress)
 - student@example.com : 1 cours (in-progress)
 
 **2 requêtes RAG** :
@@ -246,7 +246,7 @@ def hello_world(name: Optional[str] = "World") -> dict
 **Output** :
 ```json
 {
-  "message": "Hello, AcademiaOps!",
+  "message": "Hello, Argos!",
   "timestamp": "2026-02-20T10:47:50.052577Z",
   "tool": "hello.world",
   "version": "1.0.0"
@@ -302,7 +302,7 @@ curl -X POST http://127.0.0.1:8000/rpc \
   -d '{
     "jsonrpc": "2.0",
     "method": "hello.world",
-    "params": {"name": "AcademiaOps"},
+    "params": {"name": "Argos"},
     "id": 1
   }'
 ```
@@ -312,7 +312,7 @@ curl -X POST http://127.0.0.1:8000/rpc \
 {
   "jsonrpc": "2.0",
   "result": {
-    "message": "Hello, AcademiaOps!",
+    "message": "Hello, Argos!",
     "timestamp": "2026-02-20T10:47:50.052577Z",
     "tool": "hello.world",
     "version": "1.0.0"
@@ -531,8 +531,8 @@ cp .env.example .env
 ### Étape 1 : Cloner et installer
 
 ```bash
-git clone https://github.com/mistwil777/academiaOps.git
-cd academiaOps
+git clone https://github.com/mistwil777/argos.git
+cd argos
 git checkout feature/docker-database-setup
 
 # Créer l'environnement virtuel
@@ -607,7 +607,7 @@ curl -X POST http://localhost:8000/rpc \
 ### Étape 6 : Se connecter à PostgreSQL (optionnel)
 
 ```bash
-docker exec -it academiaops-postgres psql -U academiaops_user -d academiaops
+docker exec -it argos-postgres psql -U argos_user -d argos
 ```
 
 **Exemples de requêtes SQL** :

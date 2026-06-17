@@ -1,5 +1,5 @@
 """
-Configuration management for AcademiaOps MCP Server
+Configuration management for Argos Server
 Uses pydantic-settings for environment variable validation
 """
 
@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     # Database
     # ============================================
     database_url: str = Field(
-        default="postgresql://academiaops:password@localhost:5432/academiaops",
+        default="postgresql://argos:password@localhost:5432/argos",
         validation_alias=AliasChoices('database_url', 'POSTGRES_URL'),
         description="PostgreSQL connection URL"
     )

@@ -1,5 +1,5 @@
 """
-DatabaseManager for AcademiaOps MCP Server
+DatabaseManager for Argos Server
 
 Handles all PostgreSQL operations for items, topics, classifications, and decisions.
 """
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class DatabaseManager:
-    """Manages database connections and operations for AcademiaOps."""
+    """Manages database connections and operations for Argos."""
     
     def __init__(self, database_url: str):
         """
@@ -25,7 +25,7 @@ class DatabaseManager:
             database_url: PostgreSQL connection string (postgresql://user:pass@host:port/db)
         """
         self.database_url = database_url
-        logger.info("DatabaseManager initialized", extra={"database": "academiaops"})
+        logger.info("DatabaseManager initialized", extra={"database": "argos"})
     
     @contextmanager
     def get_connection(self):

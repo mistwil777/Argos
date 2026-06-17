@@ -1,6 +1,6 @@
 # Guide de Lecture des Synthèses 📖
 
-**Objectif** : Structurer ton apprentissage de la stack AcademiaOps avant d'implémenter
+**Objectif** : Structurer ton apprentissage de la stack Argos avant d'implémenter
 
 ---
 
@@ -34,12 +34,12 @@ Tu as devant toi **3 synthèses techniques** (30 minutes de lecture totale) qui 
 2. **[MCP](synthese_mcp.md)** (10 min)
    - Après n8n, tu comprendras mieux comment MCP s'insère entre n8n et les agents
    - Concepts : JSON-RPC 2.0, Tools/Resources/Prompts
-   - **Focus** : Section "Les 5 outils critiques pour AcademiaOps" → tu verras les tools qu'on va créer
+   - **Focus** : Section "Les 5 outils critiques pour Argos" → tu verras les tools qu'on va créer
 
 3. **[Agno + Skills](synthese_agno.md)** (12 min)
    - Termine par Agno : c'est le plus complexe
    - Concepts : Agent, Skill, Team, collaboration
-   - **Focus** : Section "Les 6 Agents d'AcademiaOps" → tu verras exactement ce qu'on va coder
+   - **Focus** : Section "Les 6 Agents d'Argos" → tu verras exactement ce qu'on va coder
 
 **Pause recommandée** : 5 minutes entre chaque synthèse pour laisser décanter.
 
@@ -56,12 +56,12 @@ Tu as devant toi **3 synthèses techniques** (30 minutes de lecture totale) qui 
 2. Puis lis la section 8.2 (Agents et orchestration) du [Cahier des Charges Technique](cahier_des_charges_technique.md#82-agents-et-orchestration)
 
 #### Si tu veux comprendre **comment les agents collaborent** :
-1. [Agno - Les 6 Agents d'AcademiaOps](synthese_agno.md#-les-6-agents-dacademiaops)
+1. [Agno - Les 6 Agents d'Argos](synthese_agno.md#-les-6-agents-dargos)
 2. [Agno - Collaboration entre agents (Teams)](synthese_agno.md#-collaboration-entre-agents-teams)
 3. [MCP - Pattern 2 : Agent avec état](synthese_mcp.md#pattern-2--agent-avec-état-conversationnel)
 
 #### Si tu veux comprendre **les workflows d'automatisation** :
-1. [n8n - Les 3 workflows AcademiaOps](synthese_n8n.md#-les-3-workflows-dacademiaops)
+1. [n8n - Les 3 workflows Argos](synthese_n8n.md#-les-3-workflows-dargos)
 2. [Cahier des Charges Technique - Section 5 (Workflows n8n)](cahier_des_charges_technique.md#5-workflows-n8n)
 
 #### Si tu veux comprendre **comment exposer des fonctionnalités au LLM** :
@@ -364,7 +364,7 @@ Une fois que tu as validé les critères ci-dessus, lis :
 
 1. **Prends des notes manuscrites** : Dessine les schémas, note les concepts clés
 2. **Fais les exercices** : Ne les saute pas, ils valident ta compréhension
-3. **Pose-toi des questions** : "Comment je ferais ça dans AcademiaOps ?"
+3. **Pose-toi des questions** : "Comment je ferais ça dans Argos ?"
 
 ### Après la lecture
 

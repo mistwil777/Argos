@@ -17,7 +17,7 @@ function TestApp() {
         <h1 style={{ color: '#333' }}>✅ React is Working!</h1>
         <p>If you see this, React is rendering correctly.</p>
         <ul>
-          <li>VeilleOps Frontend</li>
+          <li>Argos Frontend</li>
           <li>Vite Dev Server: Running</li>
           <li>React Router: Loaded</li>
         </ul>

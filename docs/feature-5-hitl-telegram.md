@@ -19,8 +19,8 @@ La Feature 5 implémente une boucle de feedback humain via **Telegram Bot** pour
 
 1. Ouvrez Telegram et cherchez **@BotFather**
 2. Envoyez `/newbot`
-3. Choisissez un nom : `AcademiaOps Bot`
-4. Choisissez un username : `academiaops_bot`
+3. Choisissez un nom : `Argos Bot`
+4. Choisissez un username : `argos_bot`
 5. **Copiez votre token** : `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`
 
 ### Étape 2 : Récupérer votre Chat ID

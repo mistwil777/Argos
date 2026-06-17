@@ -1,5 +1,5 @@
 """
-REST API module for AcademiaOps
+REST API module for Argos
 """
 
 from argos.api.router import api_router

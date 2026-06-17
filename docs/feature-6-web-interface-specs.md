@@ -2,7 +2,7 @@
 
 ## Vue d'ensemble
 
-Dashboard web interactif pour visualiser, gérer et interagir avec l'ensemble du système AcademiaOps.
+Dashboard web interactif pour visualiser, gérer et interagir avec l'ensemble du système Argos.
 
 ## Objectifs
 
@@ -284,7 +284,7 @@ Dashboard web interactif pour visualiser, gérer et interagir avec l'ensemble du
 ### Dashboard
 ```
 ┌────────────────────────────────────────────────────────────────┐
-│  AcademiaOps                                    [User] [Logout] │
+│  Argos                                    [User] [Logout] │
 ├─────────┬──────────────────────────────────────────────────────┤
 │Dashboard│  📊 Métriques Globales                               │
 │Items    │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────┐ │
@@ -303,7 +303,7 @@ Dashboard web interactif pour visualiser, gérer et interagir avec l'ensemble du
 ### RAG Interface
 ```
 ┌────────────────────────────────────────────────────────────────┐
-│  AcademiaOps                                    [User] [Logout] │
+│  Argos                                    [User] [Logout] │
 ├─────────┬──────────────────────────────────────────────────────┤
 │Dashboard│  💬 RAG Assistant                     [New Chat]     │
 │Items    │  ┌────────────────────────────────────────────────┐ │

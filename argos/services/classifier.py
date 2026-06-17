@@ -1,5 +1,5 @@
 """
-Classification Service for AcademiaOps
+Classification Service for Argos
 
 Uses LLM (OpenAI, AWS Bedrock, etc.) to analyze and classify tech watch items.
 """

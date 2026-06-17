@@ -1,5 +1,5 @@
 """
-Vector Store Service for AcademiaOps
+Vector Store Service for Argos
 
 Handles embeddings and vector storage using LanceDB.
 Supports multiple embedding providers: SentenceTransformer or Amazon Bedrock Titan.
@@ -23,7 +23,7 @@ class VectorStoreService:
         self,
         db_path: str = "./data/lancedb",
         model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
-        table_name: str = "academiaops_embeddings",
+        table_name: str = "argos_embeddings",
         embedding_provider: Optional[Any] = None
     ):
         """

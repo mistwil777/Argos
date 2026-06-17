@@ -213,7 +213,7 @@ created_at      TIMESTAMPTZ
 
 **Fichier :** `mcp_server/services/vector_store.py`  
 **Base vectorielle :** LanceDB (`./data/lancedb`)  
-**Table LanceDB :** `academiaops_embeddings`
+**Table LanceDB :** `argos_embeddings`
 
 ### Providers d'embeddings
 

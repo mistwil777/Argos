@@ -10,7 +10,7 @@
 
 ### 1.1 Contexte
 
-Argos est une infrastructure web pour agents IA, forkée de VeilleOps/AcademiaOps en juin 2026. L'objectif est de donner aux agents IA un accès web économique, furtif et sans APIs officielles coûteuses (X/Twitter, Reddit, etc.).
+Argos est une infrastructure web pour agents IA, forkée de Argos/Argos en juin 2026. L'objectif est de donner aux agents IA un accès web économique, furtif et sans APIs officielles coûteuses (X/Twitter, Reddit, etc.).
 
 ### 1.2 Problème résolu
 
@@ -307,9 +307,9 @@ Liste toutes les URLs surveillées avec leur dernier statut de vérification.
 
 Variables clés :
 ```bash
-POSTGRES_USER=academiaops
+POSTGRES_USER=argos
 POSTGRES_PASSWORD=...
-POSTGRES_DB=academiaops
+POSTGRES_DB=argos
 DATABASE_URL=postgresql://...
 
 LLM_PROVIDER=aws          # aws | openai | anthropic
@@ -391,7 +391,7 @@ open http://localhost:3000
 ## 9. Points d'attention / Known issues
 
 - Le venv doit avoir Playwright installé (`playwright install chromium`)
-- La table `courses` a été supprimée (fork depuis VeilleOps) — ne pas l'utiliser
+- La table `courses` a été supprimée (fork depuis Argos) — ne pas l'utiliser
 - L'index RAG nécessite un rebuild après ajout de digests (`/api/v1/rag/index-all-items`)
 - L'ingestion du codebase dans RAG se fait via `POST /api/v1/admin/ingest-codebase` (header `X-Admin-Token`)
 - Le site monitor utilise SHA-256 sur le contenu texte extrait

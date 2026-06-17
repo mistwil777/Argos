@@ -1,5 +1,5 @@
 -- ============================================
--- AcademiaOps - Database Migration
+-- Argos - Database Migration
 -- Version: 1.3.0 -> 1.4.0
 -- Description: Add 'website'/'api' source types + workspace isolation enforcement
 -- ============================================

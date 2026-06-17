@@ -38,7 +38,7 @@ export const Sidebar = () => {
     <div className="flex h-screen w-64 flex-col bg-gray-900">
       {/* Logo */}
       <div className="flex h-16 items-center px-6 bg-gray-800">
-        <h1 className="text-xl font-bold text-white">VeilleOps</h1>
+        <h1 className="text-xl font-bold text-white">Argos</h1>
       </div>
       
       {/* Navigation */}

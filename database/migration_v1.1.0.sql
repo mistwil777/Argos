@@ -1,5 +1,5 @@
 -- ============================================
--- AcademiaOps - Database Migration
+-- Argos - Database Migration
 -- Version: 1.0.0 -> 1.1.0
 -- Description: Update schema for classifier agent
 -- ============================================

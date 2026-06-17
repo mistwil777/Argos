@@ -1,3 +1,3 @@
 """
-AcademiaOps MCP Tools Package
+Argos MCP Tools Package
 """

@@ -181,7 +181,7 @@ python3 -c "from sentence_transformers import SentenceTransformer; SentenceTrans
 
 # Copier cache dans volume Docker:
 docker cp ~/.cache/torch/sentence_transformers/models--sentence-transformers--all-MiniLM-L6-v2 \
-  academiaops-mcp-server:/data/lancedb/sentence_transformers/
+  argos-mcp-server:/data/lancedb/sentence_transformers/
 ```
 
 #### 🌐 Option B: Utiliser Miroir HuggingFace Alternatif
@@ -195,7 +195,7 @@ os.environ['HF_ENDPOINT'] = 'https://huggingface.co'  # Forcer endpoint alternat
 #### 🐛 Option C: Debug Réseau Docker
 ```bash
 # Vérifier DNS dans conteneur:
-docker exec academiaops-mcp-server nslookup cdn-lfs-us-1.huggingface.co
+docker exec argos-mcp-server nslookup cdn-lfs-us-1.huggingface.co
 
 # Tester avec DNS public (Google 8.8.8.8):
 docker-compose.yml:
@@ -298,7 +298,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 ### Test après installation:
 ```python
-docker exec academiaops-mcp-server python3 -c "
+docker exec argos-mcp-server python3 -c "
 from weasyprint import HTML
 html_content = '<html><body><h1>Test PDF</h1></body></html>'
 pdf = HTML(string=html_content).write_pdf()

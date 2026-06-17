@@ -1,6 +1,6 @@
 -- ============================================
--- OpenWebMCP - PostgreSQL Schema
--- Web browsing infrastructure for AI agents
+-- Argos - PostgreSQL Schema
+-- Tech watch and intelligence platform
 -- Version: 1.0.0
 -- ============================================
 
@@ -305,6 +305,6 @@ ORDER BY i.created_at DESC;
 INSERT INTO system_logs (level, component, event_type, message, context)
 VALUES (
     'INFO', 'database', 'schema_initialized',
-    'OpenWebMCP database schema initialized',
+    'Argos database schema initialized',
     jsonb_build_object('version', '1.0.0', 'timestamp', CURRENT_TIMESTAMP)
 );

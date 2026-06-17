@@ -2313,7 +2313,7 @@ async def admin_ingest_codebase(
     background_tasks: BackgroundTasks,
     x_admin_token: Optional[str] = Header(default=None)
 ):
-    """Index the entire VeilleOps codebase into the RAG vector store."""
+    """Index the entire Argos codebase into the RAG vector store."""
     _check_admin(x_admin_token)
 
     async def _run():

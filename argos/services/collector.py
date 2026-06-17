@@ -552,7 +552,7 @@ class CollectorService:
         def _fetch_single(url: str) -> _HTMLExtractor:
             resp = requests.get(
                 url,
-                headers={'User-Agent': 'Mozilla/5.0 (compatible; VeilleBot/1.0)'},
+                headers={'User-Agent': 'Mozilla/5.0 (compatible; ArgosBot/1.0)'},
                 timeout=20,
                 verify=False,
             )

@@ -2,7 +2,7 @@
 
 ## Vue d'ensemble
 
-Le système RAG d'AcademiaOps utilise une **recherche hybride** combinant :
+Le système RAG d'Argos utilise une **recherche hybride** combinant :
 - **Recherche sémantique** (embeddings + distance cosinus)
 - **Recherche lexicale** (Full-Text Search avec BM25)
 

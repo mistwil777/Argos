@@ -16,7 +16,7 @@ _vector_store_instance: Optional[VectorStoreService] = None
 def get_vector_store(
     db_path: str = None,
     model_name: str = None,
-    table_name: str = "academiaops_embeddings"
+    table_name: str = "argos_embeddings"
 ) -> VectorStoreService:
     """
     Get or create VectorStoreService singleton.

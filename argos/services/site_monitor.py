@@ -1,5 +1,5 @@
 """
-Site Monitor Service — AcademiaOps
+Site Monitor Service — Argos
 Surveille périodiquement des pages web pour détecter les nouveaux contenus
 et enrichir automatiquement la base de connaissance RAG.
 
@@ -32,7 +32,7 @@ from argos.database import DatabaseManager
 logger = logging.getLogger(__name__)
 
 # User-agent pour le scraping (poli)
-_UA = "Mozilla/5.0 (compatible; VeilleBot/1.0; +https://github.com/academiaops)"
+_UA = "Mozilla/5.0 (compatible; ArgosBot/1.0; +https://github.com/argos)"
 
 
 # ============================================================================
