@@ -161,7 +161,7 @@ Contactez le mainteneur pour coordonner (éviter les doublons).
 
 ## 📞 Besoin d'aide ?
 
-- **Problème technique** : [Ouvrir une Issue GitHub](https://github.com/<your-username>/argos/issues)
+- **Problème technique** : [Ouvrir une Issue GitHub](https://github.com/mistwil777/Argos/issues)
 - **Question sur la doc** : Même processus
 - **Suggestion d'amélioration** : Pull Request ou Issue avec le tag `documentation`
 
