@@ -22,10 +22,14 @@ Les agents IA ont besoin d'accéder à des informations fraîches sur le web. Le
 | `rag.rebuild_index()` | Reconstruit l'index RAG complet |
 | `rag.stats()` | Statistiques de l'index vectoriel |
 | `collector.fetch_rss` | Collecte depuis les sources RSS configurées |
+| `collector.fetch_apis` | Collecte depuis les sources API configurées |
 | `collector.fetch_all` | Collecte depuis toutes les sources actives |
 | `collector.get_stats` | Statistiques de collecte |
+| `collector.list_sources` | Liste toutes les sources configurées |
 | `classifier.classify(id)` | Classifie un article par LLM |
 | `classifier.classify_batch` | Classification par lot |
+| `classifier.stats` | Statistiques de classification |
+| `classifier.get_unclassified` | Liste les articles non classifiés |
 | `hello.world` | Health check du serveur MCP |
 
 ### Interface web (React)
@@ -34,6 +38,7 @@ Les agents IA ont besoin d'accéder à des informations fraîches sur le web. Le
 |---|---|---|
 | Dashboard | `/` | Vue d'ensemble — stats, activité récente, tendances |
 | Feed | `/feed` | Flux d'articles collectés avec filtres et lecture |
+| Browse | `/browse` | Navigation web headless via Playwright |
 | Library | `/library` | Bibliothèque RAG — documents ingérés, Q&A, export |
 | Briefing | `/briefing` | Digest quotidien généré par LLM |
 | Trends | `/trends` | Visualisation des tendances et topics sur le temps |
@@ -72,25 +77,34 @@ curl -X POST http://localhost:8000/rpc \
 argos/
 ├── argos/               # Backend FastAPI + JSON-RPC
 │   ├── services/
-│   │   ├── web_browser.py      # Playwright stealth
-│   │   ├── web_search.py       # SearXNG / DuckDuckGo / Bing
-│   │   ├── digest_generator.py # LLM → markdown + JSON
-│   │   ├── rag.py              # RAG hybride (LanceDB)
+│   │   ├── web_browser.py        # Playwright stealth
+│   │   ├── web_search.py         # SearXNG / DuckDuckGo / Bing
+│   │   ├── digest_generator.py   # LLM → markdown + JSON
+│   │   ├── rag.py                # RAG hybride (LanceDB)
+│   │   ├── bedrock_embeddings.py # Embeddings via AWS Bedrock Titan
 │   │   ├── document_extractor.py # PDF / HTML extraction
-│   │   ├── classifier.py       # Classification LLM
-│   │   └── collector.py        # RSS / GitHub / web
+│   │   ├── classifier.py         # Classification LLM
+│   │   ├── collector.py          # RSS / GitHub / web
+│   │   ├── site_monitor.py       # Surveillance de pages (watch)
+│   │   └── llm_provider.py       # Abstraction multi-provider LLM
 │   ├── tools/
-│   │   ├── web_tools.py        # Outils web (browse, digest, watch)
-│   │   └── rag_tools.py        # Outils RAG
+│   │   ├── web_tools.py          # Outils web (browse, digest, watch)
+│   │   ├── rag_tools.py          # Outils RAG
+│   │   ├── collector.py          # Outils collecte
+│   │   └── classifier.py         # Outils classification
 │   ├── api/
-│   │   └── router.py           # REST API frontend
-│   ├── server.py               # JSON-RPC server + tool registry
-│   └── config.py               # Configuration LLM / providers
+│   │   ├── router.py             # REST API frontend
+│   │   └── workspaces.py         # Gestion des workspaces
+│   ├── server.py                 # JSON-RPC server + tool registry
+│   └── config.py                 # Configuration LLM / providers
+├── mcp_server/          # Serveur MCP (Model Context Protocol)
 ├── frontend/            # React + Vite + shadcn/ui (dark mode)
-│   └── src/pages/       # Dashboard, Feed, Library, Briefing, Trends, …
+│   └── src/pages/       # Dashboard, Feed, Browse, Library, Briefing, Trends, …
+├── n8n/                 # Workflows n8n (HITL classification, génération cours)
 ├── config/
 │   └── searxng/         # Configuration SearXNG
-├── database/            # PostgreSQL schema + migrations
+├── database/            # PostgreSQL schema + seed
+├── migrations/          # Migrations de base de données
 └── docker-compose.yml
 ```
 
@@ -151,9 +165,13 @@ response = client.messages.create(
 | `DEFAULT_CLASSIFICATION_MODEL` | Modèle pour la classification | `us.amazon.nova-pro-v1:0` |
 | `AWS_ACCESS_KEY_ID` | Clé AWS (si `LLM_PROVIDER=aws`) | — |
 | `AWS_SECRET_ACCESS_KEY` | Secret AWS (si `LLM_PROVIDER=aws`) | — |
-| `AWS_REGION` | Région AWS | `us-east-1` |
+| `AWS_REGION` | Région AWS | `us-west-2` |
 | `OPENAI_API_KEY` | Clé OpenAI (si `LLM_PROVIDER=openai`) | — |
 | `ANTHROPIC_API_KEY` | Clé Anthropic (si `LLM_PROVIDER=anthropic`) | — |
+| `EMBEDDING_PROVIDER` | `bedrock` ou `sentence-transformers` | `bedrock` |
+| `BEDROCK_EMBEDDING_DIMENSIONS` | Dimensions des embeddings Bedrock Titan | `1024` |
+| `TELEGRAM_BOT_TOKEN` | Token bot Telegram (HITL) | — |
+| `TELEGRAM_ADMIN_CHAT_ID` | Chat ID admin Telegram | — |
 | `SEARXNG_URL` | URL interne SearXNG | `http://searxng:8080` |
 
 ## Documentation
