@@ -1,5 +1,5 @@
 -- ============================================
--- AcademiaOps - Seed Data
+-- Argos - Seed Data
 -- Test data for local development
 -- ============================================
 
@@ -172,7 +172,7 @@ INSERT INTO user_progress (
     started_at, last_accessed_at
 ) VALUES
 (
-    'demo@academiaops.com',
+    'demo@argos.local',
     1,
     'completed',
     100,
@@ -180,7 +180,7 @@ INSERT INTO user_progress (
     '2024-11-26 13:30:00+00'
 ),
 (
-    'demo@academiaops.com',
+    'demo@argos.local',
     2,
     'in_progress',
     35,
@@ -205,7 +205,7 @@ INSERT INTO rag_queries (
     was_helpful, user_feedback
 ) VALUES
 (
-    'demo@academiaops.com',
+    'demo@argos.local',
     'Comment créer un Tool MCP personnalisé ?',
     'Pour créer un Tool MCP personnalisé, vous devez définir trois éléments : un schéma d''input avec Pydantic pour valider les paramètres, la logique métier qui implémente la fonctionnalité du tool, et un schéma d''output pour structurer la réponse.',
     '[{"course_id": 2, "chapter": "Architecture d''un Tool MCP", "score": 0.91}]',

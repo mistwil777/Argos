@@ -1,13 +1,13 @@
-# AcademiaOps - Plan de Développement
+# Argos - Plan de Développement
 
 **Last Updated**: February 23, 2026  
-**Current Status**: Feature 2 Complete ✅ 
+**Current Status**: Feature 3 Complete ✅ 
 
 ---
 
 ## 🎯 Vision du Projet
 
-**AcademiaOps** est un système complet de veille technologique IA + génération de contenu pédagogique automatisé.
+**Argos** est un système complet de veille technologique IA + génération de contenu pédagogique automatisé.
 
 **Objectif final**: Automatiser la découverte, classification, transformation en contenus éducatifs et diffusion d'informations sur l'IA.
 
@@ -37,58 +37,12 @@
 - Cost tracking complet
 - Production-ready avec AWS Nova Pro
 
-**Résultats**: 5 items classifiés pour $0.0028 (~$0.0006/item)
+**Résultats**: 55 items classifiés pour $0.0386 (~$0.0007/item)
 
----
-
-## 🚀 Roadmap - Features Restantes
-
-### Feature 3: Course Generator Agent 🎓
-
-**Branche**: `feature/course-generator`  
-**Priorité**: HIGH  
-**Estimation**: 4-6 heures  
-**LLM**: Claude Sonnet 4 (via AWS Bedrock ou Anthropic direct)
-
-#### Objectif
-Générer automatiquement des cours pédagogiques structurés à partir d'items classifiés de haute importance.
-
-#### Fonctionnalités
-
-1. **Course Generation Service** (`mcp_server/services/course_generator.py`)
-   - Input: Item classifié (importance: high/critical)
-   - Output: Cours Markdown structuré
-   - Niveaux: beginner / intermediate / advanced
-   - Structure:
-     * Titre + metadata
-     * Introduction (contexte, pourquoi c'est important)
-     * Concepts clés (3-5 concepts avec explications)
-     * Exemples pratiques (code, diagrammes)
-     * Exercices (3 questions progressives)
-     * Ressources complémentaires
-     * Conclusion
-
-2. **MCP Tools**
-   - `course.generate` - Génère un cours à partir d'un item_id
-   - `course.list` - Liste les cours disponibles (filtres: level, subject, qa_score)
-   - `course.get` - Récupère un cours complet
-   - `course.quality_check` - Vérifie la qualité d'un cours (scoring 0-10)
-
-3. **Quality Assurance**
-   - Scoring automatique (JSON structure, section lengths, keyword coverage)
-   - Stockage des issues dans `courses.qa_issues` (JSONB)
-   - Flag `status`: draft / review / published / archived
-
-4. **Database**
-   - Utilise table `courses` existante (déjà dans schema)
-   - Champs: item_id, title, subject, level, content (Markdown), learning_objectives, prerequisites, qa_score, status
-
-#### Prompt Engineering
-```
-You are an expert technical educator specializing in AI and software engineering.
-
-Task: Create a comprehensive educational course based on the following article.
-
+### Feature 2.5: Data Collection ✅
+**Status**: Complete  
+**Date**: February 23, 2026  
+**Branch**: `feature/classifier-agent`
 Article:
 Title: {title}
 Summary: {summary}
@@ -453,7 +407,7 @@ TOTAL: ~2 semaines de dev
 
 ## 🏆 Success Criteria - MVP Final
 
-Un MVP complet d'AcademiaOps sera considéré prêt quand:
+Un MVP complet d'Argos sera considéré prêt quand:
 
 - [x] Feature 1: Infrastructure opérationnelle ✅
 - [x] Feature 2: Classification automatique ✅

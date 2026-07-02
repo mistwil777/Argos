@@ -133,7 +133,7 @@ IF ($json.error !== undefined)
     ↓ False: Continue normal flow
 ```
 
-**Point critique pour architecte IA** : Dans AcademiaOps, utilise **Continue On Fail** sur les collectes de sources (si Reddit est down, continuer avec HackerNews) et **Error Workflow** pour les appels critiques (MCP server).
+**Point critique pour architecte IA** : Dans Argos, utilise **Continue On Fail** sur les collectes de sources (si Reddit est down, continuer avec HackerNews) et **Error Workflow** pour les appels critiques (MCP server).
 
 ---
 
@@ -279,7 +279,7 @@ Si timeout dépassé → utiliser un système de callback ou polling.
 
 ---
 
-## 🔧 Configuration n8n pour AcademiaOps
+## 🔧 Configuration n8n pour Argos
 
 ### Variables d'environnement essentielles
 
@@ -317,7 +317,7 @@ n8n:
 
 ## 🎓 Ce que tu DOIS retenir
 
-### Pour être efficace dans AcademiaOps
+### Pour être efficace dans Argos
 
 1. **n8n = orchestrateur IO, pas cerveau** : La logique métier doit être dans ton MCP server
 2. **Batching is king** : Toujours grouper les appels LLM pour économiser
@@ -325,7 +325,7 @@ n8n:
 4. **Timeout = configuré** : Les LLM prennent du temps
 5. **Persister les workflows** : Utilise PostgreSQL backend pour n8n
 
-### Les 3 workflows critiques d'AcademiaOps
+### Les 3 workflows critiques d'Argos
 
 | Workflow | Trigger | Fréquence | Durée |
 |----------|---------|-----------|-------|

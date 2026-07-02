@@ -74,14 +74,14 @@ docker-compose logs mcp-server
 
 **Résultat attendu** :
 ```
-academiaops-mcp-server | INFO:     Started server process [1]
-academiaops-mcp-server | INFO:     Waiting for application startup.
-academiaops-mcp-server | INFO:     Starting AcademiaOps MCP Server...
-academiaops-mcp-server | INFO:     Environment: development
-academiaops-mcp-server | INFO:     Registered 1 tools
-academiaops-mcp-server | INFO:     MCP Server ready!
-academiaops-mcp-server | INFO:     Application startup complete.
-academiaops-mcp-server | INFO:     Uvicorn running on http://0.0.0.0:8000
+argos-mcp-server | INFO:     Started server process [1]
+argos-mcp-server | INFO:     Waiting for application startup.
+argos-mcp-server | INFO:     Starting Argos MCP Server...
+argos-mcp-server | INFO:     Environment: development
+argos-mcp-server | INFO:     Registered 1 tools
+argos-mcp-server | INFO:     MCP Server ready!
+argos-mcp-server | INFO:     Application startup complete.
+argos-mcp-server | INFO:     Uvicorn running on http://0.0.0.0:8000
 ```
 
 ✅ **Succès** si le serveur démarre sans erreur
@@ -101,7 +101,7 @@ docker-compose ps mcp-server
 **Résultat attendu** :
 ```
 NAME                      STATUS                    PORTS
-academiaops-mcp-server    Up 15 seconds (healthy)   0.0.0.0:8000->8000/tcp
+argos-mcp-server    Up 15 seconds (healthy)   0.0.0.0:8000->8000/tcp
 ```
 
 **Note** : Le statut doit être `(healthy)` et non `(health: starting)`
@@ -161,7 +161,7 @@ curl -X POST http://localhost:8000/rpc \
 
 ```bash
 # Tenter d'ouvrir un shell dans le conteneur
-docker exec -it academiaops-mcp-server /bin/sh
+docker exec -it argos-mcp-server /bin/sh
 ```
 
 **Résultat attendu** :
@@ -185,7 +185,7 @@ exec: "/bin/sh": stat /bin/sh: no such file or directory: unknown
 
 ```bash
 # Vérifier l'UID du processus
-docker exec academiaops-mcp-server python3 -c "import os; print(f'UID: {os.getuid()}')"
+docker exec argos-mcp-server python3 -c "import os; print(f'UID: {os.getuid()}')"
 ```
 
 **Résultat attendu** :

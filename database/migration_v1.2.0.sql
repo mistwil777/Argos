@@ -1,5 +1,5 @@
 -- ============================================
--- AcademiaOps - Database Migration
+-- Argos - Database Migration
 -- Version: 1.1.0 -> 1.2.0
 -- Description: Add LLM cost tracking to decisions table
 -- ============================================

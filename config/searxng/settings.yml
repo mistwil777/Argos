@@ -1,0 +1,63 @@
+# SearXNG settings for Argos
+use_default_settings: true
+
+server:
+  secret_key: "argos-searxng-secret-2026"
+  bind_address: "0.0.0.0"
+  port: 8080
+  base_url: false
+  image_proxy: false
+
+ui:
+  static_use_hash: false
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  default_lang: "auto"
+  formats:
+    - html
+    - json
+
+engines:
+  - name: google
+    engine: google
+    shortcut: g
+    disabled: false
+
+  - name: bing
+    engine: bing
+    shortcut: b
+    disabled: false
+
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: ddg
+    disabled: false
+
+  - name: arxiv
+    engine: arxiv
+    shortcut: arxiv
+    categories: science
+    disabled: false
+
+  - name: wikipedia
+    engine: wikipedia
+    shortcut: wp
+    disabled: false
+
+  - name: github
+    engine: github
+    shortcut: gh
+    disabled: false
+
+  - name: reddit
+    engine: reddit
+    shortcut: re
+    disabled: false
+
+outgoing:
+  request_timeout: 10.0
+  useragent_suffix: ""
+  max_request_timeout: 30.0
+  verify: false

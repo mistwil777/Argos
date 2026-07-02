@@ -1,6 +1,6 @@
 # ============================================
-# AcademiaOps - Docker Compose
-# Local Development Environment (Mac)
+# Argos - Docker Compose
+# Local Development Environment
 # ============================================
 
 services:
@@ -9,12 +9,12 @@ services:
   # ============================================
   postgres:
     image: postgres:16-alpine
-    container_name: academiaops-postgres
+    container_name: argos-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: academiaops
-      POSTGRES_USER: academiaops_user
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev_password_change_me}
+      POSTGRES_DB: ${POSTGRES_DB:-argos}
+      POSTGRES_USER: ${POSTGRES_USER:-argos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_INITDB_ARGS: "-E UTF8 --locale=en_US.UTF-8"
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -23,110 +23,109 @@ services:
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U academiaops_user -d academiaops"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-argos} -d ${POSTGRES_DB:-argos}"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - academiaops-network
+      - argos-network
 
   # ============================================
-  # n8n - Workflow Orchestration
+  # Argos Server - FastAPI + JSON-RPC
   # ============================================
-  n8n:
-    image: n8nio/n8n:latest
-    container_name: academiaops-n8n
-    restart: unless-stopped
-    environment:
-      - N8N_BASIC_AUTH_ACTIVE=true
-      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
-      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-admin_change_me}
-      - N8N_HOST=localhost
-      - N8N_PORT=5678
-      - N8N_PROTOCOL=http
-      - WEBHOOK_URL=http://localhost:5678/
-      - GENERIC_TIMEZONE=Europe/Paris
-      - DB_TYPE=postgresdb
-      - DB_POSTGRESDB_HOST=postgres
-      - DB_POSTGRESDB_PORT=5432
-      - DB_POSTGRESDB_DATABASE=academiaops
-      - DB_POSTGRESDB_USER=academiaops_user
-      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD:-dev_password_change_me}
-    volumes:
-      - n8n_data:/home/node/.n8n
-      - ./n8n/workflows:/home/node/.n8n/workflows:rw
-    ports:
-      - "5678:5678"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget --spider -q http://localhost:5678/healthz || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    networks:
-      - academiaops-network
-
-  # ============================================
-  # MCP Server - FastAPI + JSON-RPC
-  # ============================================
-  mcp-server:
+  argos-server:
     build:
       context: .
-      dockerfile: mcp_server/Dockerfile
-    container_name: academiaops-mcp-server
+      dockerfile: argos/Dockerfile
+    container_name: argos-server
     restart: unless-stopped
     environment:
       - ENVIRONMENT=development
-      - DATABASE_URL=postgresql://academiaops_user:${POSTGRES_PASSWORD:-dev_password_change_me}@postgres:5432/academiaops
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-argos}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-argos}
       - LANCEDB_PATH=/data/lancedb
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - LOG_LEVEL=INFO
       # LLM Provider Configuration
       - LLM_PROVIDER=${LLM_PROVIDER:-aws}
-      - DEFAULT_CLASSIFICATION_MODEL=${DEFAULT_CLASSIFICATION_MODEL:-us.amazon.nova-pro-v1:0}
+      - DEFAULT_DIGEST_MODEL=${DEFAULT_DIGEST_MODEL:-us.amazon.nova-pro-v1:0}
       # AWS Bedrock Configuration
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_REGION=${AWS_REGION:-us-east-1}
       - AWS_BEDROCK_MODEL=${AWS_BEDROCK_MODEL:-us.amazon.nova-pro-v1:0}
+      - DEFAULT_CLASSIFICATION_MODEL=${DEFAULT_CLASSIFICATION_MODEL:-us.amazon.nova-pro-v1:0}
+      - DEFAULT_DIGEST_MODEL=${DEFAULT_DIGEST_MODEL:-us.amazon.nova-pro-v1:0}
+      - ADMIN_TOKEN=${ADMIN_TOKEN}
+      # Cache directories for SentenceTransformer
+      - TRANSFORMERS_CACHE=/data/lancedb/transformers_cache
+      - SENTENCE_TRANSFORMERS_HOME=/data/lancedb/sentence_transformers
+      - HF_HOME=/data/lancedb/huggingface
+      # Playwright
+      - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+      - SEARXNG_URL=http://searxng:8080
     volumes:
-      - ./mcp_server:/app/mcp_server:ro
+      - ./argos:/app/argos:ro
       - ./config:/app/config:ro
+      - ./docs:/app/docs:ro
+      - ./database:/app/database:ro
+      - ./scripts:/app/scripts:ro
+      - .:/app/project_root:ro
       - lancedb_data:/data/lancedb
       - ./logs:/app/logs
+      - playwright_browsers:/ms-playwright
     ports:
       - "8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      # Distroless doesn't have curl/wget, use Python
       test: ["CMD", "/usr/bin/python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 60s
     networks:
-      - academiaops-network
+      - argos-network
+
+  # ============================================
+  # SearXNG - Moteur de recherche agrégateur
+  # ============================================
+  searxng:
+    image: searxng/searxng:latest
+    container_name: argos-searxng
+    restart: unless-stopped
+    environment:
+      - SEARXNG_SECRET_KEY=argos-searxng-secret-2026
+      - SEARXNG_BASE_URL=http://searxng:8080
+    volumes:
+      - ./config/searxng:/etc/searxng:rw
+    ports:
+      - "8888:8080"
+    networks:
+      - argos-network
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
 
 # ============================================
 # Networks
 # ============================================
 networks:
-  academiaops-network:
+  argos-network:
     driver: bridge
-    name: academiaops-network
+    name: argos-network
 
 # ============================================
 # Volumes
 # ============================================
 volumes:
   postgres_data:
-    name: academiaops-postgres-data
-  n8n_data:
-    name: academiaops-n8n-data
+    name: argos-postgres-data
   lancedb_data:
-    name: academiaops-lancedb-data
+    name: argos-lancedb-data
+  playwright_browsers:
+    name: argos-playwright-browsers

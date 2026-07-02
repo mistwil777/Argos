@@ -1,9 +1,9 @@
-# Cahier des Charges Technique - AcademiaOps
+# Cahier des Charges Technique - Argos
 ## Architecture et Spécifications Techniques
 
 **Version** : 1.0 MVP  
 **Date** : 20 février 2026  
-**Projet** : AcademiaOps
+**Projet** : Argos
 
 ---
 
@@ -46,7 +46,7 @@
 │                 │ HTTP calls                                     │
 │                 ▼                                                 │
 │  ┌─────────────────────────────────────────────────────────┐   │
-│  │         Serveur MCP "AcademiaOps" (Python)              │   │
+│  │         Serveur MCP "Argos" (Python)              │   │
 │  │  - Exposition de tools (JSON-RPC 2.0)                    │   │
 │  │  - Routage vers agents Agno                              │   │
 │  │  - Gestion du contexte et de l'état                      │   │
@@ -313,7 +313,7 @@ TOTAL estimé : ~2.5$/mois (large marge avant les 20€)
 
 ## 3. Composants détaillés
 
-### 3.1 Serveur MCP "AcademiaOps"
+### 3.1 Serveur MCP "Argos"
 
 **Rôle** : Exposer des tools structurés pour que n8n, le dashboard, ou d'autres clients puissent interagir avec la logique métier (agents Agno, bases de données).
 
@@ -705,7 +705,7 @@ Nodes :
    ↓
 4. HTTP Request (Telegram) → rapport quotidien
    - Message:
-     📊 Rapport quotidien AcademiaOps
+     📊 Rapport quotidien Argos
      
      Veille :
      - Items collectés : 15
@@ -776,7 +776,7 @@ Nodes :
 df -h / | tail -1 | awk '{print $5}' | sed 's/%//' > /tmp/disk_usage.txt
 if [ $(cat /tmp/disk_usage.txt) -gt 80 ]; then
   # Notification macOS
-  osascript -e 'display notification "Disk usage: $(cat /tmp/disk_usage.txt)%" with title "AcademiaOps"'
+  osascript -e 'display notification "Disk usage: $(cat /tmp/disk_usage.txt)%" with title "Argos"'
 fi
 ```
 
@@ -1101,9 +1101,9 @@ Structure :
 **.env (à la racine du projet)** :
 ```bash
 # PostgreSQL
-POSTGRES_USER=academiaops
+POSTGRES_USER=argos
 POSTGRES_PASSWORD=<généré avec pwgen 32>
-POSTGRES_DB=academiaops
+POSTGRES_DB=argos
 POSTGRES_HOST=postgres
 POSTGRES_PORT=5432
 
@@ -1135,24 +1135,24 @@ MCP_SERVER_PORT=8000
 ```yaml
 # docker-compose.yml (extrait)
 networks:
-  academiaops:
+  argos:
     driver: bridge
 
 services:
   postgres:
     networks:
-      - academiaops
+      - argos
     # Pas de ports exposés publiquement
   
   mcp-server:
     networks:
-      - academiaops
+      - argos
     ports:
       - "8000:8000"  # Exposition locale seulement (pas de 0.0.0.0)
   
   n8n:
     networks:
-      - academiaops
+      - argos
     ports:
       - "5678:5678"  # Mettre derrière Nginx + BasicAuth en prod
 ```
@@ -1293,7 +1293,7 @@ services:
   # ===================================
   postgres:
     image: postgres:16-alpine
-    container_name: academiaops-postgres
+    container_name: argos-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -1302,7 +1302,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
-      - academiaops
+      - argos
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
@@ -1315,7 +1315,7 @@ services:
   # ===================================
   n8n:
     image: n8nio/n8n:latest
-    container_name: academiaops-n8n
+    container_name: argos-n8n
     environment:
       - N8N_BASIC_AUTH_ACTIVE=true
       - N8N_BASIC_AUTH_USER=${N8N_USER}
@@ -1337,7 +1337,7 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - academiaops
+      - argos
     restart: unless-stopped
 
   # ===================================
@@ -1347,7 +1347,7 @@ services:
     build:
       context: ./mcp_server
       dockerfile: Dockerfile
-    container_name: academiaops-mcp
+    container_name: argos-mcp
     environment:
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
@@ -1367,7 +1367,7 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - academiaops
+      - argos
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -1383,7 +1383,7 @@ services:
     build:
       context: ./dashboard
       dockerfile: Dockerfile
-    container_name: academiaops-dashboard
+    container_name: argos-dashboard
     environment:
       - MCP_SERVER_URL=http://mcp-server:8000
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
@@ -1393,7 +1393,7 @@ services:
     depends_on:
       - mcp-server
     networks:
-      - academiaops
+      - argos
     restart: unless-stopped
 
 volumes:
@@ -1402,7 +1402,7 @@ volumes:
   lancedb_data:
 
 networks:
-  academiaops:
+  argos:
     driver: bridge
 ```
 
@@ -1459,8 +1459,8 @@ docker-compose --version
 **2. Cloner le projet**
 ```bash
 cd ~/Desktop  # ou autre emplacement de ton choix
-git clone https://github.com/<user>/academiaops.git
-cd academiaops
+git clone https://github.com/<user>/argos.git
+cd argos
 ```
 
 **3. Configurer les variables d'environnement**
@@ -1472,7 +1472,7 @@ nano .env  # Remplir les secrets
 **4. Initialiser la base de données**
 ```bash
 docker-compose up -d postgres
-docker-compose exec postgres psql -U academiaops -d academiaops -f /docker-entrypoint-initdb.d/init.sql
+docker-compose exec postgres psql -U argos -d argos -f /docker-entrypoint-initdb.d/init.sql
 ```
 
 **5. Lancer tous les services**
@@ -1498,16 +1498,16 @@ docker-compose logs -f mcp-server
 **Backup PostgreSQL (quotidien)** :
 ```bash
 # Cron job (tous les jours à 3h du matin)
-0 3 * * * docker-compose exec -T postgres pg_dump -U academiaops academiaops | gzip > /backups/academiaops_$(date +\%Y\%m\%d).sql.gz
+0 3 * * * docker-compose exec -T postgres pg_dump -U argos argos | gzip > /backups/argos_$(date +\%Y\%m\%d).sql.gz
 
 # Conserver seulement les 30 derniers jours
-find /backups -name "academiaops_*.sql.gz" -mtime +30 -delete
+find /backups -name "argos_*.sql.gz" -mtime +30 -delete
 ```
 
 **Backup LanceDB (hebdomadaire)** :
 ```bash
 # Cron job (tous les dimanches à 4h)
-0 4 * * 0 tar -czf /backups/lancedb_$(date +\%Y\%m\%d).tar.gz /var/lib/docker/volumes/academiaops_lancedb_data
+0 4 * * 0 tar -czf /backups/lancedb_$(date +\%Y\%m\%d).tar.gz /var/lib/docker/volumes/argos_lancedb_data
 
 # Conserver seulement les 8 dernières semaines
 find /backups -name "lancedb_*.tar.gz" -mtime +56 -delete
@@ -1516,7 +1516,7 @@ find /backups -name "lancedb_*.tar.gz" -mtime +56 -delete
 **Restauration** :
 ```bash
 # PostgreSQL
-gunzip < /backups/academiaops_20260220.sql.gz | docker-compose exec -T postgres psql -U academiaops -d academiaops
+gunzip < /backups/argos_20260220.sql.gz | docker-compose exec -T postgres psql -U argos -d argos
 
 # LanceDB
 docker-compose down mcp-server
@@ -1553,7 +1553,7 @@ class JSONFormatter(logging.Formatter):
         return json.dumps(log_data)
 
 # Usage
-logger = logging.getLogger("academiaops")
+logger = logging.getLogger("argos")
 logger.setLevel(logging.INFO)
 handler = logging.StreamHandler()
 handler.setFormatter(JSONFormatter())
@@ -1710,7 +1710,7 @@ print(results[["text", "metadata"]])
 
 ## 📝 Notes finales
 
-**Ce cahier des charges technique constitue le blueprint pour l'implémentation du projet AcademiaOps.**
+**Ce cahier des charges technique constitue le blueprint pour l'implémentation du projet Argos.**
 
 **Principes directeurs** :
 1. **Pragmatisme** : Choisir la solution la plus simple qui fonctionne

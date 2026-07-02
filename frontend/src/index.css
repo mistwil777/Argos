@@ -1,0 +1,278 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─────────────────────────────────────────────────────────────────────────
+   DESIGN SYSTEM — OpenWebMCP
+   Inspired by technical precision: dark ground, electric glows, grid fabric
+───────────────────────────────────────────────────────────────────────── */
+
+@layer base {
+  :root {
+    /* ── Ground ── */
+    --bg:         9 10% 4%;          /* #070809 almost black */
+    --bg-1:       220 18% 7%;        /* panels */
+    --bg-2:       220 15% 10%;       /* elevated panels */
+    --bg-3:       220 12% 13%;       /* hovered, inputs */
+
+    /* ── Borders ── */
+    --line:       220 10% 16%;       /* default border */
+    --line-bright:220 20% 24%;       /* hover border */
+
+    /* ── Type ── */
+    --text:       210 20% 96%;       /* near-white */
+    --text-2:     215 16% 58%;       /* secondary */
+    --text-3:     215 12% 38%;       /* tertiary / disabled */
+
+    /* ── Accent — electric indigo ── */
+    --accent:     235 85% 65%;       /* #5B6EF5 */
+    --accent-dim: 235 85% 65% / .12;
+    --accent-glow:235 85% 65% / .25;
+    --accent-line:235 85% 65% / .35;
+
+    /* ── Status ── */
+    --green:  142 70% 50%;
+    --amber:  38 92% 52%;
+    --red:    0 72% 58%;
+    --cyan:   186 80% 54%;
+    --violet: 262 80% 65%;
+
+    /* ── Aliases for Tailwind theme ── */
+    --background:   var(--bg);
+    --foreground:   var(--text);
+    --card:         var(--bg-1);
+    --card-foreground: var(--text);
+    --border:       var(--line);
+    --input:        var(--bg-3);
+    --ring:         var(--accent);
+    --primary:      var(--accent);
+    --primary-foreground: 220 100% 6%;
+    --secondary:    var(--bg-2);
+    --secondary-foreground: var(--text-2);
+    --muted:        var(--bg-2);
+    --muted-foreground: var(--text-2);
+    --accent-css:   var(--accent);
+    --accent-foreground: var(--text);
+    --radius: 0.5rem;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { height: 100%; }
+
+  body {
+    height: 100%;
+    background-color: hsl(var(--bg));
+    color: hsl(var(--text));
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    letter-spacing: -0.01em;
+  }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 3px; height: 3px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: hsl(var(--line-bright)); border-radius: 99px; }
+  ::selection { background: hsl(var(--accent-dim)); }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   DOT-GRID BACKGROUND — the fabric of the app
+───────────────────────────────────────────────────────────────────────── */
+.dot-grid {
+  background-image: radial-gradient(circle, hsl(220 15% 22% / .7) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   GLOW EFFECTS
+───────────────────────────────────────────────────────────────────────── */
+.glow-accent {
+  box-shadow:
+    0 0 0 1px hsl(var(--accent-line)),
+    0 0 16px -2px hsl(var(--accent-glow)),
+    0 0 40px -8px hsl(var(--accent-dim));
+}
+.glow-sm {
+  box-shadow: 0 0 10px -2px hsl(var(--accent-glow));
+}
+.text-glow {
+  text-shadow: 0 0 20px hsl(var(--accent) / .4), 0 0 40px hsl(var(--accent) / .15);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   PANEL — fundamental surface
+───────────────────────────────────────────────────────────────────────── */
+.panel {
+  background: hsl(var(--bg-1));
+  border: 1px solid hsl(var(--line));
+  border-radius: var(--radius);
+}
+.panel-raised {
+  background: hsl(var(--bg-2));
+  border: 1px solid hsl(var(--line));
+  border-radius: var(--radius);
+}
+/* top accent line variant */
+.panel-accent {
+  background: hsl(var(--bg-1));
+  border: 1px solid hsl(var(--line));
+  border-top: 1px solid hsl(var(--accent-line));
+  border-radius: var(--radius);
+  box-shadow: 0 0 20px -8px hsl(var(--accent-glow));
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   GRADIENT TEXT
+───────────────────────────────────────────────────────────────────────── */
+.text-gradient {
+  background: linear-gradient(135deg, hsl(var(--text)) 0%, hsl(var(--accent)) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.text-gradient-soft {
+  background: linear-gradient(135deg, hsl(var(--text)) 30%, hsl(var(--text-2)) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   PILL BADGE
+───────────────────────────────────────────────────────────────────────── */
+.pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10.5px; font-weight: 500; letter-spacing: 0.02em;
+  padding: 3px 8px; border-radius: 99px;
+}
+.pill-accent { background: hsl(var(--accent-dim)); color: hsl(var(--accent)); border: 1px solid hsl(var(--accent-line)); }
+.pill-green  { background: hsl(var(--green) / .12); color: hsl(var(--green)); border: 1px solid hsl(var(--green) / .25); }
+.pill-red    { background: hsl(var(--red) / .12);   color: hsl(var(--red));   border: 1px solid hsl(var(--red) / .25); }
+.pill-amber  { background: hsl(var(--amber) / .12); color: hsl(var(--amber)); border: 1px solid hsl(var(--amber) / .25); }
+.pill-muted  { background: hsl(var(--bg-3)); color: hsl(var(--text-2)); border: 1px solid hsl(var(--line)); }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   INPUT
+───────────────────────────────────────────────────────────────────────── */
+.input-field {
+  background: hsl(var(--bg-3));
+  border: 1px solid hsl(var(--line));
+  border-radius: var(--radius);
+  color: hsl(var(--text));
+  transition: border-color .15s, box-shadow .15s;
+}
+.input-field:focus-within {
+  border-color: hsl(var(--accent-line));
+  box-shadow: 0 0 0 3px hsl(var(--accent-dim));
+  outline: none;
+}
+.input-field::placeholder { color: hsl(var(--text-3)); }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   SEGMENTED CONTROL
+───────────────────────────────────────────────────────────────────────── */
+.seg {
+  background: hsl(var(--bg));
+  border: 1px solid hsl(var(--line));
+  border-radius: var(--radius);
+  padding: 3px;
+  display: inline-flex; gap: 2px;
+}
+.seg-item {
+  position: relative; padding: 5px 14px;
+  font-size: 12px; font-weight: 500;
+  border-radius: calc(var(--radius) - 2px);
+  color: hsl(var(--text-2));
+  cursor: pointer; user-select: none; transition: color .1s;
+}
+.seg-item:hover { color: hsl(var(--text)); }
+.seg-item.active { color: hsl(var(--text)); }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   SIDEBAR NAV ITEM
+───────────────────────────────────────────────────────────────────────── */
+.nav-item {
+  display: flex; align-items: center; gap: 9px;
+  padding: 7px 10px; border-radius: var(--radius);
+  font-size: 13.5px; font-weight: 500;
+  color: hsl(var(--text-2));
+  cursor: pointer; transition: color .1s, background .1s;
+  position: relative;
+}
+.nav-item:hover { color: hsl(var(--text)); background: hsl(var(--bg-2)); }
+.nav-item.active {
+  color: hsl(var(--accent));
+  background: hsl(var(--accent-dim));
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   SKELETON
+───────────────────────────────────────────────────────────────────────── */
+@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+.skeleton {
+  background: linear-gradient(90deg,
+    hsl(var(--bg-1)) 25%,
+    hsl(var(--bg-3)) 50%,
+    hsl(var(--bg-1)) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   PROSE (digest / assistant)
+───────────────────────────────────────────────────────────────────────── */
+.prose-app {
+  font-size: 13px; line-height: 1.75;
+  color: hsl(var(--text));
+}
+.prose-app h1,.prose-app h2,.prose-app h3 { font-weight: 700; margin: 1.2em 0 .4em; letter-spacing: -.02em; }
+.prose-app h1 { font-size: 1.05rem; }
+.prose-app h2 { font-size: .95rem; color: hsl(var(--text-2)); }
+.prose-app h3 { font-size: .875rem; color: hsl(var(--text-2)); }
+.prose-app p  { margin: .45em 0; }
+.prose-app ul,.prose-app ol { padding-left: 1.25em; margin: .4em 0; }
+.prose-app li { margin: .15em 0; }
+.prose-app a  { color: hsl(var(--accent)); text-decoration: underline; text-underline-offset: 2px; }
+.prose-app code {
+  font-family: 'Space Mono', monospace;
+  font-size: .8em;
+  background: hsl(var(--bg-3));
+  border: 1px solid hsl(var(--line));
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.prose-app pre {
+  font-family: 'Space Mono', monospace;
+  font-size: .78em;
+  background: hsl(var(--bg));
+  border: 1px solid hsl(var(--line));
+  border-radius: var(--radius);
+  padding: .875em 1em;
+  overflow-x: auto;
+  margin: .7em 0;
+}
+.prose-app pre code { background: none; border: none; padding: 0; }
+.prose-app blockquote {
+  border-left: 2px solid hsl(var(--accent-line));
+  padding-left: .875em;
+  color: hsl(var(--text-2));
+  font-style: italic;
+}
+.prose-app strong { font-weight: 700; }
+.prose-app hr { border: none; border-top: 1px solid hsl(var(--line)); margin: .8em 0; }
+.prose-app table { width: 100%; border-collapse: collapse; font-size: .8em; }
+.prose-app th,.prose-app td { padding: .35em .7em; border: 1px solid hsl(var(--line)); }
+.prose-app th { background: hsl(var(--bg-2)); font-weight: 600; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   MISC
+───────────────────────────────────────────────────────────────────────── */
+.mono { font-family: 'Space Mono', monospace; }
+.divider { height: 1px; background: hsl(var(--line)); }
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }

@@ -1,4 +1,4 @@
-# Architecture du Projet - AcademiaOps
+# Architecture du Projet - Argos
 ## Arborescence Complète et Explications
 
 **Version** : 1.0 MVP  
@@ -23,7 +23,7 @@ Le projet est organisé en **composants indépendants** qui communiquent via des
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                    RACINE DU PROJET                      │
-│                       academiaops/                       │
+│                       argos/                       │
 └─────────────────────────────────────────────────────────┘
                             │
         ┌───────────────────┼────────────────────┐
@@ -48,7 +48,7 @@ Le projet est organisé en **composants indépendants** qui communiquent via des
 ## 2. Arborescence complète
 
 ```
-academiaops/
+argos/
 │
 ├── .env                           # Variables d'environnement (SECRETS, NE PAS COMMIT)
 ├── .env.example                   # Template des variables d'environnement
@@ -255,7 +255,7 @@ academiaops/
 
 **Structure des guides pédagogiques** (proposition) :
 ```markdown
-# Guide MCP pour AcademiaOps
+# Guide MCP pour Argos
 
 ## 1. Qu'est-ce que MCP ?
 - Définition simple
@@ -272,7 +272,7 @@ academiaops/
 - Resources (données exposées)
 - Prompts (prompts paramétrables)
 
-## 4. Dans AcademiaOps
+## 4. Dans Argos
 - Comment on utilise MCP (n8n appelle MCP, dashboard appelle MCP)
 - Exemple concret : le tool `batch_classify_items` décortiqué
 - Code commenté ligne par ligne
@@ -384,10 +384,10 @@ import logging
 from tools import TOOLS_REGISTRY
 
 # Configuration du logger
-logger = logging.getLogger("academiaops")
+logger = logging.getLogger("argos")
 
 # Initialisation FastAPI
-app = FastAPI(title="AcademiaOps MCP Server", version="1.0.0")
+app = FastAPI(title="Argos MCP Server", version="1.0.0")
 
 # Modèles Pydantic pour JSON-RPC 2.0
 class MCPRequest(BaseModel):
@@ -506,7 +506,7 @@ from database.postgres import get_db
 from utils.llm_client import get_llm_client
 import logging
 
-logger = logging.getLogger("academiaops")
+logger = logging.getLogger("argos")
 
 # ============================================
 # Schémas d'input/output (contrat du tool)
@@ -675,7 +675,7 @@ from typing import List, Dict
 import json
 import logging
 
-logger = logging.getLogger("academiaops.agents.classifier")
+logger = logging.getLogger("argos.agents.classifier")
 
 class ClassifierAgent(Agent):
     """Agent spécialisé dans la classification de contenus techniques"""
@@ -834,7 +834,7 @@ from sqlalchemy.orm import sessionmaker
 from config import POSTGRES_URL
 import logging
 
-logger = logging.getLogger("academiaops.database")
+logger = logging.getLogger("argos.database")
 
 # ====================================
 # Configuration SQLAlchemy
@@ -1144,7 +1144,7 @@ export async function validateItem(
 
 set -e  # Arrêter si erreur
 
-echo "🚀 Déploiement AcademiaOps..."
+echo "🚀 Déploiement Argos..."
 
 # 1. Pull dernières modifications
 git pull origin main

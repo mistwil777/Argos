@@ -283,7 +283,7 @@ class AnalyzeArticleSkill(Skill):
 
 ---
 
-## 🚀 Les 6 Agents d'AcademiaOps
+## 🚀 Les 6 Agents d'Argos
 
 ### 1. Agent Classifier
 
@@ -569,7 +569,7 @@ LLM / DB / API (Outils)
 4. **Teams pour workflows complexes** : Séquentiel ou parallèle selon le besoin
 5. **LLM = Outil, pas agent** : L'agent décide, le LLM exécute
 
-### Les 6 agents d'AcademiaOps
+### Les 6 agents d'Argos
 
 | Agent | Rôle | Skills clés | LLM |
 |-------|------|-------------|-----|

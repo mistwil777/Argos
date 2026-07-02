@@ -1,6 +1,6 @@
-# 📚 Documentation AcademiaOps
+# 📚 Documentation Argos
 
-Bienvenue dans la documentation complète du projet AcademiaOps !
+Bienvenue dans la documentation complète du projet Argos !
 
 ---
 
@@ -19,7 +19,7 @@ Bienvenue dans la documentation complète du projet AcademiaOps !
 | Synthèse | Temps | Description |
 |----------|-------|-------------|
 | [📕 Synthèse MCP](synthese_mcp.md) | 10 min | Le protocole MCP, JSON-RPC 2.0, design de Tools |
-| [📔 Synthèse Agno + Skills](synthese_agno.md) | 12 min | Multi-agents, composition par Skills, les 6 agents d'AcademiaOps |
+| [📔 Synthèse Agno + Skills](synthese_agno.md) | 12 min | Multi-agents, composition par Skills, les 6 agents d'Argos |
 | [📓 Synthèse n8n](synthese_n8n.md) | 8 min | Workflows, nodes, patterns pour systèmes IA |
 | [📖 Guide de lecture](guide_lecture_syntheses.md) | - | Comment lire les synthèses + exercices pratiques |
 
@@ -161,7 +161,7 @@ Contactez le mainteneur pour coordonner (éviter les doublons).
 
 ## 📞 Besoin d'aide ?
 
-- **Problème technique** : [Ouvrir une Issue GitHub](https://github.com/<your-username>/academiaops/issues)
+- **Problème technique** : [Ouvrir une Issue GitHub](https://github.com/mistwil777/Argos/issues)
 - **Question sur la doc** : Même processus
 - **Suggestion d'amélioration** : Pull Request ou Issue avec le tag `documentation`
 

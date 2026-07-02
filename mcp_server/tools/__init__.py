@@ -1,3 +1,0 @@
-"""
-AcademiaOps MCP Tools Package
-"""

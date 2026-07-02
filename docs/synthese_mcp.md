@@ -97,7 +97,7 @@ Un **resource** expose des données en lecture seule (comme une API GET).
 **Exemple** :
 ```json
 {
-  "uri": "academiaops://courses/list",
+  "uri": "argos://courses/list",
   "name": "Liste des cours disponibles",
   "mimeType": "application/json"
 }
@@ -105,10 +105,10 @@ Un **resource** expose des données en lecture seule (comme une API GET).
 
 **Usage** : Un LLM peut demander les resources disponibles, puis les lire pour enrichir son contexte.
 
-**Dans AcademiaOps** :
-- `academiaops://items/pending` : Liste des items en attente de validation
-- `academiaops://courses/topics` : Liste des sujets de cours
-- `academiaops://stats/monthly` : Stats du mois
+**Dans Argos** :
+- `argos://items/pending` : Liste des items en attente de validation
+- `argos://courses/topics` : Liste des sujets de cours
+- `argos://stats/monthly` : Stats du mois
 
 ---
 
@@ -130,7 +130,7 @@ Un **prompt** est un template paramétrable.
 
 **Usage** : Le client appelle `prompts/get` avec `{"tech1": "MCP", "tech2": "LangGraph"}` et reçoit un prompt complet.
 
-**Point critique** : Dans AcademiaOps, on utilise principalement les **Tools**, mais les Prompts sont utiles pour des patterns de questions récurrentes.
+**Point critique** : Dans Argos, on utilise principalement les **Tools**, mais les Prompts sont utiles pour des patterns de questions récurrentes.
 
 ---
 
@@ -199,7 +199,7 @@ MCP utilise **JSON-RPC 2.0** comme transport.
 
 ---
 
-## 🏗️ Architecture MCP d'AcademiaOps
+## 🏗️ Architecture MCP d'Argos
 
 ### La stack complète
 
@@ -365,7 +365,7 @@ async def generate_course(input_data: dict) -> dict:
 
 ---
 
-## 🚀 Implémentation dans AcademiaOps
+## 🚀 Implémentation dans Argos
 
 ### Structure du serveur MCP
 
@@ -374,7 +374,7 @@ async def generate_course(input_data: dict) -> dict:
 from fastapi import FastAPI
 from tools import TOOLS_REGISTRY
 
-app = FastAPI(title="AcademiaOps MCP Server")
+app = FastAPI(title="Argos MCP Server")
 
 @app.post("/mcp/v1/tools/execute")
 async def execute_tool(request: MCPRequest):
@@ -501,7 +501,7 @@ except ValidationError as e:
 4. **Pydantic pour validation** : Schémas auto-documentés, validation automatique
 5. **Gestion d'erreurs explicite** : Codes d'erreur standards + customs
 
-### Les 5 tools critiques d'AcademiaOps
+### Les 5 tools critiques d'Argos
 
 | Tool | Description | Appelé par |
 |------|-------------|------------|
