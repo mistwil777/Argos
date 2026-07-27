@@ -293,7 +293,7 @@ export default function Feed() {
     if (!manualUrl.trim()) return
     setAddingUrl(true)
     try {
-      const item = await api.addManualUrl(manualUrl)
+      const item = await api.addManualUrl(manualUrl, 1)
       await load(true)
       setManualUrl('')
       setUrlLookup(null)

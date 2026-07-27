@@ -2552,7 +2552,13 @@ async def get_recent_activity(
 _DOC_SYSTEM = """Tu es un expert en veille technologique et rédaction structurée.
 Génère un document professionnel en français, bien structuré en markdown.
 Utilise des exemples concrets, des analogies, des listes numérotées quand pertinent.
-Ne fabrique pas d'informations qui ne sont pas dans les sources fournies."""
+Ne fabrique pas d'informations qui ne sont pas dans les sources fournies.
+
+RÈGLES ABSOLUES :
+- Si l'utilisateur demande une longueur minimale (ex: "10 pages", "5000 mots"), tu DOIS respecter cette contrainte. Un refus ou un raccourci est inacceptable.
+- Si l'utilisateur demande un angle spécifique (ex: "pour dev IA", "avec exemples concrets"), TOUS les exemples et explications doivent adopter cet angle.
+- Développe chaque section en profondeur — ne te contente pas de lister des points, explique, illustre avec du code ou des scénarios réels.
+- Un "exemple pratique" = au minimum un bloc de code ou un scénario étape par étape, pas une phrase descriptive."""
 
 _DOC_PROMPTS = {
     "fiche": """Génère une fiche de veille concise à partir des sources suivantes.
@@ -2600,7 +2606,13 @@ Structure obligatoire :
 
     "guide": """Génère un guide pratique et opérationnel à partir des sources suivantes.
 
-THÈME : {prompt}
+CONTRAINTES PRIORITAIRES (non négociables) :
+- Respecte STRICTEMENT la longueur demandée dans les instructions utilisateur. Si "10 pages" est demandé, génère au moins 10 pages de contenu dense.
+- Chaque étape doit contenir au moins un exemple concret (bloc de code, commande, scénario réel).
+- Ne résume pas — développe en profondeur chaque concept avec contexte, explication et illustration.
+- Ne fabrique AUCUNE information absente des sources.
+
+THÈME ET INSTRUCTIONS : {prompt}
 
 SOURCES :
 {sources}
@@ -2613,13 +2625,13 @@ Structure obligatoire :
 (ce qu'il faut savoir ou avoir avant de commencer)
 
 ## Étapes
-(étapes numérotées, avec exemples de code ou commandes si pertinent)
+(étapes numérotées, avec exemples de code ou commandes extraits des sources)
 
 ## Pièges à éviter
-(erreurs fréquentes et comment les éviter)
+(erreurs fréquentes et comment les éviter, tirés des sources)
 
 ## Pour aller plus loin
-(ressources complémentaires)
+(ressources complémentaires mentionnées dans les sources)
 
 ## Sources
 (liste des titres avec URLs)""",
@@ -2651,7 +2663,7 @@ Structure obligatoire :
 (liste complète des sources utilisées)"""
 }
 
-_MAX_TOKENS = {"fiche": 1500, "synthese": 3500, "guide": 3500, "rapport": 4500}
+_MAX_TOKENS = {"fiche": 1500, "synthese": 4000, "guide": 8000, "rapport": 8000}
 
 
 @api_router.post("/documents/{doc_id}/ai-edit")
@@ -2718,7 +2730,9 @@ async def generate_document(data: Dict[str, Any]):
     """Generate a document from selected items + free prompt. Does NOT save."""
     try:
         doc_type = data.get("doc_type", "fiche")
-        prompt = (data.get("prompt") or data.get("title") or "").strip()
+        title = (data.get("title") or "").strip()
+        instructions = (data.get("prompt") or "").strip()
+        prompt = f"{title}\n\nINSTRUCTIONS UTILISATEUR : {instructions}" if instructions else title
         item_ids = data.get("item_ids") or []
 
         if doc_type not in _DOC_PROMPTS:
@@ -2744,16 +2758,28 @@ async def generate_document(data: Dict[str, Any]):
             with db.get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
-                        "SELECT id, title, summary, url FROM items WHERE id = ANY(%s) ORDER BY importance DESC NULLS LAST",
+                        "SELECT id, title, summary, url, digest_markdown FROM items WHERE id = ANY(%s) ORDER BY importance DESC NULLS LAST",
                         (item_ids,)
                     )
                     rows = cur.fetchall()
+            from argos.services.web_browser import browse_with_requests
+            import asyncio as _asyncio
             parts = []
             for r in rows:
                 title_s = r[1] or ""
-                summary_s = (r[2] or "")[:600]
                 url_s = r[3] or ""
-                parts.append(f"### {title_s}\n{summary_s}\nURL: {url_s}")
+                # Try to fetch full content, fall back to digest then summary
+                try:
+                    if url_s and not url_s.startswith("upload://") and not url_s.lower().endswith(".pdf"):
+                        result = await browse_with_requests(url_s)
+                        content_s = result.get("content", "")[:8000]
+                    else:
+                        content_s = ""
+                except Exception:
+                    content_s = ""
+                if not content_s:
+                    content_s = (r[4] or r[2] or "")[:5000]
+                parts.append(f"### {title_s}\nURL: {url_s}\n\n{content_s}")
             sources_text = "\n\n".join(parts)
 
         user_prompt = _DOC_PROMPTS[doc_type].format(
@@ -2761,11 +2787,23 @@ async def generate_document(data: Dict[str, Any]):
             sources=sources_text or "Aucune source — génère à partir du thème uniquement."
         )
 
+        # Compute max_tokens: honour explicit page/word request from user, else use default
+        import re as _re
+        dynamic_max_tokens = _MAX_TOKENS[doc_type]
+        pages_match = _re.search(r'(\d+)\s*pages?', instructions, _re.IGNORECASE)
+        words_match = _re.search(r'(\d+)\s*mots?', instructions, _re.IGNORECASE)
+        if pages_match:
+            requested_pages = int(pages_match.group(1))
+            dynamic_max_tokens = max(dynamic_max_tokens, requested_pages * 600)
+        elif words_match:
+            requested_words = int(words_match.group(1))
+            dynamic_max_tokens = max(dynamic_max_tokens, int(requested_words * 1.4))
+
         markdown, usage = await llm.generate(
             prompt=user_prompt,
             system_prompt=_DOC_SYSTEM,
             temperature=0.75,
-            max_tokens=_MAX_TOKENS[doc_type],
+            max_tokens=dynamic_max_tokens,
             top_p=0.9,
         )
 

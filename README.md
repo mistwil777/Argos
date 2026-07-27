@@ -39,7 +39,7 @@ Les agents IA ont besoin d'accéder à des informations fraîches sur le web. Le
 | Dashboard | `/` | Vue d'ensemble — stats, activité récente, tendances |
 | Feed | `/feed` | Flux d'articles collectés avec filtres et lecture |
 | Browse | `/browse` | Navigation web headless via Playwright |
-| Library | `/library` | Bibliothèque RAG — documents ingérés, Q&A, export |
+| Library | `/library` | Bibliothèque de documents générés — sauvegarde, recherche, édition IA |
 | Briefing | `/briefing` | Digest quotidien généré par LLM |
 | Trends | `/trends` | Visualisation des tendances et topics sur le temps |
 | Assistant | `/assistant` | Chat avec l'assistant IA sur votre corpus |
@@ -63,7 +63,8 @@ cp .env.example .env
 docker compose up -d
 
 # 3. Accéder à l'interface
-open http://localhost:3000
+open http://localhost:8000   # backend API
+open http://localhost:5174   # frontend React (dev)
 
 # 4. Tester un outil MCP
 curl -X POST http://localhost:8000/rpc \
@@ -103,8 +104,10 @@ argos/
 ├── n8n/                 # Workflows n8n (HITL classification, génération cours)
 ├── config/
 │   └── searxng/         # Configuration SearXNG
-├── database/            # PostgreSQL schema + seed
-├── migrations/          # Migrations de base de données
+├── database/            # PostgreSQL schema + migrations (init.sql, migration_v*.sql)
+│   ├── init.sql
+│   ├── migration_v1.*.sql
+│   └── seed.sql
 └── docker-compose.yml
 ```
 
@@ -112,10 +115,26 @@ argos/
 
 | Service | Port | Description |
 |---|---|---|
-| `frontend` | 3000 | Interface React |
 | `argos-server` | 8000 | API FastAPI + JSON-RPC |
 | `postgres` | 5432 | Base de données principale |
 | `searxng` | 8888 | Moteur de recherche agrégateur (auto-hébergé) |
+
+> Le frontend React n'est pas dans Docker en développement. Lancer avec `cd frontend && npm run dev -- --port 5174`.
+
+## Génération de documents
+
+La page Library permet de générer des documents structurés à partir des articles collectés.
+
+| Type | Description | `max_tokens` par défaut |
+|---|---|---|
+| Fiche de veille | 1 page — résumé + points clés + importance | 1 500 |
+| Synthèse thématique | 3-5 pages — sections par thème + tendances | 4 000 |
+| Guide pratique | Variable — étapes + exemples + pièges | 8 000 |
+| Rapport de veille | 5-10 pages — analyse + tendances + recommandations | 8 000 |
+
+Le champ **Thème / Instructions** accepte des contraintes de longueur en langage naturel (`"au moins 10 pages"`, `"5000 mots"`). Le backend parse ces contraintes et ajuste `max_tokens` dynamiquement — la demande utilisateur est toujours prioritaire sur le défaut.
+
+Le contenu généré est basé sur le vrai contenu des pages fetchées via Playwright, pas uniquement sur les résumés stockés.
 
 ## Intégration avec un agent Claude
 
