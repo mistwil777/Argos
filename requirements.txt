@@ -18,7 +18,7 @@ sentence-transformers==2.3.1
 
 # LLM providers
 openai==1.12.0
-anthropic==0.18.1
+anthropic>=0.40.0
 boto3==1.34.34
 
 # Web browsing & scraping

@@ -5,7 +5,8 @@ Provides REST endpoints alongside the existing JSON-RPC interface.
 """
 
 from fastapi import APIRouter, HTTPException, Query, BackgroundTasks, UploadFile, File, Form, Header
-from typing import Optional, Dict, Any
+from fastapi.responses import StreamingResponse
+from typing import Optional, Dict, Any, AsyncGenerator
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -3639,3 +3640,109 @@ async def get_today_briefing():
     except Exception as e:
         logger.error(f"Error fetching today briefing: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===========================================
+# RAG Streaming (SSE)
+# ===========================================
+
+@api_router.post("/rag/ask/stream")
+async def rag_ask_stream(request: Dict[str, Any]):
+    """
+    SSE endpoint — stream la réponse RAG token par token.
+    Format : data: <token>\n\n
+    Événements spéciaux : data: [SOURCES]<json>\n\n  puis  data: [DONE]\n\n
+    """
+    query = request.get("query", "").strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="Query is required")
+    if not settings.anthropic_api_key:
+        raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY non configurée")
+
+    workspace_id_raw = request.get("workspace_id")
+    workspace_id = int(workspace_id_raw) if workspace_id_raw is not None else None
+    use_hybrid = request.get("use_hybrid_search", True)
+
+    async def event_stream() -> AsyncGenerator[str, None]:
+        import json
+        import asyncio
+        from argos.services.rag import RAGService, RAG_SYSTEM_PROMPT, RAG_USER_PROMPT_TEMPLATE
+        from argos.services.vector_store_singleton import get_vector_store
+
+        try:
+            # ── 1. Retrieve (synchronous, run in thread) ─────────────────
+            vs = get_vector_store()
+            if use_hybrid:
+                search_results = await asyncio.to_thread(
+                    vs.hybrid_search, query=query, limit=8, workspace_id=workspace_id
+                )
+            else:
+                search_results = await asyncio.to_thread(
+                    vs.search, query=query, limit=8, workspace_id=workspace_id
+                )
+
+            if not search_results:
+                yield "data: Je n'ai pas trouvé d'informations pertinentes dans la base de connaissances.\n\n"
+                yield "data: [DONE]\n\n"
+                return
+
+            # ── 2. Build prompt ──────────────────────────────────────────
+            rag_svc = RAGService(
+                llm_provider=None, vector_store=vs, db_manager=db, top_k=8
+            )
+            sources_text, sources_list = rag_svc._format_sources(search_results)
+            user_prompt = RAG_USER_PROMPT_TEMPLATE.format(
+                sources=sources_text, query=query
+            )
+
+            # ── 3. Envoyer les sources d'abord ───────────────────────────
+            yield f"data: [SOURCES]{json.dumps(sources_list, ensure_ascii=False)}\n\n"
+
+            # ── 4. Stream Claude ─────────────────────────────────────────
+            import anthropic
+            client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+
+            full_answer = []
+            async with client.messages.stream(
+                model="claude-opus-4-5",
+                max_tokens=2500,
+                system=RAG_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": user_prompt}],
+            ) as stream:
+                async for text in stream.text_stream:
+                    full_answer.append(text)
+                    # Échapper les newlines pour SSE
+                    escaped = text.replace("\n", "\\n")
+                    yield f"data: {escaped}\n\n"
+
+            yield "data: [DONE]\n\n"
+
+            # ── 5. Log en background ─────────────────────────────────────
+            answer = "".join(full_answer)
+            try:
+                usage = (await stream.get_final_message()).usage
+                tokens_used = usage.input_tokens + usage.output_tokens
+                cost_usd = tokens_used * 0.000015  # approximation claude-opus
+                with db.get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("""
+                            INSERT INTO rag_queries (query, answer, sources, tokens_used, cost_usd)
+                            VALUES (%s, %s, %s::jsonb, %s, %s)
+                        """, (query, answer, json.dumps(sources_list), tokens_used, cost_usd))
+                        conn.commit()
+            except Exception as log_err:
+                logger.warning(f"[SSE] Log RAG query failed : {log_err}")
+
+        except Exception as e:
+            logger.error(f"[SSE] Erreur stream RAG : {e}", exc_info=True)
+            yield f"data: [ERROR]{str(e)}\n\n"
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
