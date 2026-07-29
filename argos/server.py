@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ValidationError
 
 from argos.config import settings
-from argos.api import api_router
+from argos.api import api_router, veille_router
 
 
 # ============================================
@@ -52,6 +52,7 @@ app.add_middleware(
 # REST API Router
 # ============================================
 app.include_router(api_router)
+app.include_router(veille_router)
 
 
 # ============================================
@@ -518,65 +519,22 @@ async def startup_event():
     except Exception as exc:
         logger.warning(f"VectorStore warmup could not be scheduled: {exc}")
 
-    # ---- Site Monitor Scheduler ----
+    # ---- Site Monitor (intégré dans APScheduler via site_monitor.py) ----
     try:
         from argos.services.site_monitor import init_site_monitor
         monitor = init_site_monitor(db_manager=api_db, dashboard_url="http://localhost:3000")
         await monitor.start_scheduler(poll_interval_seconds=60)
-        logger.info("Site monitor scheduler started")
+        logger.info("Site monitor démarré")
     except Exception as exc:
-        logger.warning(f"Site monitor not started: {exc}")
+        logger.warning(f"Site monitor non démarré : {exc}")
 
-    # ---- Daily Briefing Scheduler ----
+    # ---- APScheduler — remplace toutes les boucles asyncio ad-hoc ----
     try:
-        import asyncio as _asyncio
+        from argos.services.scheduler import start_scheduler
         from argos.config import settings as _settings
-
-        async def _daily_briefing_job():
-            """Generate daily briefing at configured hour (default 7:00)."""
-            import datetime as _dt
-            briefing_hour = int(getattr(_settings, 'briefing_hour', 7))
-            logger.info(f"Daily briefing scheduler started — fires at {briefing_hour:02d}:00 daily")
-            while True:
-                now = _dt.datetime.now()
-                next_run = now.replace(hour=briefing_hour, minute=0, second=0, microsecond=0)
-                if now >= next_run:
-                    next_run += _dt.timedelta(days=1)
-                wait_seconds = (next_run - now).total_seconds()
-                logger.info(f"Next briefing in {wait_seconds/3600:.1f}h (at {next_run.strftime('%H:%M')})")
-                await _asyncio.sleep(wait_seconds)
-                try:
-                    from argos.api.router import db as _db
-                    from argos.api.router import _generate_briefing_content
-                    import json as _json
-                    import datetime as _dt2
-                    today = _dt2.date.today()
-                    result = await _generate_briefing_content(hours=24)
-                    if "error" not in result:
-                        with _db.get_connection() as conn:
-                            with conn.cursor() as cur:
-                                cur.execute(
-                                    """INSERT INTO daily_briefings
-                                       (briefing_date, executive_summary, top_items, trends, stats, tokens_used, cost_usd)
-                                       VALUES (%s,%s,%s::jsonb,%s::jsonb,%s::jsonb,%s,%s)
-                                       ON CONFLICT (briefing_date) DO NOTHING""",
-                                    (today, result["markdown"],
-                                     _json.dumps(result["top_items"]),
-                                     _json.dumps(result["trends"]),
-                                     _json.dumps(result["stats"]),
-                                     result["tokens_used"], result["cost_usd"])
-                                )
-                                conn.commit()
-                        logger.info(f"Daily briefing generated for {today}")
-                    else:
-                        logger.warning(f"Briefing skipped: {result.get('message')}")
-                except Exception as e:
-                    logger.error(f"Daily briefing generation failed: {e}", exc_info=True)
-
-        _asyncio.ensure_future(_daily_briefing_job())
-        logger.info("Daily briefing scheduler started")
+        await start_scheduler(database_url=_settings.database_url)
     except Exception as exc:
-        logger.warning(f"Daily briefing scheduler not started: {exc}")
+        logger.warning(f"APScheduler non démarré : {exc}")
 
     logger.info("Argos Server ready!")
 
@@ -585,13 +543,19 @@ async def startup_event():
 async def shutdown_event():
     logger.info("Shutting down Argos Server...")
 
-    # Arrêter le scheduler de surveillance
+    # Arrêter APScheduler
+    try:
+        from argos.services.scheduler import stop_scheduler
+        stop_scheduler()
+    except Exception:
+        pass
+
+    # Arrêter le site monitor
     try:
         from argos.services.site_monitor import get_site_monitor
         monitor = get_site_monitor()
         if monitor:
             monitor.stop_scheduler()
-            logger.info("Site monitor scheduler arrêté")
     except Exception:
         pass
 

@@ -32,76 +32,9 @@ db = DatabaseManager(settings.database_url)
 # ===========================================
 
 async def _auto_collect_and_classify(source_id: int):
-    """Background task: collect items from a source then classify them all."""
-    try:
-        with db.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT id, name, url, type, workspace_id FROM sources WHERE id = %s AND active = TRUE",
-                    (source_id,)
-                )
-                row = cur.fetchone()
-                if not row:
-                    return
-                src_id, src_name, src_url, src_type, src_wid = row
-
-        from argos.services.collector import CollectorService
-        collector = CollectorService(db_manager=db)
-
-        items = []
-        if src_type == 'rss':
-            config = {"url": src_url, "name": src_name or src_url, "enabled": True}
-            items = collector.fetch_rss_feed(config)
-            for i in items:
-                i.update({'workspace_id': src_wid, 'source_url': src_url})
-        elif src_type == 'website':
-            items = collector.fetch_website_page(src_url, workspace_id=src_wid)
-        elif src_type == 'github':
-            config = {"type": "github", "url": src_url, "name": src_name or src_url, "enabled": True}
-            items = collector.fetch_github_repos(config)
-            for i in items:
-                i.update({'workspace_id': src_wid, 'source_url': src_url})
-        else:
-            logger.warning(f"[auto-collect] source type '{src_type}' not supported")
-            return
-
-        inserted, duplicates = collector.insert_items(items)
-        logger.info(f"[auto-collect] source={source_id} fetched={len(items)} inserted={inserted} duplicates={duplicates}")
-
-        # Fetch all pending items from this source URL and classify them
-        with db.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT id FROM items WHERE source_url = %s AND classification_status = 'pending'",
-                    (src_url,)
-                )
-                pending_ids = [r[0] for r in cur.fetchall()]
-
-        if not pending_ids:
-            logger.info(f"[auto-classify] no pending items for source={source_id}")
-            return
-
-        from argos.services.classifier import ClassifierService
-        llm_provider = create_llm_provider(
-            provider_type=settings.llm_provider,
-            openai_api_key=settings.openai_api_key,
-            aws_access_key_id=settings.aws_access_key_id,
-            aws_secret_access_key=settings.aws_secret_access_key,
-            aws_region=settings.aws_region,
-            model=settings.default_classification_model
-        )
-        classifier = ClassifierService(llm_provider=llm_provider, db_manager=db, temperature=0.5, max_tokens=800)
-
-        logger.info(f"[auto-classify] classifying {len(pending_ids)} items for source={source_id}")
-        for item_id in pending_ids:
-            try:
-                await classifier.classify_item(item_id)
-                logger.info(f"[auto-classify] item={item_id} classified")
-            except Exception as e:
-                logger.error(f"[auto-classify] item={item_id} failed: {e}")
-
-    except Exception as e:
-        logger.error(f"[auto-collect-classify] source={source_id} error={e}", exc_info=True)
+    """Background task: pipeline complet collect → classify → score → digest → RAG."""
+    from argos.services.pipeline import run_pipeline_for_source
+    await run_pipeline_for_source(source_id)
 
 
 # ===========================================

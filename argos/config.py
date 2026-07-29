@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     # ============================================
     database_url: str = Field(
         default="postgresql://argos:password@localhost:5432/argos",
-        validation_alias=AliasChoices('database_url', 'POSTGRES_URL'),
+        validation_alias=AliasChoices('database_url', 'DATABASE_URL', 'POSTGRES_URL'),
         description="PostgreSQL connection URL"
     )
     

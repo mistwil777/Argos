@@ -1,18 +1,25 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Rss, MessageSquare, Radio,
+  Rss, MessageSquare, Radio, Sparkles,
   Settings, LayoutDashboard, Zap, Activity, Library, Newspaper, TrendingUp
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const FLOW = [
   {
+    to: '/veille',
+    icon: Sparkles,
+    label: 'Nouvelle veille',
+    step: '1',
+    tip: 'Décrivez votre besoin — le système découvre et configure les sources automatiquement',
+  },
+  {
     to: '/sources',
     icon: Radio,
     label: 'Sources',
-    step: '1',
-    tip: 'Configurez vos sources de collecte : RSS, GitHub, APIs',
+    step: '2',
+    tip: 'Gérez vos sources de collecte : RSS, GitHub, APIs',
   },
   {
     to: '/feed',
@@ -42,7 +49,8 @@ const META: Record<string, { title: string; badge?: string; desc?: string }> = {
   '/':          { title: 'Dashboard',    desc: 'Vue d\'ensemble — métriques et activité récente' },
   '/feed':      { title: 'Contenus',     desc: 'Collectez, enrichissez, indexez — depuis des sources ou des URLs manuelles' },
   '/assistant': { title: 'Assistant',    badge: 'RAG',        desc: 'Interrogez votre base de connaissances indexée' },
-  '/sources':   { title: 'Sources',      desc: 'Configurez les sources de collecte automatique' },
+  '/veille':    { title: 'Nouvelle veille', desc: 'Décrivez votre besoin — le système découvre et configure les sources' },
+  '/sources':   { title: 'Sources',        desc: 'Gérez vos sources de collecte automatique' },
   '/briefing':  { title: 'Briefing',     desc: 'Synthèse quotidienne automatique des signaux importants de veille' },
   '/trends':    { title: 'Tendances',    desc: 'Évolution des concepts clés détectés dans vos contenus — signaux faibles' },
   '/library':   { title: 'Bibliothèque', desc: 'Vos documents générés — fiches, synthèses, guides, rapports' },

@@ -8,6 +8,7 @@ import Settings from '@/pages/Settings'
 import Library from '@/pages/Library'
 import Briefing from '@/pages/Briefing'
 import Trends from '@/pages/Trends'
+import Veille from '@/pages/Veille'
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
           <Route path="/search" element={<Navigate to="/feed" replace />} />
           <Route path="/feed" element={<Feed />} />
           <Route path="/assistant" element={<Assistant />} />
+          <Route path="/veille" element={<Veille />} />
           <Route path="/sources" element={<Sources />} />
           <Route path="/library" element={<Library />} />
           <Route path="/briefing" element={<Briefing />} />

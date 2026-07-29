@@ -1,5 +1,5 @@
 # ========================================
-# OpenWebMCP - Requirements
+# Argos - Requirements
 # ========================================
 
 # Core Framework
@@ -32,12 +32,25 @@ python-dotenv==1.0.1
 httpx>=0.25.0,<1.0.0
 python-multipart==0.0.9
 PyYAML==6.0.1
-python-dateutil==2.8.2
+python-dateutil>=2.8.2
 markdown==3.5.2
 
 # Document extraction
 pdfplumber==0.11.4
 Pillow==10.2.0
+
+# Scheduling
+apscheduler==3.11.0
+SQLAlchemy>=2.0.25
+
+# Content extraction & web
+trafilatura==2.1.0
+
+# Scoring & ML (sans LLM)
+scikit-learn>=1.4.0
+textstat==0.7.3
+tldextract==5.1.2
+hdbscan==0.8.40
 
 # Development & testing
 pytest==7.4.4
