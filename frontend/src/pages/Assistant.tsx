@@ -1,21 +1,24 @@
 /**
- * Assistant Argos — RAG conversationnel avec vocal
+ * Assistant Argos — vocal complet
  *
- * STT  : Web Speech API (SpeechRecognition) — natif navigateur, français
- * TTS  : Web Speech API (SpeechSynthesis)   — natif navigateur, aucun modèle à télécharger
- * LLM  : Claude via /rag/ask/stream (SSE)   — tokens affichés en temps réel
+ * Wake word  : "argos wake up" → démarre la séquence
+ * Séquence   : accueil TTS → STT capte la demande → route → stream réponse
+ * Flow A     : RAG direct (base déjà indexée)
+ * Flow B     : Discovery (nouvelles sources découvertes + pipeline lancé)
+ * Sources    : drawer latéral avec explication littérale + feedback préférences
  *
- * Aucune dépendance HuggingFace — fonctionne derrière Zscaler.
+ * STT/TTS    : Web Speech API native — aucune dépendance HuggingFace
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Send, Bot, User, Loader2, BookOpen, Zap, Terminal,
-  Mic, MicOff, Volume2, VolumeX,
+  Send, Bot, User, BookOpen, Zap, Terminal,
+  Mic, MicOff, Volume2, VolumeX, List, Radio,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import PageHint from '@/components/ui/PageHint'
+import SourcesPanel, { type DiscoveredSource } from '@/components/assistant/SourcesPanel'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -24,212 +27,232 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
   streaming?: boolean
-  sources?: Source[]
-}
-
-interface Source {
-  title?: string
-  source?: string
-  url?: string
+  sources?: DiscoveredSource[]
+  flow?: 'rag_direct' | 'discovery' | null
+  intent?: any
 }
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
 const API_BASE = 'http://localhost:8000/api/v1'
 
-const SUGGESTIONS = [
-  'Comment fonctionne web.digest ?',
-  'Quels outils MCP sont disponibles ?',
-  'Quels sont les derniers articles haute importance ?',
-  'Résume les tendances de cette semaine.',
-  'Comment configurer une source GitHub ?',
-]
+const WAKE_PATTERNS = ['argos wake up', 'argos réveille-toi', 'argos réveil', 'argos wakeup']
 
-// ─── Helpers Web Speech API ───────────────────────────────────────────────────
+const GREETINGS = [
+  "Bonjour, je suis Argos. Que puis-je faire pour vous ? Souhaitez-vous un débrief des dernières nouveautés ou avez-vous une demande particulière ?",
+  "Argos à votre écoute. Quelle est votre demande ?",
+  "Je suis prêt. Vous pouvez me poser votre question.",
+]
 
 const SpeechRecognitionAPI =
   (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-
 const STT_SUPPORTED = !!SpeechRecognitionAPI
 const TTS_SUPPORTED = !!window.speechSynthesis
 
-// ─── Composant principal ──────────────────────────────────────────────────────
+const SUGGESTIONS = [
+  'Débrief des dernières nouveautés',
+  'Quels sujets ont été collectés cette semaine ?',
+  'Je veux apprendre sur les agents IA',
+  'Quelles sources sont actives ?',
+]
+
+// ─── Composant ────────────────────────────────────────────────────────────────
 
 export default function Assistant() {
-  const [messages, setMessages]     = useState<Message[]>([])
-  const [input, setInput]           = useState('')
-  const [loading, setLoading]       = useState(false)
+  const [messages, setMessages]         = useState<Message[]>([])
+  const [input, setInput]               = useState('')
+  const [loading, setLoading]           = useState(false)
 
   // Vocal
-  const [listening, setListening]   = useState(false)
-  const [ttsEnabled, setTtsEnabled] = useState(true)
-  const recognitionRef = useRef<any>(null)
-  const synthRef       = useRef<SpeechSynthesisUtterance | null>(null)
+  const [wakeActive, setWakeActive]     = useState(false)   // écoute wake word
+  const [listening, setListening]       = useState(false)   // écoute demande
+  const [ttsEnabled, setTtsEnabled]     = useState(true)
+  const [awaitingDemand, setAwaiting]   = useState(false)   // entre accueil et demande
 
-  const endRef     = useRef<HTMLDivElement>(null)
-  const abortRef   = useRef<AbortController | null>(null)
+  // Sources panel
+  const [panelOpen, setPanelOpen]       = useState(false)
+  const [panelSources, setPanelSources] = useState<DiscoveredSource[]>([])
+  const [panelIntent, setPanelIntent]   = useState<any>(null)
+  const [panelFlow, setPanelFlow]       = useState<'rag_direct' | 'discovery' | null>(null)
+
+  const recognitionRef   = useRef<any>(null)
+  const wakeRecognitionRef = useRef<any>(null)
+  const endRef           = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  // ── Envoi question + streaming SSE ──────────────────────────────────────────
+  // ── TTS helper ───────────────────────────────────────────────────────────────
 
-  const send = useCallback(async (q: string) => {
-    if (!q.trim() || loading) return
+  const speak = useCallback((text: string, onEnd?: () => void) => {
+    if (!TTS_SUPPORTED || !ttsEnabled) { onEnd?.(); return }
+    window.speechSynthesis.cancel()
+    const spoken = text.replace(/[#*`\[\]]/g, '').slice(0, 800)
+    const utt = new SpeechSynthesisUtterance(spoken)
+    utt.lang  = 'fr-FR'; utt.rate = 1.05; utt.pitch = 1.0
+    const voices = window.speechSynthesis.getVoices()
+    const fr = voices.find(v => v.lang.startsWith('fr'))
+    if (fr) utt.voice = fr
+    if (onEnd) utt.onend = onEnd
+    window.speechSynthesis.speak(utt)
+  }, [ttsEnabled])
 
-    const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content: q }
-    setMessages(prev => [...prev, userMsg])
+  // ── STT helper ───────────────────────────────────────────────────────────────
+
+  function captureOnce(onResult: (transcript: string) => void) {
+    if (!STT_SUPPORTED) return
+    const rec = new SpeechRecognitionAPI()
+    rec.lang = 'fr-FR'; rec.interimResults = false; rec.maxAlternatives = 1
+    recognitionRef.current = rec
+    setListening(true)
+    rec.onresult = (e: any) => {
+      const t = e.results[0][0].transcript.trim()
+      setListening(false)
+      onResult(t)
+    }
+    rec.onerror = () => setListening(false)
+    rec.onend   = () => setListening(false)
+    rec.start()
+  }
+
+  // ── Wake word — écoute continue ──────────────────────────────────────────────
+
+  function startWakeListening() {
+    if (!STT_SUPPORTED || wakeActive) return
+    setWakeActive(true)
+    _wakeLoop()
+  }
+
+  function stopWakeListening() {
+    setWakeActive(false)
+    wakeRecognitionRef.current?.stop()
+  }
+
+  function _wakeLoop() {
+    if (!STT_SUPPORTED) return
+    const rec = new SpeechRecognitionAPI()
+    rec.lang = 'fr-FR'; rec.interimResults = true; rec.continuous = false
+    wakeRecognitionRef.current = rec
+
+    rec.onresult = (e: any) => {
+      const t = Array.from(e.results as any[]).map((r: any) => r[0].transcript).join('').toLowerCase()
+      if (WAKE_PATTERNS.some(p => t.includes(p.toLowerCase().replace(/-/g, ' ')))) {
+        rec.stop()
+        _onWakeDetected()
+      }
+    }
+
+    rec.onend = () => {
+      // Relancer si toujours en mode wake
+      setWakeActive(prev => {
+        if (prev) setTimeout(_wakeLoop, 300)
+        return prev
+      })
+    }
+
+    rec.onerror = () => {
+      setWakeActive(prev => {
+        if (prev) setTimeout(_wakeLoop, 1000)
+        return prev
+      })
+    }
+
+    try { rec.start() } catch { /* ignore double-start */ }
+  }
+
+  function _onWakeDetected() {
+    setAwaiting(true)
+    const greeting = GREETINGS[Math.floor(Math.random() * GREETINGS.length)]
+    speak(greeting, () => {
+      setAwaiting(false)
+      captureOnce(transcript => {
+        if (transcript.length > 2) sendVocal(transcript)
+      })
+    })
+  }
+
+  // ── Envoi vocal (route /assistant/vocal SSE) ─────────────────────────────────
+
+  const sendVocal = useCallback(async (transcript: string) => {
+    if (!transcript.trim() || loading) return
+
+    setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'user', content: transcript }])
     setInput('')
     setLoading(true)
 
     const assistantId = crypto.randomUUID()
     setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', streaming: true }])
 
-    abortRef.current = new AbortController()
-
     try {
-      const resp = await fetch(`${API_BASE}/rag/ask/stream`, {
-        method: 'POST',
+      const resp = await fetch(`${API_BASE}/assistant/vocal`, {
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: q, use_hybrid_search: true }),
-        signal: abortRef.current.signal,
+        body:    JSON.stringify({ transcript }),
       })
 
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-      if (!resp.body) throw new Error('No body')
+      if (!resp.ok || !resp.body) throw new Error(`HTTP ${resp.status}`)
 
       const reader  = resp.body.getReader()
       const decoder = new TextDecoder()
-      let sources: Source[] = []
-      let fullText = ''
+      let fullText  = ''
+      let sources: DiscoveredSource[] = []
+      let intent: any = null
+      let flow: 'rag_direct' | 'discovery' | null = null
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
 
-        const chunk = decoder.decode(value, { stream: true })
-        const lines = chunk.split('\n')
-
-        for (const line of lines) {
+        for (const line of decoder.decode(value, { stream: true }).split('\n')) {
           if (!line.startsWith('data: ')) continue
           const payload = line.slice(6)
 
           if (payload === '[DONE]') break
+          if (payload.startsWith('[FLOW]'))     { flow = payload.slice(6) as any; continue }
+          if (payload.startsWith('[SOURCES]'))  { try { sources = JSON.parse(payload.slice(8)) } catch {} ; continue }
+          if (payload.startsWith('[INTENT]'))   { try { intent  = JSON.parse(payload.slice(8)) } catch {} ; continue }
+          if (payload.startsWith('[DISCOVERY_START]')) continue
+          if (payload.startsWith('[ERROR]'))    { fullText += `\n_Erreur : ${payload.slice(7)}_`; continue }
 
-          if (payload.startsWith('[SOURCES]')) {
-            try { sources = JSON.parse(payload.slice(9)) } catch { /* ignore */ }
-            continue
-          }
-
-          if (payload.startsWith('[ERROR]')) {
-            fullText += `\n\n_Erreur : ${payload.slice(7)}_`
-            continue
-          }
-
-          // Rétablir les newlines échappés
-          const text = payload.replace(/\\n/g, '\n')
-          fullText += text
-
+          fullText += payload.replace(/\\n/g, '\n')
           setMessages(prev => prev.map(m =>
-            m.id === assistantId
-              ? { ...m, content: fullText, streaming: true }
-              : m
+            m.id === assistantId ? { ...m, content: fullText } : m
           ))
         }
       }
 
-      // Finaliser le message
       setMessages(prev => prev.map(m =>
         m.id === assistantId
-          ? { ...m, content: fullText, streaming: false, sources }
+          ? { ...m, content: fullText, streaming: false, sources, flow, intent }
           : m
       ))
 
-      // TTS : lire la réponse si activé
-      if (ttsEnabled && TTS_SUPPORTED && fullText) {
-        speakText(fullText)
+      // Ouvrir le panel sources si discovery
+      if (flow === 'discovery' && sources.length > 0) {
+        setPanelSources(sources)
+        setPanelIntent(intent)
+        setPanelFlow(flow)
+        setPanelOpen(true)
       }
 
+      if (ttsEnabled && TTS_SUPPORTED && fullText) speak(fullText)
+
+      // Reprendre le wake word après réponse
+      if (wakeActive) setTimeout(_wakeLoop, 1500)
+
     } catch (err: any) {
-      if (err.name === 'AbortError') return
       setMessages(prev => prev.map(m =>
-        m.id === assistantId
-          ? { ...m, content: `ERR / ${err.message}`, streaming: false }
-          : m
+        m.id === assistantId ? { ...m, content: `ERR / ${err.message}`, streaming: false } : m
       ))
     } finally {
       setLoading(false)
     }
-  }, [loading, ttsEnabled])
+  }, [loading, ttsEnabled, wakeActive, speak])
 
-  // ── STT : Web Speech API ─────────────────────────────────────────────────────
+  // ── Envoi texte classique ─────────────────────────────────────────────────────
 
-  function startListening() {
-    if (!STT_SUPPORTED || listening) return
-
-    const recognition = new SpeechRecognitionAPI()
-    recognition.lang         = 'fr-FR'
-    recognition.interimResults = true
-    recognition.maxAlternatives = 1
-
-    recognitionRef.current = recognition
-
-    recognition.onstart = () => setListening(true)
-
-    recognition.onresult = (event: any) => {
-      const transcript = Array.from(event.results as any[])
-        .map((r: any) => r[0].transcript)
-        .join('')
-      setInput(transcript)
-    }
-
-    recognition.onend = () => {
-      setListening(false)
-      // Si du texte a été capturé, envoyer automatiquement
-      setInput(prev => {
-        if (prev.trim().length > 2) {
-          setTimeout(() => send(prev), 100)
-        }
-        return prev
-      })
-    }
-
-    recognition.onerror = () => setListening(false)
-
-    recognition.start()
-  }
-
-  function stopListening() {
-    recognitionRef.current?.stop()
-    setListening(false)
-  }
-
-  // ── TTS : Web Speech API ─────────────────────────────────────────────────────
-
-  function speakText(text: string) {
-    if (!TTS_SUPPORTED) return
-    window.speechSynthesis.cancel()
-
-    // Tronquer le texte pour la lecture vocale (max ~600 caractères)
-    const spoken = text.replace(/[#*`]/g, '').slice(0, 600)
-    const utterance = new SpeechSynthesisUtterance(spoken)
-    utterance.lang  = 'fr-FR'
-    utterance.rate  = 1.05
-    utterance.pitch = 1.0
-
-    // Préférer une voix française si disponible
-    const voices = window.speechSynthesis.getVoices()
-    const frVoice = voices.find(v => v.lang.startsWith('fr'))
-    if (frVoice) utterance.voice = frVoice
-
-    synthRef.current = utterance
-    window.speechSynthesis.speak(utterance)
-  }
-
-  function stopSpeaking() {
-    window.speechSynthesis.cancel()
-  }
+  const send = useCallback((q: string) => sendVocal(q), [sendVocal])
 
   // ─────────────────────────────────────────────────────────────────────────────
 
@@ -239,9 +262,9 @@ export default function Assistant() {
       {/* Hint */}
       <div className="px-6 pt-6">
         <PageHint id="assistant-vocal" steps={[
-          { title: 'Vocal (STT)', body: 'Cliquez sur le micro pour dicter votre question. Utilise l\'API native du navigateur — aucun modèle à télécharger.' },
-          { title: 'Streaming', body: 'La réponse s\'affiche token par token via SSE. Vous pouvez lire pendant que Claude rédige.' },
-          { title: 'Lecture (TTS)', body: 'Après chaque réponse, le système lit les 600 premiers caractères. Désactivez avec le bouton haut-parleur.' },
+          { title: 'Wake word', body: 'Dites "Argos, wake up" pour activer l\'assistant vocal. Il vous accueille puis écoute votre demande.' },
+          { title: 'Demande libre', body: 'Posez n\'importe quelle question. Si votre base est vide sur ce sujet, le système découvre automatiquement des sources et lance la collecte.' },
+          { title: 'Sources', body: 'Cliquez sur "Sources" pour voir quelles sources ont été choisies, pourquoi, et exclure celles qui ne vous conviennent pas.' },
         ]} />
       </div>
 
@@ -268,7 +291,8 @@ export default function Assistant() {
               <div className="max-w-xs">
                 <h2 className="text-[16px] font-bold text-[hsl(var(--text))] tracking-tight">Assistant Argos</h2>
                 <p className="text-[12.5px] text-[hsl(var(--text-2))] mt-2 leading-relaxed">
-                  Questions en texte ou en vocal. Réponses streamées depuis votre base de connaissances.
+                  Dites <span className="font-mono text-[hsl(var(--accent))]">"Argos, wake up"</span> ou tapez votre question.
+                  Le système cherche dans votre base ou découvre de nouvelles sources.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2 justify-center max-w-md">
@@ -307,32 +331,53 @@ export default function Assistant() {
                       ? 'bg-[hsl(var(--accent))] text-[hsl(var(--primary-foreground))] font-medium ml-auto'
                       : 'panel-accent text-[hsl(var(--text))]'
                   }`}>
-                    {msg.role === 'assistant'
-                      ? (
-                        <>
-                          <div className="prose-app">
-                            <ReactMarkdown>{msg.content}</ReactMarkdown>
-                          </div>
-                          {msg.streaming && (
-                            <span className="inline-block w-1 h-3.5 bg-[hsl(var(--accent))] rounded ml-0.5 animate-pulse" />
-                          )}
-                        </>
-                      )
-                      : <p className="text-[13.5px]">{msg.content}</p>
-                    }
+                    {msg.role === 'assistant' ? (
+                      <>
+                        <div className="prose-app">
+                          <ReactMarkdown>{msg.content}</ReactMarkdown>
+                        </div>
+                        {msg.streaming && (
+                          <span className="inline-block w-1 h-3.5 bg-[hsl(var(--accent))] rounded ml-0.5 animate-pulse" />
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-[13.5px]">{msg.content}</p>
+                    )}
                   </div>
-                  {msg.sources && msg.sources.length > 0 && !msg.streaming && (
+
+                  {/* Sources + bouton panel */}
+                  {!msg.streaming && msg.role === 'assistant' && (
                     <motion.div
                       initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.15 }}
-                      className="flex items-center gap-1.5 mt-1.5 flex-wrap"
+                      className="flex items-center gap-2 mt-1.5 flex-wrap"
                     >
-                      <BookOpen className="w-2.5 h-2.5 text-[hsl(var(--text-3))]" />
-                      {msg.sources.slice(0, 4).map((s, i) => (
-                        <span key={i} className="text-[10px] font-mono text-[hsl(var(--text-3))] bg-[hsl(var(--bg-2))] border border-[hsl(var(--line))] px-1.5 py-0.5 rounded">
-                          {s.title || s.source || `src:${i + 1}`}
+                      {msg.sources && msg.sources.length > 0 && (
+                        <>
+                          <BookOpen className="w-2.5 h-2.5 text-[hsl(var(--text-3))]" />
+                          {msg.sources.slice(0, 3).map((s, i) => (
+                            <span key={i} className="text-[10px] font-mono text-[hsl(var(--text-3))] bg-[hsl(var(--bg-2))] border border-[hsl(var(--line))] px-1.5 py-0.5 rounded">
+                              {s.name || s.url || `src:${i + 1}`}
+                            </span>
+                          ))}
+                          <button
+                            onClick={() => {
+                              setPanelSources(msg.sources || [])
+                              setPanelIntent(msg.intent)
+                              setPanelFlow(msg.flow || null)
+                              setPanelOpen(true)
+                            }}
+                            className="flex items-center gap-1 text-[10px] font-mono text-[hsl(var(--accent))] hover:underline"
+                          >
+                            <List size={9} /> Voir toutes les sources
+                          </button>
+                        </>
+                      )}
+                      {msg.flow === 'discovery' && (
+                        <span className="text-[10px] font-mono text-amber-400 bg-amber-900/20 border border-amber-800/30 px-1.5 py-0.5 rounded">
+                          nouvelles sources — collecte en cours
                         </span>
-                      ))}
+                      )}
                     </motion.div>
                   )}
                 </div>
@@ -345,13 +390,11 @@ export default function Assistant() {
             ))}
           </AnimatePresence>
 
-          {/* Typing dots — visible uniquement avant que le premier token arrive */}
+          {/* Typing dots */}
           <AnimatePresence>
             {loading && messages.at(-1)?.content === '' && (
-              <motion.div
-                initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-                className="flex gap-3"
-              >
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                className="flex gap-3">
                 <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-[hsl(var(--accent-dim))] border border-[hsl(var(--accent-line))]">
                   <Bot className="w-3.5 h-3.5 text-[hsl(var(--accent))]" />
                 </div>
@@ -367,7 +410,6 @@ export default function Assistant() {
               </motion.div>
             )}
           </AnimatePresence>
-
           <div ref={endRef} />
         </div>
       </div>
@@ -379,74 +421,98 @@ export default function Assistant() {
           className="input-field flex items-center gap-2 px-3 max-w-3xl mx-auto"
         >
           <Terminal className="w-3.5 h-3.5 text-[hsl(var(--text-3))] flex-shrink-0" />
-
           <input
             type="text"
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder={listening ? 'Écoute en cours…' : 'Pose une question ou utilise le micro…'}
+            placeholder={
+              awaitingDemand ? 'Argos vous écoute…'
+              : listening     ? 'Écoute en cours…'
+              : wakeActive    ? 'En attente de "Argos, wake up"…'
+              : 'Posez une question ou dites "Argos, wake up"…'
+            }
             disabled={loading}
             className="flex-1 bg-transparent py-3 text-[13.5px] text-[hsl(var(--text))] placeholder:text-[hsl(var(--text-3))] outline-none font-mono"
           />
 
+          {/* Sources panel toggle */}
+          <motion.button type="button" whileTap={{ scale: 0.9 }}
+            onClick={() => setPanelOpen(true)}
+            title="Voir les sources sélectionnées"
+            className="w-7 h-7 flex-shrink-0 rounded flex items-center justify-center text-[hsl(var(--text-3))] hover:text-[hsl(var(--accent))] transition-colors"
+          >
+            <List className="w-3.5 h-3.5" />
+          </motion.button>
+
           {/* TTS toggle */}
           {TTS_SUPPORTED && (
-            <motion.button
-              type="button"
-              whileTap={{ scale: 0.9 }}
-              onClick={() => { setTtsEnabled(p => !p); stopSpeaking() }}
+            <motion.button type="button" whileTap={{ scale: 0.9 }}
+              onClick={() => { setTtsEnabled(p => !p); window.speechSynthesis.cancel() }}
               title={ttsEnabled ? 'Désactiver lecture vocale' : 'Activer lecture vocale'}
-              className={`w-7 h-7 flex-shrink-0 rounded flex items-center justify-center transition-colors ${
-                ttsEnabled
-                  ? 'text-[hsl(var(--accent))]'
-                  : 'text-[hsl(var(--text-3))] opacity-50'
-              }`}
+              className={`w-7 h-7 flex-shrink-0 rounded flex items-center justify-center transition-colors ${ttsEnabled ? 'text-[hsl(var(--accent))]' : 'text-[hsl(var(--text-3))] opacity-50'}`}
             >
               {ttsEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
             </motion.button>
           )}
 
-          {/* STT bouton micro */}
+          {/* Wake word toggle */}
           {STT_SUPPORTED && (
-            <motion.button
-              type="button"
-              whileTap={{ scale: 0.9 }}
-              onClick={listening ? stopListening : startListening}
+            <motion.button type="button" whileTap={{ scale: 0.9 }}
+              onClick={wakeActive ? stopWakeListening : startWakeListening}
               disabled={loading}
-              title={listening ? 'Arrêter la dictée' : 'Dicter une question (fr-FR)'}
+              title={wakeActive ? 'Désactiver le wake word' : 'Activer "Argos, wake up"'}
+              className={`w-7 h-7 flex-shrink-0 rounded flex items-center justify-center transition-colors ${
+                wakeActive
+                  ? 'bg-[hsl(var(--accent-dim))] text-[hsl(var(--accent))] border border-[hsl(var(--accent-line))]'
+                  : 'text-[hsl(var(--text-3))] hover:text-[hsl(var(--accent))]'
+              }`}
+            >
+              <Radio className="w-3.5 h-3.5" />
+            </motion.button>
+          )}
+
+          {/* Micro one-shot */}
+          {STT_SUPPORTED && (
+            <motion.button type="button" whileTap={{ scale: 0.9 }}
+              onClick={() => captureOnce(t => { setInput(t); setTimeout(() => send(t), 100) })}
+              disabled={loading || listening}
+              title="Dicter une question (fr-FR)"
               className={`w-7 h-7 flex-shrink-0 rounded flex items-center justify-center transition-colors ${
                 listening
                   ? 'bg-red-500/20 text-red-400 animate-pulse'
                   : 'text-[hsl(var(--text-3))] hover:text-[hsl(var(--accent))]'
               }`}
             >
-              {listening
-                ? <MicOff className="w-3.5 h-3.5" />
-                : <Mic className="w-3.5 h-3.5" />
-              }
+              {listening ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
             </motion.button>
           )}
 
           {/* Envoyer */}
-          <motion.button
-            type="submit"
+          <motion.button type="submit"
             disabled={loading || !input.trim()}
             whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.9 }}
             className="w-8 h-8 flex-shrink-0 my-1 rounded bg-[hsl(var(--accent))] flex items-center justify-center disabled:opacity-35 transition-opacity"
           >
-            {loading
-              ? <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
-              : <Send className="w-3.5 h-3.5 text-[hsl(var(--primary-foreground))]" />
-            }
+            <Send className="w-3.5 h-3.5 text-[hsl(var(--primary-foreground))]" />
           </motion.button>
         </form>
 
         <p className="text-[10px] font-mono text-[hsl(var(--text-3))] text-center mt-1.5 max-w-3xl mx-auto">
-          RAG hybride · LanceDB + BM25 · streaming SSE
-          {STT_SUPPORTED && ' · STT Web Speech API'}
-          {TTS_SUPPORTED && ' · TTS natif'}
+          RAG hybride · discovery automatique · wake word "Argos, wake up"
+          {wakeActive && <span className="text-[hsl(var(--accent))] ml-1">· en écoute</span>}
+          {awaitingDemand && <span className="text-amber-400 ml-1">· en attente de votre demande</span>}
         </p>
       </div>
+
+      {/* Sources panel */}
+      <SourcesPanel
+        open={panelOpen}
+        onClose={() => setPanelOpen(false)}
+        sources={panelSources}
+        intent={panelIntent}
+        flow={panelFlow}
+        onPreferenceSaved={() => {}}
+      />
     </div>
   )
 }

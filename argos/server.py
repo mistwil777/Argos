@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ValidationError
 
 from argos.config import settings
-from argos.api import api_router, veille_router
+from argos.api import api_router, veille_router, assistant_router
 
 
 # ============================================
@@ -53,6 +53,7 @@ app.add_middleware(
 # ============================================
 app.include_router(api_router)
 app.include_router(veille_router)
+app.include_router(assistant_router)
 
 
 # ============================================

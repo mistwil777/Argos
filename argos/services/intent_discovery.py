@@ -32,6 +32,7 @@ Décompose cette intention en :
 - source_types : types de sources les plus pertinents parmi ["rss", "github", "arxiv", "website", "blog", "docs", "news"]
 - search_queries : liste de 5 requêtes de recherche web optimisées pour trouver des sources (pas des articles)
 - keywords : mots-clés de filtrage pour la classification (10 max)
+- source_rationale : explication courte en français (1-2 phrases) expliquant POURQUOI ces types de sources ont été choisis pour cette intention
 
 Format JSON attendu :
 {{
@@ -39,7 +40,8 @@ Format JSON attendu :
   "themes": ["..."],
   "source_types": ["..."],
   "search_queries": ["site:github.com ...", "...feed RSS...", "..."],
-  "keywords": ["..."]
+  "keywords": ["..."],
+  "source_rationale": "..."
 }}"""
 
 
@@ -161,15 +163,17 @@ class DiscoveryService:
         existing_urls = self._get_existing_source_urls()
         unique = [c for c in unique if c.get("url") not in existing_urls]
 
-        # 5. Scoring
+        # 5. Scoring + raison littérale par source
         from argos.services.scorer import domain_score
+        source_rationale = intent_data.get("source_rationale", "")
         scored = []
         for c in unique:
             d_score = domain_score(c.get("url", ""))
-            # Bonus si le type correspond à ce qui est demandé
-            type_bonus = 0.1 if c.get("type") in source_types else 0.0
+            src_type = c.get("type", "website")
+            type_bonus = 0.1 if src_type in source_types else 0.0
             c["relevance_score"] = round(min(d_score + type_bonus, 1.0), 3)
             c["workspace_id"] = workspace_id
+            c["reason"] = _build_source_reason(c, entities, source_rationale)
             scored.append(c)
 
         # Tri par score décroissant, limité à 20 candidats
@@ -308,3 +312,59 @@ def _find_rss_feeds(url: str) -> list[str]:
         return find_feed_urls(url) or []
     except Exception:
         return []
+
+# Libellés des types de sources pour les raisons lisibles
+_TYPE_LABELS = {
+    "rss":     "flux RSS",
+    "github":  "dépôt GitHub",
+    "arxiv":   "publication académique",
+    "website": "site web",
+    "blog":    "blog",
+    "docs":    "documentation officielle",
+    "news":    "site d'actualités",
+}
+
+_DOMAIN_NOTES = {
+    "github.com":      "héberge le code source et les projets open source",
+    "arxiv.org":       "publie des articles de recherche avant peer-review",
+    "huggingface.co":  "plateforme de référence pour les modèles et datasets IA",
+    "medium.com":      "agrège des articles de praticiens et de chercheurs",
+    "substack.com":    "newsletters de spécialistes indépendants",
+    "reddit.com":      "discussions communautaires entre praticiens",
+}
+
+
+def _build_source_reason(source: dict, entities: list[str], rationale: str) -> str:
+    """Génère une explication littérale en français pour une source candidate."""
+    url        = source.get("url", "")
+    name       = source.get("name", url)
+    src_type   = source.get("type", "website")
+    domain     = _extract_domain(url)
+    type_label = _TYPE_LABELS.get(src_type, "source")
+    domain_note = _DOMAIN_NOTES.get(domain, "")
+
+    parts = []
+
+    # Ligne 1 : pourquoi ce type
+    if rationale:
+        parts.append(rationale)
+    else:
+        if src_type == "github":
+            parts.append("Les dépôts GitHub permettent de suivre les projets open source et les évolutions du code en temps réel.")
+        elif src_type == "arxiv":
+            parts.append("ArXiv publie les travaux de recherche récents avant leur validation officielle, idéal pour suivre l'état de l'art.")
+        elif src_type == "rss":
+            parts.append(f"Le flux RSS de {name} permet de recevoir automatiquement les nouveaux contenus sans visiter le site.")
+        else:
+            parts.append(f"Ce {type_label} a été sélectionné car son contenu correspond aux axes de votre demande.")
+
+    # Ligne 2 : note sur le domaine si connue
+    if domain_note:
+        parts.append(f"{domain} {domain_note}.")
+
+    # Ligne 3 : lien avec les entités
+    matched = [e for e in entities if e.lower() in url.lower() or e.lower() in name.lower()]
+    if matched:
+        parts.append(f"Correspond directement à : {', '.join(matched)}.")
+
+    return " ".join(parts)
