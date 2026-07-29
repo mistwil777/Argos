@@ -60,13 +60,37 @@ async def vocal_query(request: Dict[str, Any]):
     user_id = request.get("user_id", "default")
 
     async def stream() -> AsyncGenerator[str, None]:
-        import anthropic
         from argos.services.intent_router import route
-        from argos.services.rag import RAG_SYSTEM_PROMPT, RAG_USER_PROMPT_TEMPLATE
-        from argos.services.vector_store_singleton import get_vector_store
+        import asyncio
+
+        # File de statuts : on_status pousse dedans, le générateur SSE dépile
+        status_queue: asyncio.Queue = asyncio.Queue()
+
+        async def on_status(msg: str):
+            await status_queue.put(("status", msg))
 
         try:
-            result = await route(transcript, workspace_id=workspace_id, user_id=user_id)
+            # Lancer route() en tâche de fond pour pouvoir yield les statuts pendant qu'il tourne
+            route_task = asyncio.ensure_future(
+                route(transcript, workspace_id=workspace_id, user_id=user_id, on_status=on_status)
+            )
+
+            # Vider la queue de statuts jusqu'à ce que route() soit terminé
+            while not route_task.done():
+                try:
+                    kind, msg = await asyncio.wait_for(status_queue.get(), timeout=0.1)
+                    escaped = msg.replace("\n", "\\n")
+                    yield f"data: [STATUS]{escaped}\n\n"
+                except asyncio.TimeoutError:
+                    pass
+
+            # Vider les statuts restants
+            while not status_queue.empty():
+                kind, msg = status_queue.get_nowait()
+                escaped = msg.replace("\n", "\\n")
+                yield f"data: [STATUS]{escaped}\n\n"
+
+            result = await route_task
             flow = result["flow"]
 
             yield f"data: [FLOW]{flow}\n\n"
@@ -77,34 +101,30 @@ async def vocal_query(request: Dict[str, Any]):
 
             # ── RAG direct : stream la réponse ──────────────────────
             if flow == "rag_direct" and result.get("answer"):
-                # Réponse déjà générée par route() — on la stream mot par mot
-                # pour maintenir la cohérence UX (affichage progressif)
                 words = result["answer"].split(" ")
                 for i, word in enumerate(words):
                     chunk = word if i == 0 else f" {word}"
-                    escaped = chunk.replace("\n", "\\n")
-                    yield f"data: {escaped}\n\n"
+                    yield f"data: {chunk.replace(chr(10), chr(92) + 'n')}\n\n"
                 yield "data: [DONE]\n\n"
                 return
 
-            # ── Discovery : informer l'UI puis attendre le pipeline ──
+            # ── Discovery : résumé synthétique ───────────────────────
             if flow == "discovery":
                 created = result.get("new_sources_created", 0)
+                summary = result.get("sources_summary", "")
                 yield f"data: [DISCOVERY_START]{created}\n\n"
 
                 if created == 0:
                     answer = result.get("answer", "Aucune source trouvée pour cette demande.")
-                    yield f"data: {answer.replace(chr(10), '\\n')}\n\n"
-                    yield "data: [DONE]\n\n"
-                    return
+                    yield f"data: {answer.replace(chr(10), chr(92) + 'n')}\n\n"
+                else:
+                    msg = (
+                        f"J'ai configuré {created} source(s) et lancé la collecte. {summary} "
+                        f"Le contenu sera disponible dans votre Feed dans quelques instants. "
+                        f"Vous pouvez consulter le panneau Sources pour le détail."
+                    )
+                    yield f"data: {msg.replace(chr(10), chr(92) + 'n')}\n\n"
 
-                # Message d'attente streamé
-                msg = (
-                    f"J'ai trouvé et configuré {created} source(s) pour votre demande. "
-                    "La collecte et l'analyse sont en cours — cela prend quelques instants. "
-                    "Vous pouvez suivre l'avancement dans l'onglet Sources."
-                )
-                yield f"data: {msg.replace(chr(10), '\\n')}\n\n"
                 yield "data: [DONE]\n\n"
                 return
 
@@ -138,7 +158,7 @@ async def save_source_preference(request: Dict[str, Any]):
     reason    = request.get("reason", "").strip()
     user_id   = request.get("user_id", "default")
 
-    valid_rules = {"reject_domain", "reject_type", "prefer_type", "prefer_domain"}
+    valid_rules = {"reject_domain", "reject_type", "prefer_type", "prefer_domain", "user_feedback"}
     if rule_type not in valid_rules:
         raise HTTPException(status_code=400, detail=f"rule_type invalide. Attendu : {valid_rules}")
     if not value:

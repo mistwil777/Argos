@@ -27,6 +27,7 @@ async def route(
     transcript: str,
     workspace_id: Optional[int] = None,
     user_id: str = "default",
+    on_status=None,   # callable async optionnel : on_status(msg: str)
 ) -> dict:
     """
     Point d'entrée principal du router vocal.
@@ -46,7 +47,13 @@ async def route(
     from argos.services.vector_store_singleton import get_vector_store
     from argos.config import settings
 
+    async def _status(msg: str):
+        if on_status:
+            await on_status(msg)
+        logger.info(f"[ROUTER STATUS] {msg}")
+
     # ── 1. Essai RAG rapide ──────────────────────────────────────────
+    await _status("Je cherche dans votre base de connaissances…")
     vs = get_vector_store()
     search_results = await asyncio.to_thread(
         vs.hybrid_search,
@@ -68,8 +75,8 @@ async def route(
 
     # ── 2a. RAG direct ───────────────────────────────────────────────
     if rag_viable:
+        await _status(f"J'ai trouvé {len(search_results)} passages pertinents dans votre base. Je formule une réponse…")
         from argos.services.llm_provider import create_llm_provider
-        from argos.services.rag import RAG_SYSTEM_PROMPT, RAG_USER_PROMPT_TEMPLATE
 
         llm = create_llm_provider(
             provider_type=settings.llm_provider,
@@ -92,13 +99,22 @@ async def route(
         }
 
     # ── 2b. Discovery flow ───────────────────────────────────────────
+    await _status("Aucune source dans ma base sur ce sujet. Je lance la recherche de sources correspondantes…")
+
     from argos.services.intent_discovery import IntentService, DiscoveryService
     from argos.services.pipeline import run_pipeline_for_source
 
     intent_svc    = IntentService(anthropic_api_key=settings.anthropic_api_key)
     discovery_svc = DiscoveryService(db_manager=db)
 
+    await _status("J'analyse votre demande pour identifier les axes de recherche…")
     intent_data = await intent_svc.decompose(transcript)
+
+    themes = intent_data.get("themes", [])
+    if themes:
+        await _status(f"Axes identifiés : {', '.join(themes[:3])}. Je cherche les meilleures sources…")
+    else:
+        await _status("Recherche de sources en cours, cela peut prendre quelques secondes…")
 
     # Appliquer les préférences utilisateur pour filtrer les sources
     user_prefs = _load_user_preferences(db, user_id)
@@ -106,6 +122,7 @@ async def route(
     candidates  = _apply_preferences(candidates, user_prefs)
 
     if not candidates:
+        await _status("Aucune source pertinente trouvée. Voulez-vous reformuler votre demande ?")
         return {
             "flow":                "discovery",
             "answer":              "Je n'ai pas trouvé de sources pertinentes pour cette demande. Voulez-vous reformuler ?",
@@ -115,8 +132,11 @@ async def route(
             "new_sources_created": 0,
         }
 
+    await _status(f"{len(candidates)} sources trouvées. Je les configure et lance la collecte…")
+
     # Créer les sources et collecter en background
     created = await discovery_svc.create_sources(candidates[:10])
+    await _status(f"{len(created)} source(s) configurée(s). Collecte et analyse du contenu lancées en arrière-plan.")
 
     # Lancer le pipeline sur chaque source créée (asyncio background)
     async def _run_pipelines():
@@ -130,6 +150,16 @@ async def route(
 
     asyncio.ensure_future(_run_pipelines())
 
+    # Résumé synthétique des sources
+    summary_parts = []
+    by_type: dict = {}
+    for c in candidates[:10]:
+        t = c.get("type", "website")
+        by_type[t] = by_type.get(t, 0) + 1
+    for t, n in by_type.items():
+        summary_parts.append(f"{n} {t}")
+    summary = f"Sources : {', '.join(summary_parts)}."
+
     return {
         "flow":                "discovery",
         "answer":              None,
@@ -137,6 +167,7 @@ async def route(
         "confidence":          0.0,
         "intent":              intent_data,
         "new_sources_created": len(created),
+        "sources_summary":     summary,
     }
 
 

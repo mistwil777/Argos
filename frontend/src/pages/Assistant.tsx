@@ -27,6 +27,7 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
   streaming?: boolean
+  status?: string        // message de statut Argos affiché pendant le traitement
   sources?: DiscoveredSource[]
   flow?: 'rag_direct' | 'discovery' | null
   intent?: any
@@ -136,7 +137,18 @@ export default function Assistant() {
     wakeRecognitionRef.current = rec
 
     rec.onresult = (e: any) => {
-      const t = Array.from(e.results as any[]).map((r: any) => r[0].transcript).join('').toLowerCase()
+      const t = Array.from(e.results as any[]).map((r: any) => r[0].transcript).join('').toLowerCase().trim()
+
+      // Commande directe : "Argos, <demande>" sans passer par le wake
+      const directMatch = t.match(/^argos[,\s]+(.{5,})$/)
+      if (directMatch && !WAKE_PATTERNS.some(p => t.includes(p.replace(/-/g, ' ')))) {
+        const demand = directMatch[1].trim()
+        rec.stop()
+        sendVocal(demand)
+        return
+      }
+
+      // Wake word classique
       if (WAKE_PATTERNS.some(p => t.includes(p.toLowerCase().replace(/-/g, ' ')))) {
         rec.stop()
         _onWakeDetected()
@@ -199,25 +211,35 @@ export default function Assistant() {
       let sources: DiscoveredSource[] = []
       let intent: any = null
       let flow: 'rag_direct' | 'discovery' | null = null
+      let done = false
 
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
+      while (!done) {
+        const { done: streamDone, value } = await reader.read()
+        if (streamDone) break
 
         for (const line of decoder.decode(value, { stream: true }).split('\n')) {
           if (!line.startsWith('data: ')) continue
           const payload = line.slice(6)
 
-          if (payload === '[DONE]') break
+          if (payload === '[DONE]') { done = true; break }
           if (payload.startsWith('[FLOW]'))     { flow = payload.slice(6) as any; continue }
           if (payload.startsWith('[SOURCES]'))  { try { sources = JSON.parse(payload.slice(8)) } catch {} ; continue }
           if (payload.startsWith('[INTENT]'))   { try { intent  = JSON.parse(payload.slice(8)) } catch {} ; continue }
           if (payload.startsWith('[DISCOVERY_START]')) continue
           if (payload.startsWith('[ERROR]'))    { fullText += `\n_Erreur : ${payload.slice(7)}_`; continue }
 
+          // Statut Argos — affiché en italique dans le message en cours avant la réponse finale
+          if (payload.startsWith('[STATUS]')) {
+            const statusMsg = payload.slice(8).replace(/\\n/g, '\n')
+            setMessages(prev => prev.map(m =>
+              m.id === assistantId ? { ...m, status: statusMsg } : m
+            ))
+            continue
+          }
+
           fullText += payload.replace(/\\n/g, '\n')
           setMessages(prev => prev.map(m =>
-            m.id === assistantId ? { ...m, content: fullText } : m
+            m.id === assistantId ? { ...m, content: fullText, status: undefined } : m
           ))
         }
       }
@@ -333,10 +355,19 @@ export default function Assistant() {
                   }`}>
                     {msg.role === 'assistant' ? (
                       <>
-                        <div className="prose-app">
-                          <ReactMarkdown>{msg.content}</ReactMarkdown>
-                        </div>
-                        {msg.streaming && (
+                        {/* Statut en cours — affiché tant que la réponse est vide */}
+                        {msg.status && !msg.content && (
+                          <p className="text-[12px] italic text-[hsl(var(--text-3))] flex items-center gap-2">
+                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[hsl(var(--accent))] animate-pulse flex-shrink-0" />
+                            {msg.status}
+                          </p>
+                        )}
+                        {msg.content && (
+                          <div className="prose-app">
+                            <ReactMarkdown>{msg.content}</ReactMarkdown>
+                          </div>
+                        )}
+                        {msg.streaming && msg.content && (
                           <span className="inline-block w-1 h-3.5 bg-[hsl(var(--accent))] rounded ml-0.5 animate-pulse" />
                         )}
                       </>

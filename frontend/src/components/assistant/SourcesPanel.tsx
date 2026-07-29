@@ -1,13 +1,13 @@
 /**
- * SourcesPanel — drawer latéral listant les sources sélectionnées par le système
- * avec leur explication littérale et la possibilité de les rejeter.
+ * SourcesPanel — drawer latéral listant les sources sélectionnées par le système.
+ * L'utilisateur peut exprimer librement pourquoi une source ne lui convient pas.
  */
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  X, ChevronRight, Globe, Rss, Github, BookOpen,
-  ThumbsDown, Check, Info, Loader2,
+  X, Globe, Rss, Github, BookOpen,
+  ThumbsDown, Check, Info, Loader2, Send,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -39,18 +39,13 @@ interface SourcesPanelProps {
 const API_BASE = 'http://localhost:8000/api/v1'
 
 const TYPE_ICON: Record<string, React.ReactNode> = {
-  rss:     <Rss     size={13} className="text-amber-400"  />,
-  github:  <Github  size={13} className="text-purple-400" />,
-  arxiv:   <BookOpen size={13} className="text-blue-400" />,
-  website: <Globe   size={13} className="text-zinc-400"   />,
-  blog:    <Globe   size={13} className="text-green-400"  />,
-  docs:    <BookOpen size={13} className="text-sky-400"   />,
-  news:    <Globe   size={13} className="text-orange-400" />,
-}
-
-const RULE_LABELS: Record<string, string> = {
-  reject_domain: "Ne plus utiliser ce site",
-  reject_type:   "Ne plus utiliser ce type de source",
+  rss:     <Rss      size={13} className="text-amber-400"  />,
+  github:  <Github   size={13} className="text-purple-400" />,
+  arxiv:   <BookOpen size={13} className="text-blue-400"   />,
+  website: <Globe    size={13} className="text-zinc-400"   />,
+  blog:    <Globe    size={13} className="text-green-400"  />,
+  docs:    <BookOpen size={13} className="text-sky-400"    />,
+  news:    <Globe    size={13} className="text-orange-400" />,
 }
 
 // ─── Composant ────────────────────────────────────────────────────────────────
@@ -58,30 +53,51 @@ const RULE_LABELS: Record<string, string> = {
 export default function SourcesPanel({
   open, onClose, sources, intent, flow, onPreferenceSaved,
 }: SourcesPanelProps) {
-  const [feedback, setFeedback] = useState<Record<string, 'pending' | 'done'>>({})
+  // État par source : null = pas ouvert, string = texte en cours, 'done' = envoyé
+  const [feedbackState, setFeedbackState] = useState<Record<string, {
+    open: boolean
+    text: string
+    status: 'idle' | 'pending' | 'done'
+  }>>({})
 
-  async function rejectSource(source: DiscoveredSource, ruleType: 'reject_domain' | 'reject_type') {
-    const value = ruleType === 'reject_domain'
-      ? new URL(source.url).hostname.replace('www.', '')
-      : source.type
+  function openFeedback(srcUrl: string) {
+    setFeedbackState(prev => ({
+      ...prev,
+      [srcUrl]: { open: true, text: prev[srcUrl]?.text ?? '', status: 'idle' },
+    }))
+  }
 
-    const key = `${ruleType}:${value}`
-    setFeedback(prev => ({ ...prev, [key]: 'pending' }))
+  function updateText(srcUrl: string, text: string) {
+    setFeedbackState(prev => ({
+      ...prev,
+      [srcUrl]: { ...prev[srcUrl], text },
+    }))
+  }
+
+  async function submitFeedback(source: DiscoveredSource) {
+    const state = feedbackState[source.url]
+    if (!state || !state.text.trim()) return
+
+    setFeedbackState(prev => ({ ...prev, [source.url]: { ...prev[source.url], status: 'pending' } }))
+
+    // On détermine automatiquement la rule_type selon le contenu du texte
+    // (le backend stocke le texte brut — rule_type = 'user_feedback' libre)
+    const domain = (() => { try { return new URL(source.url).hostname.replace('www.', '') } catch { return source.url } })()
 
     try {
       await fetch(`${API_BASE}/assistant/sources/feedback`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          rule_type: ruleType,
-          value,
-          reason: `Rejeté depuis le panneau Sources après une demande vocale.`,
+          rule_type: 'user_feedback',
+          value:     domain,
+          reason:    state.text.trim(),
         }),
       })
-      setFeedback(prev => ({ ...prev, [key]: 'done' }))
+      setFeedbackState(prev => ({ ...prev, [source.url]: { ...prev[source.url], status: 'done' } }))
       onPreferenceSaved?.()
     } catch {
-      setFeedback(prev => { const n = { ...prev }; delete n[key]; return n })
+      setFeedbackState(prev => ({ ...prev, [source.url]: { ...prev[source.url], status: 'idle' } }))
     }
   }
 
@@ -102,7 +118,7 @@ export default function SourcesPanel({
             key="panel"
             initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
             transition={{ type: 'spring', stiffness: 350, damping: 35 }}
-            className="fixed right-0 top-0 bottom-0 z-50 w-[420px] max-w-full
+            className="fixed right-0 top-0 bottom-0 z-50 w-[440px] max-w-full
                        bg-[hsl(var(--bg-1))] border-l border-[hsl(var(--line))]
                        flex flex-col overflow-hidden"
           >
@@ -114,7 +130,7 @@ export default function SourcesPanel({
                 </p>
                 <p className="text-[11px] font-mono text-[hsl(var(--text-3))] mt-0.5">
                   {flow === 'rag_direct' ? 'Depuis la base indexée' : 'Nouvelles sources découvertes'}
-                  {' · '}{sources.length} sources
+                  {' · '}{sources.length} source{sources.length > 1 ? 's' : ''}
                 </p>
               </div>
               <button onClick={onClose}
@@ -123,11 +139,11 @@ export default function SourcesPanel({
               </button>
             </div>
 
-            {/* Intent summary */}
-            {intent && (flow === 'discovery') && (
+            {/* Résumé de l'analyse */}
+            {intent && flow === 'discovery' && (
               <div className="mx-4 mt-4 p-3 rounded-lg bg-[hsl(var(--bg-2))] border border-[hsl(var(--line))] space-y-2">
                 <div className="flex items-center gap-1.5 text-[11px] font-mono text-[hsl(var(--accent))]">
-                  <Info size={11} /> Analyse de votre demande
+                  <Info size={11} /> Pourquoi ces sources ?
                 </div>
                 {intent.source_rationale && (
                   <p className="text-[11.5px] text-[hsl(var(--text-2))] leading-relaxed">
@@ -154,78 +170,98 @@ export default function SourcesPanel({
                   Aucune source à afficher.
                 </p>
               )}
-              {sources.map((src, i) => (
-                <motion.div
-                  key={src.url}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.04 }}
-                  className="p-3 rounded-lg bg-[hsl(var(--bg-2))] border border-[hsl(var(--line))] space-y-2"
-                >
-                  {/* Titre + type + score */}
-                  <div className="flex items-start gap-2">
-                    <span className="mt-0.5 flex-shrink-0">
-                      {TYPE_ICON[src.type] || TYPE_ICON.website}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[12.5px] font-medium text-[hsl(var(--text))] truncate">
-                        {src.name || src.url}
-                      </p>
-                      <p className="text-[10.5px] font-mono text-[hsl(var(--text-3))] truncate">
-                        {src.url}
-                      </p>
+
+              {sources.map((src, i) => {
+                const fb = feedbackState[src.url]
+                return (
+                  <motion.div
+                    key={src.url}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.04 }}
+                    className="p-3 rounded-lg bg-[hsl(var(--bg-2))] border border-[hsl(var(--line))] space-y-2"
+                  >
+                    {/* Titre + type + score */}
+                    <div className="flex items-start gap-2">
+                      <span className="mt-0.5 flex-shrink-0">
+                        {TYPE_ICON[src.type] || TYPE_ICON.website}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[12.5px] font-medium text-[hsl(var(--text))] truncate">
+                          {src.name || src.url}
+                        </p>
+                        <p className="text-[10.5px] font-mono text-[hsl(var(--text-3))] truncate">
+                          {src.url}
+                        </p>
+                      </div>
+                      <span className="text-[10px] font-mono text-[hsl(var(--text-3))] flex-shrink-0">
+                        {Math.round((src.relevance_score ?? 0) * 100)}%
+                      </span>
                     </div>
-                    <span className="text-[10px] font-mono text-[hsl(var(--text-3))] flex-shrink-0">
-                      {Math.round((src.relevance_score ?? 0) * 100)}%
-                    </span>
-                  </div>
 
-                  {/* Raison littérale */}
-                  {src.reason && (
-                    <p className="text-[11.5px] text-[hsl(var(--text-2))] leading-relaxed pl-5">
-                      {src.reason}
-                    </p>
-                  )}
+                    {/* Raison littérale du système */}
+                    {src.reason && (
+                      <p className="text-[11.5px] text-[hsl(var(--text-2))] leading-relaxed pl-5">
+                        {src.reason}
+                      </p>
+                    )}
 
-                  {/* Actions de rejet */}
-                  <div className="flex gap-2 pl-5 pt-1 flex-wrap">
-                    {(['reject_domain', 'reject_type'] as const).map(rule => {
-                      const value = rule === 'reject_domain'
-                        ? new URL(src.url).hostname.replace('www.', '')
-                        : src.type
-                      const key = `${rule}:${value}`
-                      const state = feedback[key]
-
-                      return (
+                    {/* Feedback utilisateur */}
+                    <div className="pl-5">
+                      {fb?.status === 'done' ? (
+                        <div className="flex items-center gap-1.5 text-[11px] text-green-400">
+                          <Check size={11} /> Avis enregistré — Argos en tiendra compte.
+                        </div>
+                      ) : fb?.open ? (
+                        <div className="space-y-1.5">
+                          <p className="text-[10.5px] text-[hsl(var(--text-3))]">
+                            Exprimez librement votre avis sur cette source :
+                          </p>
+                          <div className="flex gap-2">
+                            <input
+                              autoFocus
+                              type="text"
+                              value={fb.text}
+                              onChange={e => updateText(src.url, e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter') submitFeedback(src) }}
+                              placeholder="Ex : trop généraliste, pas assez technique, hors sujet..."
+                              className="flex-1 bg-[hsl(var(--bg))] border border-[hsl(var(--line))] rounded px-2.5 py-1.5
+                                         text-[11.5px] text-[hsl(var(--text))] placeholder:text-[hsl(var(--text-3))]
+                                         focus:outline-none focus:border-[hsl(var(--accent-line))] transition-colors"
+                            />
+                            <button
+                              onClick={() => submitFeedback(src)}
+                              disabled={!fb.text.trim() || fb.status === 'pending'}
+                              className="w-7 h-7 flex items-center justify-center rounded bg-[hsl(var(--accent))]
+                                         text-white disabled:opacity-40 flex-shrink-0"
+                            >
+                              {fb.status === 'pending'
+                                ? <Loader2 size={11} className="animate-spin" />
+                                : <Send size={11} />
+                              }
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
                         <button
-                          key={rule}
-                          onClick={() => rejectSource(src, rule)}
-                          disabled={state === 'done' || state === 'pending'}
-                          className={`flex items-center gap-1 text-[10px] px-2 py-1 rounded border transition-colors ${
-                            state === 'done'
-                              ? 'border-green-800/40 text-green-400 bg-green-950/20'
-                              : 'border-[hsl(var(--line))] text-[hsl(var(--text-3))] hover:border-red-800/50 hover:text-red-400'
-                          }`}
+                          onClick={() => openFeedback(src.url)}
+                          className="flex items-center gap-1.5 text-[11px] text-[hsl(var(--text-3))]
+                                     hover:text-red-400 transition-colors"
                         >
-                          {state === 'pending'
-                            ? <Loader2 size={9} className="animate-spin" />
-                            : state === 'done'
-                            ? <Check size={9} />
-                            : <ThumbsDown size={9} />
-                          }
-                          {RULE_LABELS[rule]}
+                          <ThumbsDown size={11} />
+                          Cette source ne me convient pas
                         </button>
-                      )
-                    })}
-                  </div>
-                </motion.div>
-              ))}
+                      )}
+                    </div>
+                  </motion.div>
+                )
+              })}
             </div>
 
             {/* Footer */}
             <div className="px-4 py-3 border-t border-[hsl(var(--line))]">
               <p className="text-[10px] font-mono text-[hsl(var(--text-3))] text-center">
-                Vos préférences sont appliquées à toutes les prochaines demandes.
+                Vos retours sont mémorisés et appliqués aux prochaines recherches.
               </p>
             </div>
           </motion.aside>
