@@ -204,3 +204,6 @@ site/
 NOTES.md
 TODO_PERSO.md
 SCRATCH.md
+
+# AuditArgos isolation env
+AuditArgos/venv_kokoro/

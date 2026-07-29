@@ -283,6 +283,24 @@ CREATE TRIGGER update_sources_updated_at BEFORE UPDATE ON sources
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================
+-- DAILY BRIEFINGS
+-- ============================================
+CREATE TABLE IF NOT EXISTS daily_briefings (
+    id                SERIAL PRIMARY KEY,
+    briefing_date     DATE NOT NULL UNIQUE,
+    executive_summary TEXT,
+    top_items         JSONB DEFAULT '[]',
+    trends            JSONB DEFAULT '[]',
+    stats             JSONB DEFAULT '{}',
+    workspace_id      INTEGER REFERENCES workspaces(id) ON DELETE SET NULL,
+    tokens_used       INTEGER DEFAULT 0,
+    cost_usd          NUMERIC(10, 6) DEFAULT 0,
+    generated_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_daily_briefings_date ON daily_briefings (briefing_date DESC);
+
+-- ============================================
 -- VIEWS
 -- ============================================
 CREATE OR REPLACE VIEW pending_items_view AS
