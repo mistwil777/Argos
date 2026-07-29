@@ -88,14 +88,22 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
   const handleDemand = useCallback((transcript: string) => {
     setLastTranscript(transcript)
-    // Naviguer vers /assistant si on n'y est pas déjà
-    if (!window.location.pathname.includes('/assistant')) {
-      navigate('/assistant')
+    const needsNav = !window.location.pathname.includes('/assistant')
+    if (needsNav) navigate('/assistant')
+
+    // Retry jusqu'à ce que le handler soit enregistré (max 2s)
+    let attempts = 0
+    const tryDispatch = () => {
+      if (handlerRef.current) {
+        handlerRef.current(transcript)
+      } else if (attempts < 10) {
+        attempts++
+        setTimeout(tryDispatch, 200)
+      } else {
+        console.warn('[Argos] Handler non enregistré après 2s')
+      }
     }
-    // Délai pour laisser le temps à Assistant.tsx de s'enregistrer si navigation
-    setTimeout(() => {
-      handlerRef.current?.(transcript)
-    }, 150)
+    setTimeout(tryDispatch, needsNav ? 300 : 50)
   }, [navigate])
 
   // ── Boucle d'écoute continue ──────────────────────────────────────────────────
@@ -119,13 +127,18 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         .join('')
         .trim()
 
-      // Détection : commence par "argos" + au moins 3 autres caractères
       const lower = t.toLowerCase()
-      const match = lower.match(/^argos[,.\s]+(.{3,})/)
+      console.log('[Argos STT]', JSON.stringify(lower), 'final:', isFinal)
+
+      // Détection : "argos" en début de transcript, séparateur optionnel, puis la demande
+      const match = lower.match(/^argos[,.\s]*(.+)/)
       if (match && isFinal) {
         const demand = match[1].trim()
-        rec.stop()
-        handleDemand(demand)
+        if (demand.length >= 2) {
+          console.log('[Argos] Demande détectée :', demand)
+          rec.stop()
+          handleDemand(demand)
+        }
       }
     }
 
