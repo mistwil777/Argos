@@ -5,6 +5,7 @@ import {
   Settings, LayoutDashboard, Zap, Activity, Library, Newspaper, TrendingUp
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import VoiceIndicator from '@/components/voice/VoiceIndicator'
 
 const FLOW = [
   {
@@ -199,6 +200,9 @@ export default function AppLayout() {
             </a>
           </div>
         </header>
+
+        {/* Indicateur vocal global */}
+        <VoiceIndicator />
 
         {/* Content */}
         <main className="flex-1 overflow-auto bg-[hsl(var(--bg))]">

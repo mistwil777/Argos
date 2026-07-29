@@ -1,24 +1,21 @@
 /**
- * Assistant Argos — vocal complet
+ * Assistant Argos — page de conversation
  *
- * Wake word  : "argos wake up" → démarre la séquence
- * Séquence   : accueil TTS → STT capte la demande → route → stream réponse
- * Flow A     : RAG direct (base déjà indexée)
- * Flow B     : Discovery (nouvelles sources découvertes + pipeline lancé)
- * Sources    : drawer latéral avec explication littérale + feedback préférences
- *
- * STT/TTS    : Web Speech API native — aucune dépendance HuggingFace
+ * L'écoute vocale est gérée globalement par VoiceContext (App.tsx).
+ * Cette page s'enregistre comme handler de demandes : quand l'utilisateur
+ * dit "Argos <demande>" depuis n'importe quelle page, la navigation
+ * arrive ici et sendVocal() est appelé automatiquement.
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Send, Bot, User, BookOpen, Zap, Terminal,
-  Mic, MicOff, Volume2, VolumeX, List, Radio,
+  Send, Bot, User, BookOpen, Zap, Terminal, List,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import PageHint from '@/components/ui/PageHint'
 import SourcesPanel, { type DiscoveredSource } from '@/components/assistant/SourcesPanel'
+import { useVoice } from '@/context/VoiceContext'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -27,7 +24,7 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
   streaming?: boolean
-  status?: string        // message de statut Argos affiché pendant le traitement
+  status?: string
   sources?: DiscoveredSource[]
   flow?: 'rag_direct' | 'discovery' | null
   intent?: any
@@ -36,19 +33,6 @@ interface Message {
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
 const API_BASE = 'http://localhost:8000/api/v1'
-
-const WAKE_PATTERNS = ['argos wake up', 'argos réveille-toi', 'argos réveil', 'argos wakeup']
-
-const GREETINGS = [
-  "Bonjour, je suis Argos. Que puis-je faire pour vous ? Souhaitez-vous un débrief des dernières nouveautés ou avez-vous une demande particulière ?",
-  "Argos à votre écoute. Quelle est votre demande ?",
-  "Je suis prêt. Vous pouvez me poser votre question.",
-]
-
-const SpeechRecognitionAPI =
-  (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-const STT_SUPPORTED = !!SpeechRecognitionAPI
-const TTS_SUPPORTED = !!window.speechSynthesis
 
 const SUGGESTIONS = [
   'Débrief des dernières nouveautés',
@@ -60,131 +44,24 @@ const SUGGESTIONS = [
 // ─── Composant ────────────────────────────────────────────────────────────────
 
 export default function Assistant() {
-  const [messages, setMessages]         = useState<Message[]>([])
-  const [input, setInput]               = useState('')
-  const [loading, setLoading]           = useState(false)
+  const { speak, registerHandler } = useVoice()
 
-  // Vocal
-  const [wakeActive, setWakeActive]     = useState(false)   // écoute wake word
-  const [listening, setListening]       = useState(false)   // écoute demande
-  const [ttsEnabled, setTtsEnabled]     = useState(true)
-  const [awaitingDemand, setAwaiting]   = useState(false)   // entre accueil et demande
+  const [messages, setMessages] = useState<Message[]>([])
+  const [input, setInput]       = useState('')
+  const [loading, setLoading]   = useState(false)
 
-  // Sources panel
   const [panelOpen, setPanelOpen]       = useState(false)
   const [panelSources, setPanelSources] = useState<DiscoveredSource[]>([])
   const [panelIntent, setPanelIntent]   = useState<any>(null)
   const [panelFlow, setPanelFlow]       = useState<'rag_direct' | 'discovery' | null>(null)
 
-  const recognitionRef   = useRef<any>(null)
-  const wakeRecognitionRef = useRef<any>(null)
-  const endRef           = useRef<HTMLDivElement>(null)
+  const endRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  // ── TTS helper ───────────────────────────────────────────────────────────────
-
-  const speak = useCallback((text: string, onEnd?: () => void) => {
-    if (!TTS_SUPPORTED || !ttsEnabled) { onEnd?.(); return }
-    window.speechSynthesis.cancel()
-    const spoken = text.replace(/[#*`\[\]]/g, '').slice(0, 800)
-    const utt = new SpeechSynthesisUtterance(spoken)
-    utt.lang  = 'fr-FR'; utt.rate = 1.05; utt.pitch = 1.0
-    const voices = window.speechSynthesis.getVoices()
-    const fr = voices.find(v => v.lang.startsWith('fr'))
-    if (fr) utt.voice = fr
-    if (onEnd) utt.onend = onEnd
-    window.speechSynthesis.speak(utt)
-  }, [ttsEnabled])
-
-  // ── STT helper ───────────────────────────────────────────────────────────────
-
-  function captureOnce(onResult: (transcript: string) => void) {
-    if (!STT_SUPPORTED) return
-    const rec = new SpeechRecognitionAPI()
-    rec.lang = 'fr-FR'; rec.interimResults = false; rec.maxAlternatives = 1
-    recognitionRef.current = rec
-    setListening(true)
-    rec.onresult = (e: any) => {
-      const t = e.results[0][0].transcript.trim()
-      setListening(false)
-      onResult(t)
-    }
-    rec.onerror = () => setListening(false)
-    rec.onend   = () => setListening(false)
-    rec.start()
-  }
-
-  // ── Wake word — écoute continue ──────────────────────────────────────────────
-
-  function startWakeListening() {
-    if (!STT_SUPPORTED || wakeActive) return
-    setWakeActive(true)
-    _wakeLoop()
-  }
-
-  function stopWakeListening() {
-    setWakeActive(false)
-    wakeRecognitionRef.current?.stop()
-  }
-
-  function _wakeLoop() {
-    if (!STT_SUPPORTED) return
-    const rec = new SpeechRecognitionAPI()
-    rec.lang = 'fr-FR'; rec.interimResults = true; rec.continuous = false
-    wakeRecognitionRef.current = rec
-
-    rec.onresult = (e: any) => {
-      const t = Array.from(e.results as any[]).map((r: any) => r[0].transcript).join('').toLowerCase().trim()
-
-      // Commande directe : "Argos, <demande>" sans passer par le wake
-      const directMatch = t.match(/^argos[,\s]+(.{5,})$/)
-      if (directMatch && !WAKE_PATTERNS.some(p => t.includes(p.replace(/-/g, ' ')))) {
-        const demand = directMatch[1].trim()
-        rec.stop()
-        sendVocal(demand)
-        return
-      }
-
-      // Wake word classique
-      if (WAKE_PATTERNS.some(p => t.includes(p.toLowerCase().replace(/-/g, ' ')))) {
-        rec.stop()
-        _onWakeDetected()
-      }
-    }
-
-    rec.onend = () => {
-      // Relancer si toujours en mode wake
-      setWakeActive(prev => {
-        if (prev) setTimeout(_wakeLoop, 300)
-        return prev
-      })
-    }
-
-    rec.onerror = () => {
-      setWakeActive(prev => {
-        if (prev) setTimeout(_wakeLoop, 1000)
-        return prev
-      })
-    }
-
-    try { rec.start() } catch { /* ignore double-start */ }
-  }
-
-  function _onWakeDetected() {
-    setAwaiting(true)
-    const greeting = GREETINGS[Math.floor(Math.random() * GREETINGS.length)]
-    speak(greeting, () => {
-      setAwaiting(false)
-      captureOnce(transcript => {
-        if (transcript.length > 2) sendVocal(transcript)
-      })
-    })
-  }
-
-  // ── Envoi vocal (route /assistant/vocal SSE) ─────────────────────────────────
+  // ── Envoi vocal / texte ───────────────────────────────────────────────────────
 
   const sendVocal = useCallback(async (transcript: string) => {
     if (!transcript.trim() || loading) return
@@ -222,13 +99,12 @@ export default function Assistant() {
           const payload = line.slice(6)
 
           if (payload === '[DONE]') { done = true; break }
-          if (payload.startsWith('[FLOW]'))     { flow = payload.slice(6) as any; continue }
-          if (payload.startsWith('[SOURCES]'))  { try { sources = JSON.parse(payload.slice(8)) } catch {} ; continue }
-          if (payload.startsWith('[INTENT]'))   { try { intent  = JSON.parse(payload.slice(8)) } catch {} ; continue }
-          if (payload.startsWith('[DISCOVERY_START]')) continue
-          if (payload.startsWith('[ERROR]'))    { fullText += `\n_Erreur : ${payload.slice(7)}_`; continue }
+          if (payload.startsWith('[FLOW]'))            { flow   = payload.slice(6) as any; continue }
+          if (payload.startsWith('[SOURCES]'))         { try { sources = JSON.parse(payload.slice(8)) } catch {} ; continue }
+          if (payload.startsWith('[INTENT]'))          { try { intent  = JSON.parse(payload.slice(8)) } catch {} ; continue }
+          if (payload.startsWith('[DISCOVERY_START]')) { continue }
+          if (payload.startsWith('[ERROR]'))           { fullText += `\n_Erreur : ${payload.slice(7)}_`; continue }
 
-          // Statut Argos — affiché en italique dans le message en cours avant la réponse finale
           if (payload.startsWith('[STATUS]')) {
             const statusMsg = payload.slice(8).replace(/\\n/g, '\n')
             setMessages(prev => prev.map(m =>
@@ -250,7 +126,6 @@ export default function Assistant() {
           : m
       ))
 
-      // Ouvrir le panel sources si discovery
       if (flow === 'discovery' && sources.length > 0) {
         setPanelSources(sources)
         setPanelIntent(intent)
@@ -258,10 +133,7 @@ export default function Assistant() {
         setPanelOpen(true)
       }
 
-      if (ttsEnabled && TTS_SUPPORTED && fullText) speak(fullText)
-
-      // Reprendre le wake word après réponse
-      if (wakeActive) setTimeout(_wakeLoop, 1500)
+      if (fullText) speak(fullText)
 
     } catch (err: any) {
       setMessages(prev => prev.map(m =>
@@ -270,23 +142,24 @@ export default function Assistant() {
     } finally {
       setLoading(false)
     }
-  }, [loading, ttsEnabled, wakeActive, speak])
+  }, [loading, speak])
 
-  // ── Envoi texte classique ─────────────────────────────────────────────────────
+  // ── Enregistrer le handler dans le contexte global ───────────────────────────
 
-  const send = useCallback((q: string) => sendVocal(q), [sendVocal])
+  useEffect(() => {
+    registerHandler(sendVocal)
+  }, [registerHandler, sendVocal])
 
   // ─────────────────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col h-full">
 
-      {/* Hint */}
       <div className="px-6 pt-6">
         <PageHint id="assistant-vocal" steps={[
-          { title: 'Wake word', body: 'Dites "Argos, wake up" pour activer l\'assistant vocal. Il vous accueille puis écoute votre demande.' },
-          { title: 'Demande libre', body: 'Posez n\'importe quelle question. Si votre base est vide sur ce sujet, le système découvre automatiquement des sources et lance la collecte.' },
-          { title: 'Sources', body: 'Cliquez sur "Sources" pour voir quelles sources ont été choisies, pourquoi, et exclure celles qui ne vous conviennent pas.' },
+          { title: 'Commande vocale', body: 'Dites "Argos" suivi de votre demande depuis n\'importe quelle page. Ex : "Argos, quelles sont les dernières nouveautés ?"' },
+          { title: 'Recherche automatique', body: 'Si votre base ne contient pas de réponse, Argos découvre des sources, collecte et analyse le contenu automatiquement.' },
+          { title: 'Sources', body: 'Le panneau Sources explique pourquoi chaque source a été choisie. Donnez votre avis pour affiner les prochaines recherches.' },
         ]} />
       </div>
 
@@ -310,11 +183,12 @@ export default function Assistant() {
               >
                 <Zap className="w-6 h-6 text-[hsl(var(--accent))]" strokeWidth={2.5} />
               </motion.div>
-              <div className="max-w-xs">
+              <div className="max-w-sm">
                 <h2 className="text-[16px] font-bold text-[hsl(var(--text))] tracking-tight">Assistant Argos</h2>
                 <p className="text-[12.5px] text-[hsl(var(--text-2))] mt-2 leading-relaxed">
-                  Dites <span className="font-mono text-[hsl(var(--accent))]">"Argos, wake up"</span> ou tapez votre question.
-                  Le système cherche dans votre base ou découvre de nouvelles sources.
+                  Dites{' '}
+                  <span className="font-mono text-[hsl(var(--accent))]">"Argos, [votre demande]"</span>
+                  {' '}depuis n'importe quelle page, ou tapez ici.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2 justify-center max-w-md">
@@ -324,7 +198,7 @@ export default function Assistant() {
                     transition={{ delay: 0.1 + i * 0.07 }}
                     whileHover={{ y: -2, borderColor: 'hsl(var(--accent-line))' }}
                     whileTap={{ scale: 0.96 }}
-                    onClick={() => send(s)}
+                    onClick={() => sendVocal(s)}
                     className="text-[11.5px] font-mono px-3 py-1.5 rounded border border-[hsl(var(--line))] text-[hsl(var(--text-2))] hover:text-[hsl(var(--accent))] bg-[hsl(var(--bg-1))] transition-colors"
                   >{s}</motion.button>
                 ))}
@@ -355,7 +229,6 @@ export default function Assistant() {
                   }`}>
                     {msg.role === 'assistant' ? (
                       <>
-                        {/* Statut en cours — affiché tant que la réponse est vide */}
                         {msg.status && !msg.content && (
                           <p className="text-[12px] italic text-[hsl(var(--text-3))] flex items-center gap-2">
                             <span className="inline-block w-1.5 h-1.5 rounded-full bg-[hsl(var(--accent))] animate-pulse flex-shrink-0" />
@@ -376,7 +249,6 @@ export default function Assistant() {
                     )}
                   </div>
 
-                  {/* Sources + bouton panel */}
                   {!msg.streaming && msg.role === 'assistant' && (
                     <motion.div
                       initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
@@ -423,7 +295,7 @@ export default function Assistant() {
 
           {/* Typing dots */}
           <AnimatePresence>
-            {loading && messages.at(-1)?.content === '' && (
+            {loading && messages.at(-1)?.content === '' && !messages.at(-1)?.status && (
               <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                 className="flex gap-3">
                 <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-[hsl(var(--accent-dim))] border border-[hsl(var(--accent-line))]">
@@ -448,7 +320,7 @@ export default function Assistant() {
       {/* Input bar */}
       <div className="flex-shrink-0 border-t border-[hsl(var(--line))] bg-[hsl(var(--bg-1))] px-6 py-4">
         <form
-          onSubmit={e => { e.preventDefault(); send(input) }}
+          onSubmit={e => { e.preventDefault(); sendVocal(input) }}
           className="input-field flex items-center gap-2 px-3 max-w-3xl mx-auto"
         >
           <Terminal className="w-3.5 h-3.5 text-[hsl(var(--text-3))] flex-shrink-0" />
@@ -456,69 +328,19 @@ export default function Assistant() {
             type="text"
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder={
-              awaitingDemand ? 'Argos vous écoute…'
-              : listening     ? 'Écoute en cours…'
-              : wakeActive    ? 'En attente de "Argos, wake up"…'
-              : 'Posez une question ou dites "Argos, wake up"…'
-            }
+            placeholder='Tapez ici ou dites "Argos, [votre demande]"…'
             disabled={loading}
             className="flex-1 bg-transparent py-3 text-[13.5px] text-[hsl(var(--text))] placeholder:text-[hsl(var(--text-3))] outline-none font-mono"
           />
 
-          {/* Sources panel toggle */}
-          <motion.button type="button" whileTap={{ scale: 0.9 }}
+          <button type="button"
             onClick={() => setPanelOpen(true)}
-            title="Voir les sources sélectionnées"
+            title="Voir les sources"
             className="w-7 h-7 flex-shrink-0 rounded flex items-center justify-center text-[hsl(var(--text-3))] hover:text-[hsl(var(--accent))] transition-colors"
           >
             <List className="w-3.5 h-3.5" />
-          </motion.button>
+          </button>
 
-          {/* TTS toggle */}
-          {TTS_SUPPORTED && (
-            <motion.button type="button" whileTap={{ scale: 0.9 }}
-              onClick={() => { setTtsEnabled(p => !p); window.speechSynthesis.cancel() }}
-              title={ttsEnabled ? 'Désactiver lecture vocale' : 'Activer lecture vocale'}
-              className={`w-7 h-7 flex-shrink-0 rounded flex items-center justify-center transition-colors ${ttsEnabled ? 'text-[hsl(var(--accent))]' : 'text-[hsl(var(--text-3))] opacity-50'}`}
-            >
-              {ttsEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
-            </motion.button>
-          )}
-
-          {/* Wake word toggle */}
-          {STT_SUPPORTED && (
-            <motion.button type="button" whileTap={{ scale: 0.9 }}
-              onClick={wakeActive ? stopWakeListening : startWakeListening}
-              disabled={loading}
-              title={wakeActive ? 'Désactiver le wake word' : 'Activer "Argos, wake up"'}
-              className={`w-7 h-7 flex-shrink-0 rounded flex items-center justify-center transition-colors ${
-                wakeActive
-                  ? 'bg-[hsl(var(--accent-dim))] text-[hsl(var(--accent))] border border-[hsl(var(--accent-line))]'
-                  : 'text-[hsl(var(--text-3))] hover:text-[hsl(var(--accent))]'
-              }`}
-            >
-              <Radio className="w-3.5 h-3.5" />
-            </motion.button>
-          )}
-
-          {/* Micro one-shot */}
-          {STT_SUPPORTED && (
-            <motion.button type="button" whileTap={{ scale: 0.9 }}
-              onClick={() => captureOnce(t => { setInput(t); setTimeout(() => send(t), 100) })}
-              disabled={loading || listening}
-              title="Dicter une question (fr-FR)"
-              className={`w-7 h-7 flex-shrink-0 rounded flex items-center justify-center transition-colors ${
-                listening
-                  ? 'bg-red-500/20 text-red-400 animate-pulse'
-                  : 'text-[hsl(var(--text-3))] hover:text-[hsl(var(--accent))]'
-              }`}
-            >
-              {listening ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
-            </motion.button>
-          )}
-
-          {/* Envoyer */}
           <motion.button type="submit"
             disabled={loading || !input.trim()}
             whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.9 }}
@@ -527,15 +349,11 @@ export default function Assistant() {
             <Send className="w-3.5 h-3.5 text-[hsl(var(--primary-foreground))]" />
           </motion.button>
         </form>
-
         <p className="text-[10px] font-mono text-[hsl(var(--text-3))] text-center mt-1.5 max-w-3xl mx-auto">
-          RAG hybride · discovery automatique · wake word "Argos, wake up"
-          {wakeActive && <span className="text-[hsl(var(--accent))] ml-1">· en écoute</span>}
-          {awaitingDemand && <span className="text-amber-400 ml-1">· en attente de votre demande</span>}
+          RAG hybride · discovery automatique · écoute globale active
         </p>
       </div>
 
-      {/* Sources panel */}
       <SourcesPanel
         open={panelOpen}
         onClose={() => setPanelOpen(false)}
