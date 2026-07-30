@@ -1,61 +1,29 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Rss, MessageSquare, Radio, Sparkles,
-  Settings, LayoutDashboard, Zap, Activity, Library, Newspaper, TrendingUp
+  MessageSquare, Radio, FolderOpen,
+  Settings, Zap, Activity, Library, Newspaper
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import VoiceIndicator from '@/components/voice/VoiceIndicator'
+import { useCollect } from '@/context/CollectContext'
 
-const FLOW = [
-  {
-    to: '/veille',
-    icon: Sparkles,
-    label: 'Nouvelle veille',
-    step: '1',
-    tip: 'Décrivez votre besoin — le système découvre et configure les sources automatiquement',
-  },
-  {
-    to: '/sources',
-    icon: Radio,
-    label: 'Sources',
-    step: '2',
-    tip: 'Gérez vos sources de collecte : RSS, GitHub, APIs',
-  },
-  {
-    to: '/feed',
-    icon: Rss,
-    label: 'Contenus',
-    step: '2',
-    tip: 'Parcourez, enrichissez et indexez vos contenus collectés ou ajoutés manuellement',
-  },
-  {
-    to: '/assistant',
-    icon: MessageSquare,
-    label: 'Assistant',
-    step: '3',
-    tip: 'Interrogez votre base de connaissances en langage naturel',
-  },
-]
-
-const TOOLS = [
-  { to: '/briefing', icon: Newspaper,       label: 'Briefing',     tip: 'Synthèse quotidienne automatique des signaux importants' },
-  { to: '/trends',   icon: TrendingUp,      label: 'Tendances',    tip: 'Évolution des concepts clés — signaux faibles et émergents' },
-  { to: '/library',  icon: Library,         label: 'Bibliothèque', tip: 'Vos documents générés — fiches, synthèses, guides, rapports' },
-  { to: '/',         icon: LayoutDashboard, label: 'Dashboard',    tip: 'Vue d\'ensemble — métriques et activité récente', end: true },
-  { to: '/settings', icon: Settings,        label: 'Réglages',     tip: 'Configuration du système' },
+const NAV = [
+  { to: '/settings',  icon: Settings,     label: 'Veille',         tip: 'Périmètre de surveillance, sources et découverte' },
+  { to: '/briefing',  icon: Newspaper,    label: 'Briefing Delta', tip: 'Résumé quotidien de ce qui a changé — groupé par entité surveillée' },
+  { to: '/assistant', icon: MessageSquare,label: 'Assistant',      tip: 'Interrogez la base RAG en langage naturel ou vocal' },
+  { to: '/library',   icon: Library,      label: 'Bibliothèque',   tip: 'Documents générés depuis le RAG — fiches, synthèses, rapports' },
+  { to: '/dossiers',  icon: FolderOpen,   label: 'Dossiers',       tip: 'Dossiers, sujets, sources et profils de connaissance' },
 ]
 
 const META: Record<string, { title: string; badge?: string; desc?: string }> = {
-  '/':          { title: 'Dashboard',    desc: 'Vue d\'ensemble — métriques et activité récente' },
-  '/feed':      { title: 'Contenus',     desc: 'Collectez, enrichissez, indexez — depuis des sources ou des URLs manuelles' },
-  '/assistant': { title: 'Assistant',    badge: 'RAG',        desc: 'Interrogez votre base de connaissances indexée' },
-  '/veille':    { title: 'Nouvelle veille', desc: 'Décrivez votre besoin — le système découvre et configure les sources' },
-  '/sources':   { title: 'Sources',        desc: 'Gérez vos sources de collecte automatique' },
-  '/briefing':  { title: 'Briefing',     desc: 'Synthèse quotidienne automatique des signaux importants de veille' },
-  '/trends':    { title: 'Tendances',    desc: 'Évolution des concepts clés détectés dans vos contenus — signaux faibles' },
-  '/library':   { title: 'Bibliothèque', desc: 'Vos documents générés — fiches, synthèses, guides, rapports' },
-  '/settings':  { title: 'Réglages',     desc: 'Configuration du système et des intégrations' },
+  '/':          { title: 'Briefing Delta',  desc: 'Ce qui a changé aujourd\'hui dans l\'écosystème surveillé' },
+  '/briefing':  { title: 'Briefing Delta',  desc: 'Ce qui a changé aujourd\'hui dans l\'écosystème surveillé' },
+  '/assistant': { title: 'Assistant',       badge: 'RAG', desc: 'Recherche dans la base de connaissances indexée' },
+  '/sources':   { title: 'Sources',         badge: 'lecture seule', desc: 'Transparence — sources surveillées et items collectés' },
+  '/dossiers':  { title: 'Dossiers',        desc: 'Dossiers, sujets, sources et profils de connaissance' },
+  '/library':   { title: 'Bibliothèque',    desc: 'Documents générés depuis le RAG' },
+  '/settings':  { title: 'Veille',           desc: 'Périmètre de surveillance, sources et découverte' },
 }
 
 function NavItem({ to, icon: Icon, label, step, tip, end }: {
@@ -109,6 +77,7 @@ function NavItem({ to, icon: Icon, label, step, tip, end }: {
 export default function AppLayout() {
   const { pathname } = useLocation()
   const meta = META[pathname] ?? { title: 'Argos' }
+  const { job: collectJob } = useCollect()
 
   return (
     <div className="flex h-screen bg-[hsl(var(--bg))] overflow-hidden dark">
@@ -137,25 +106,35 @@ export default function AppLayout() {
 
         {/* Nav */}
         <nav className="relative flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-
-          {/* Section flux */}
-          <p className="text-[9.5px] font-mono text-[hsl(var(--text-3))] uppercase tracking-[.12em] px-2 mb-2">
-            Flux de travail
-          </p>
-          {FLOW.map(item => (
-            <NavItem key={item.to} {...item} />
-          ))}
-
-          <div className="mx-2 my-3 h-px bg-[hsl(var(--line))]" />
-
-          {/* Section outils */}
-          <p className="text-[9.5px] font-mono text-[hsl(var(--text-3))] uppercase tracking-[.12em] px-2 mb-2">
-            Outils
-          </p>
-          {TOOLS.map(item => (
+          {NAV.map(item => (
             <NavItem key={item.to} {...item} />
           ))}
         </nav>
+
+        {/* Indicateur collecte en cours */}
+        <AnimatePresence>
+          {collectJob && !collectJob.done && (
+            <motion.div
+              initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }}
+              className="relative mx-3 mb-2 p-2.5 rounded-lg bg-[hsl(var(--accent-dim))] border border-[hsl(var(--accent-line))]"
+            >
+              <div className="flex items-center gap-2">
+                <div className="flex gap-0.5">
+                  {[0,1,2].map(i => (
+                    <motion.div key={i} className="w-0.5 h-3 rounded-full bg-[hsl(var(--accent))]"
+                      animate={{ scaleY: [0.3, 1, 0.3] }}
+                      transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.15 }} />
+                  ))}
+                </div>
+                <p className="text-[10.5px] font-mono text-[hsl(var(--accent))] leading-tight">
+                  {collectJob.itemsCollected > 0
+                    ? `${collectJob.itemsCollected} articles collectés`
+                    : 'Collecte en cours…'}
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Status indicator */}
         <div className="relative mx-3 mb-3 p-3 rounded-lg bg-[hsl(var(--bg-2))] border border-[hsl(var(--line))]">

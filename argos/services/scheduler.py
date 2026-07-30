@@ -143,6 +143,17 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
         replace_existing=True,
     )
 
+    # ----------------------------------------------------------------
+    # 7. Hygiène RAG — nettoyage + alertes HITL (nuit à 2h00)
+    # ----------------------------------------------------------------
+    scheduler.add_job(
+        _job_rag_hygiene,
+        trigger=CronTrigger(hour=2, minute=0),
+        id="rag_hygiene",
+        name="Hygiène RAG — nettoyage + alertes",
+        replace_existing=True,
+    )
+
 
 def _log_jobs(scheduler: AsyncIOScheduler) -> None:
     for job in scheduler.get_jobs():
@@ -253,3 +264,14 @@ async def _job_decay_sources() -> None:
         logger.debug("[SCHEDULER] scorer.py pas encore disponible — job ignoré")
     except Exception as e:
         logger.error(f"[SCHEDULER] Erreur decay sources : {e}", exc_info=True)
+
+
+async def _job_rag_hygiene() -> None:
+    """Nettoyage automatique du RAG + génération d'alertes HITL."""
+    logger.info("[SCHEDULER] Hygiène RAG démarrée")
+    try:
+        from argos.services.rag_hygiene import run_rag_hygiene
+        stats = await run_rag_hygiene()
+        logger.info(f"[SCHEDULER] Hygiène RAG terminée — {stats}")
+    except Exception as e:
+        logger.error(f"[SCHEDULER] Erreur hygiène RAG : {e}", exc_info=True)

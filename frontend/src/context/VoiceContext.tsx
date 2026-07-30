@@ -1,34 +1,17 @@
-/**
- * VoiceContext — contexte global de l'assistant vocal Argos
- *
- * Comportement :
- *   - Micro ouvert automatiquement au chargement de l'app
- *   - Écoute continue en arrière-plan sur toutes les pages
- *   - Détection : phrase commençant par "argos" → la suite est la demande
- *   - Exemples : "Argos quelles sont les dernières news ?"
- *                "Argos, lance une recherche sur les LLMs"
- *   - Si on est ailleurs que /assistant → navigation automatique
- *   - TTS : Argos parle, état lisible partout dans l'app
- */
-
 import {
   createContext, useContext, useRef, useState,
-  useCallback, useEffect, type ReactNode,
+  useCallback, type ReactNode,
 } from 'react'
-import { useNavigate } from 'react-router-dom'
-
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface VoiceState {
-  listening: boolean       // écoute active
-  speaking: boolean        // TTS en cours
+  speaking: boolean
   ttsEnabled: boolean
-  lastTranscript: string   // dernière demande captée
   setTtsEnabled: (v: boolean) => void
   stopSpeaking: () => void
   speak: (text: string, onEnd?: () => void) => void
-  // Permet à Assistant.tsx d'enregistrer son handler de demande
-  registerHandler: (fn: (transcript: string) => void) => void
+  // Dictée manuelle : démarre le micro, appelle onResult avec le texte final,
+  // retourne une fonction stop() pour annuler
+  startDictation: (onResult: (text: string) => void, onError?: (e: string) => void) => () => void
 }
 
 const VoiceContext = createContext<VoiceState | null>(null)
@@ -39,22 +22,13 @@ export function useVoice() {
   return ctx
 }
 
-// ─── Provider ─────────────────────────────────────────────────────────────────
-
 const SpeechRecognitionAPI =
   (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
 
 export function VoiceProvider({ children }: { children: ReactNode }) {
-  const navigate   = useNavigate()
-
-  const [listening,   setListening]   = useState(false)
-  const [speaking,    setSpeaking]    = useState(false)
-  const [ttsEnabled,  setTtsEnabled]  = useState(true)
-  const [lastTranscript, setLastTranscript] = useState('')
-
-  const recRef     = useRef<any>(null)
-  const handlerRef = useRef<((t: string) => void) | null>(null)
-  const loopRef    = useRef(true)   // contrôle la boucle d'écoute
+  const [speaking,   setSpeaking]   = useState(false)
+  const [ttsEnabled, setTtsEnabled] = useState(true)
+  const recRef = useRef<any>(null)
 
   // ── TTS ──────────────────────────────────────────────────────────────────────
 
@@ -78,112 +52,44 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     window.speechSynthesis.speak(utt)
   }, [ttsEnabled, stopSpeaking])
 
-  // ── Enregistrement du handler Assistant ──────────────────────────────────────
+  // ── Dictée manuelle (one-shot) ────────────────────────────────────────────────
 
-  const registerHandler = useCallback((fn: (t: string) => void) => {
-    handlerRef.current = fn
-  }, [])
-
-  // ── Déclenchement d'une demande ───────────────────────────────────────────────
-
-  const handleDemand = useCallback((transcript: string) => {
-    setLastTranscript(transcript)
-    const needsNav = !window.location.pathname.includes('/assistant')
-    if (needsNav) navigate('/assistant')
-
-    // Retry jusqu'à ce que le handler soit enregistré (max 2s)
-    let attempts = 0
-    const tryDispatch = () => {
-      if (handlerRef.current) {
-        handlerRef.current(transcript)
-      } else if (attempts < 10) {
-        attempts++
-        setTimeout(tryDispatch, 200)
-      } else {
-        console.warn('[Argos] Handler non enregistré après 2s')
+  const startDictation = useCallback(
+    (onResult: (text: string) => void, onError?: (e: string) => void) => {
+      if (!SpeechRecognitionAPI) {
+        onError?.('not_supported')
+        return () => {}
       }
-    }
-    setTimeout(tryDispatch, needsNav ? 300 : 50)
-  }, [navigate])
 
-  // ── Boucle d'écoute continue ──────────────────────────────────────────────────
-
-  const startLoop = useCallback(() => {
-    if (!SpeechRecognitionAPI) return
-
-    const rec = new SpeechRecognitionAPI()
-    rec.lang             = 'fr-FR'
-    rec.interimResults   = true
-    rec.continuous       = false
-    rec.maxAlternatives  = 1
-    recRef.current = rec
-
-    rec.onstart = () => setListening(true)
-
-    rec.onresult = (e: any) => {
-      const isFinal = e.results[e.results.length - 1].isFinal
-      const t = Array.from(e.results as any[])
-        .map((r: any) => r[0].transcript)
-        .join('')
-        .trim()
-
-      const lower = t.toLowerCase()
-      console.log('[Argos STT]', JSON.stringify(lower), 'final:', isFinal)
-
-      // Détection : "argos" en début de transcript, séparateur optionnel, puis la demande
-      const match = lower.match(/^argos[,.\s]*(.+)/)
-      if (match && isFinal) {
-        const demand = match[1].trim()
-        if (demand.length >= 2) {
-          console.log('[Argos] Demande détectée :', demand)
-          rec.stop()
-          handleDemand(demand)
-        }
-      }
-    }
-
-    rec.onend = () => {
-      setListening(false)
-      // Relancer sauf si le provider a été démonté
-      if (loopRef.current) {
-        setTimeout(startLoop, 400)
-      }
-    }
-
-    rec.onerror = (e: any) => {
-      // 'no-speech' est normal — on relance silencieusement
-      if (e.error !== 'no-speech') {
-        console.warn('[VoiceContext] STT error:', e.error)
-      }
-      setListening(false)
-      if (loopRef.current) {
-        setTimeout(startLoop, 1000)
-      }
-    }
-
-    try { rec.start() } catch { /* ignore */ }
-  }, [handleDemand])
-
-  // ── Démarrage au montage ──────────────────────────────────────────────────────
-
-  useEffect(() => {
-    if (!SpeechRecognitionAPI) return
-    loopRef.current = true
-    // Petit délai pour laisser le navigateur demander la permission si nécessaire
-    const t = setTimeout(startLoop, 800)
-    return () => {
-      loopRef.current = false
-      clearTimeout(t)
       recRef.current?.stop()
-    }
-  }, [startLoop])
 
-  // ─────────────────────────────────────────────────────────────────────────────
+      const rec = new SpeechRecognitionAPI()
+      rec.lang            = 'fr-FR'
+      rec.interimResults  = false
+      rec.continuous      = false
+      rec.maxAlternatives = 1
+      recRef.current = rec
+
+      rec.onresult = (e: any) => {
+        const text = e.results[0]?.[0]?.transcript?.trim() ?? ''
+        if (text) onResult(text)
+      }
+
+      rec.onerror = (e: any) => {
+        if (e.error !== 'no-speech') onError?.(e.error)
+      }
+
+      try { rec.start() } catch { onError?.('start_failed') }
+
+      return () => { try { rec.stop() } catch { /* ignore */ } }
+    },
+    []
+  )
 
   return (
     <VoiceContext.Provider value={{
-      listening, speaking, ttsEnabled, lastTranscript,
-      setTtsEnabled, stopSpeaking, speak, registerHandler,
+      speaking, ttsEnabled, setTtsEnabled,
+      stopSpeaking, speak, startDictation,
     }}>
       {children}
     </VoiceContext.Provider>

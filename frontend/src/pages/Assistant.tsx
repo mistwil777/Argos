@@ -8,9 +8,10 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Send, Bot, User, BookOpen, Zap, Terminal, List,
+  Send, Bot, User, BookOpen, Terminal, List, Mic, Volume2,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import PageHint from '@/components/ui/PageHint'
@@ -44,7 +45,11 @@ const SUGGESTIONS = [
 // ─── Composant ────────────────────────────────────────────────────────────────
 
 export default function Assistant() {
-  const { speak, registerHandler } = useVoice()
+  const { speak, startDictation } = useVoice()
+  const { state: routeState } = useLocation()
+  const [dictating, setDictating] = useState(false)
+  const stopDictRef = useRef<(() => void) | null>(null)
+  const autoSentRef = useRef(false)
 
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput]       = useState('')
@@ -55,7 +60,8 @@ export default function Assistant() {
   const [panelIntent, setPanelIntent]   = useState<any>(null)
   const [panelFlow, setPanelFlow]       = useState<'rag_direct' | 'discovery' | null>(null)
 
-  const endRef = useRef<HTMLDivElement>(null)
+  const endRef    = useRef<HTMLDivElement>(null)
+  const cancelRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -73,11 +79,18 @@ export default function Assistant() {
     const assistantId = crypto.randomUUID()
     setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', streaming: true }])
 
+    const abortCtrl = new AbortController()
+    cancelRef.current = () => {
+      abortCtrl.abort()
+    }
+    const timeoutId = setTimeout(() => abortCtrl.abort(), 3 * 60 * 1000) // 3 min max
+
     try {
       const resp = await fetch(`${API_BASE}/assistant/vocal`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ transcript }),
+        signal:  abortCtrl.signal,
       })
 
       if (!resp.ok || !resp.body) throw new Error(`HTTP ${resp.status}`)
@@ -102,7 +115,12 @@ export default function Assistant() {
           if (payload.startsWith('[FLOW]'))            { flow   = payload.slice(6) as any; continue }
           if (payload.startsWith('[SOURCES]'))         { try { sources = JSON.parse(payload.slice(8)) } catch {} ; continue }
           if (payload.startsWith('[INTENT]'))          { try { intent  = JSON.parse(payload.slice(8)) } catch {} ; continue }
-          if (payload.startsWith('[DISCOVERY_START]')) { continue }
+          if (payload.startsWith('[DISCOVERY_START]')) {
+            setMessages(prev => prev.map(m =>
+              m.id === assistantId ? { ...m, status: 'Recherche de sources en cours…' } : m
+            ))
+            continue
+          }
           if (payload.startsWith('[ERROR]'))           { fullText += `\n_Erreur : ${payload.slice(7)}_`; continue }
 
           if (payload.startsWith('[STATUS]')) {
@@ -133,22 +151,49 @@ export default function Assistant() {
         setPanelOpen(true)
       }
 
-      if (fullText) speak(fullText)
 
     } catch (err: any) {
+      const msg = err.name === 'AbortError' ? 'Délai dépassé (3 min).' : `ERR / ${err.message}`
       setMessages(prev => prev.map(m =>
-        m.id === assistantId ? { ...m, content: `ERR / ${err.message}`, streaming: false } : m
+        m.id === assistantId ? { ...m, content: msg, streaming: false } : m
       ))
     } finally {
+      clearTimeout(timeoutId)
+      cancelRef.current = null
       setLoading(false)
     }
   }, [loading, speak])
 
-  // ── Enregistrer le handler dans le contexte global ───────────────────────────
+  // ── Auto-envoi depuis Settings (navigate state) ───────────────────────────────
 
   useEffect(() => {
-    registerHandler(sendVocal)
-  }, [registerHandler, sendVocal])
+    const q = (routeState as any)?.query
+    if (q && !autoSentRef.current) {
+      autoSentRef.current = true
+      sendVocal(q)
+    }
+  }, [routeState, sendVocal])
+
+  // ── Dictée manuelle ───────────────────────────────────────────────────────────
+
+  function toggleDictation() {
+    if (dictating) {
+      stopDictRef.current?.()
+      stopDictRef.current = null
+      setDictating(false)
+      return
+    }
+    setDictating(true)
+    const stop = startDictation(
+      (text) => {
+        setDictating(false)
+        stopDictRef.current = null
+        sendVocal(text)
+      },
+      () => setDictating(false)
+    )
+    stopDictRef.current = stop
+  }
 
   // ─────────────────────────────────────────────────────────────────────────────
 
@@ -181,14 +226,23 @@ export default function Assistant() {
                 transition={{ repeat: Infinity, duration: 2.5 }}
                 className="w-14 h-14 rounded-xl bg-[hsl(var(--accent-dim))] border border-[hsl(var(--accent-line))] flex items-center justify-center"
               >
-                <Zap className="w-6 h-6 text-[hsl(var(--accent))]" strokeWidth={2.5} />
+                <svg viewBox="0 0 32 32" className="w-7 h-7">
+                  <path d="M4.5 16 C8.5 9.5, 23.5 9.5, 27.5 16 C23.5 22.5, 8.5 22.5, 4.5 16 Z" fill="none" stroke="#3987e5" strokeWidth="1.4"/>
+                  <circle cx="16" cy="16" r="5" fill="url(#iris-a)"/>
+                  <circle cx="16" cy="16" r="2.2" fill="#0e0e1c"/>
+                  <circle cx="14.4" cy="14.4" r="1.1" fill="white" opacity="0.55"/>
+                  <defs>
+                    <radialGradient id="iris-a" cx="45%" cy="40%" r="55%">
+                      <stop offset="0%" stopColor="#9085e9"/>
+                      <stop offset="100%" stopColor="#3987e5"/>
+                    </radialGradient>
+                  </defs>
+                </svg>
               </motion.div>
               <div className="max-w-sm">
                 <h2 className="text-[16px] font-bold text-[hsl(var(--text))] tracking-tight">Assistant Argos</h2>
                 <p className="text-[12.5px] text-[hsl(var(--text-2))] mt-2 leading-relaxed">
-                  Dites{' '}
-                  <span className="font-mono text-[hsl(var(--accent))]">"Argos, [votre demande]"</span>
-                  {' '}depuis n'importe quelle page, ou tapez ici.
+                  Posez une question ou dictez votre demande.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2 justify-center max-w-md">
@@ -281,6 +335,15 @@ export default function Assistant() {
                           nouvelles sources — collecte en cours
                         </span>
                       )}
+                      {msg.content && (
+                        <button
+                          onClick={() => speak(msg.content)}
+                          title="Lire à voix haute"
+                          className="ml-auto flex items-center gap-1 text-[10px] font-mono text-[hsl(var(--text-3))] hover:text-[hsl(var(--accent))] transition-colors"
+                        >
+                          <Volume2 className="w-3 h-3" /> Écouter
+                        </button>
+                      )}
                     </motion.div>
                   )}
                 </div>
@@ -328,10 +391,22 @@ export default function Assistant() {
             type="text"
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder='Tapez ici ou dites "Argos, [votre demande]"…'
+            placeholder={dictating ? 'Dictez maintenant…' : 'Posez votre question…'}
             disabled={loading}
             className="flex-1 bg-transparent py-3 text-[13.5px] text-[hsl(var(--text))] placeholder:text-[hsl(var(--text-3))] outline-none font-mono"
           />
+
+          <button type="button"
+            onClick={toggleDictation}
+            title={dictating ? 'Arrêter la dictée' : 'Dicter'}
+            className={`w-7 h-7 flex-shrink-0 rounded flex items-center justify-center transition-colors ${
+              dictating
+                ? 'text-[hsl(var(--accent))] bg-[hsl(var(--accent-dim))] border border-[hsl(var(--accent-line))] animate-pulse'
+                : 'text-[hsl(var(--text-3))] hover:text-[hsl(var(--accent))]'
+            }`}
+          >
+            <Mic className="w-3.5 h-3.5" />
+          </button>
 
           <button type="button"
             onClick={() => setPanelOpen(true)}
@@ -350,7 +425,7 @@ export default function Assistant() {
           </motion.button>
         </form>
         <p className="text-[10px] font-mono text-[hsl(var(--text-3))] text-center mt-1.5 max-w-3xl mx-auto">
-          RAG hybride · discovery automatique · écoute globale active
+          RAG hybride · discovery automatique · dictée à la demande
         </p>
       </div>
 

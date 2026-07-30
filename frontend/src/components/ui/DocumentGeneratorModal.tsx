@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import {
   X, FileText, BookOpen, Map, BarChart3,
-  Loader2, Sparkles, Save, Check, DatabaseZap
+  Loader2, Sparkles, Save, Check
 } from 'lucide-react'
 import { api } from '@/services/api'
 import ReactMarkdown from 'react-markdown'
@@ -42,12 +42,22 @@ interface Props {
   itemIds: number[]
   onClose: () => void
   onSaved: () => void
+  initialPrompt?: string
+  sujetId?: number | null
 }
 
-export default function DocumentGeneratorModal({ itemIds, onClose, onSaved }: Props) {
-  const [docType, setDocType]       = useState('fiche')
-  const [title, setTitle]           = useState('')
-  const [prompt, setPrompt]         = useState('')
+function todayLabel() {
+  return new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+export default function DocumentGeneratorModal({ itemIds, onClose, onSaved, initialPrompt, sujetId }: Props) {
+  const [docType, setDocType]       = useState('synthese')
+  const [title, setTitle]           = useState(
+    initialPrompt
+      ? `Synthèse — ${todayLabel()} — ${initialPrompt.slice(0, 50)}`
+      : `Synthèse — ${todayLabel()}`
+  )
+  const [prompt, setPrompt]         = useState(initialPrompt ?? '')
   const [generating, setGenerating] = useState(false)
   const [markdown, setMarkdown]     = useState('')
   const [editedMarkdown, setEditedMarkdown] = useState('')
@@ -79,6 +89,7 @@ export default function DocumentGeneratorModal({ itemIds, onClose, onSaved }: Pr
         content_markdown: editedMarkdown,
         source_item_ids: itemIds,
         source_prompt: prompt,
+        sujet_id: sujetId ?? null,
       })
       setSaved(true)
       setTimeout(() => { onSaved(); onClose() }, 800)
@@ -104,9 +115,11 @@ export default function DocumentGeneratorModal({ itemIds, onClose, onSaved }: Pr
         <div className="flex items-center justify-between px-6 py-4 border-b border-[hsl(var(--line))] bg-[hsl(var(--bg-2))] flex-shrink-0">
           <div>
             <p className="text-[14px] font-bold text-[hsl(var(--text))]">Générer un document</p>
-            <p className="text-[11px] text-[hsl(var(--text-3))] mt-0.5">
-              {itemIds.length} item{itemIds.length > 1 ? 's' : ''} sélectionné{itemIds.length > 1 ? 's' : ''} comme sources
-            </p>
+            {itemIds.length > 0 && (
+              <p className="text-[11px] text-[hsl(var(--text-3))] mt-0.5">
+                {itemIds.length} item{itemIds.length > 1 ? 's' : ''} sélectionné{itemIds.length > 1 ? 's' : ''} comme sources
+              </p>
+            )}
           </div>
           <button onClick={onClose} className="text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))] transition-colors">
             <X className="w-4 h-4" />

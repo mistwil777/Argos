@@ -57,10 +57,18 @@ export const api = {
   getTodayBriefing: () => request<any>('/api/v1/briefing/today'),
   listBriefings: (limit = 30) => request<any[]>(`/api/v1/briefing/list?limit=${limit}`),
   getBriefing: (id: number) => request<any>(`/api/v1/briefing/${id}`),
+  deleteBriefing: (id: number) => request<any>(`/api/v1/briefing/${id}`, { method: 'DELETE' }),
+  deleteAllBriefings: () => request<any>('/api/v1/briefing', { method: 'DELETE' }),
 
   // Veille à la demande
   veilleOnDemand: (subject: string, max_results = 5, sources = ['hn', 'devto', 'arxiv']) =>
     request<any>('/api/v1/veille/on-demand', { method: 'POST', body: JSON.stringify({ subject, max_results, sources }) }),
+
+  // Discovery : découverte de sources candidates puis confirmation
+  veilleDiscover: (description: string, workspace_id?: number) =>
+    request<any>('/api/v1/veille/create', { method: 'POST', body: JSON.stringify({ description, workspace_id, auto_create: false }) }),
+  veilleConfirm: (sources: any[], workspace_id?: number) =>
+    request<any>('/api/v1/veille/confirm', { method: 'POST', body: JSON.stringify({ sources, workspace_id }) }),
 
   // Tendances
   getTrends: (window = 7, limit = 30) =>
@@ -102,17 +110,18 @@ export const api = {
     request<any>(`/api/v1/items/${item_id}/summary`, { method: 'PATCH', body: JSON.stringify({ summary }) }),
 
   // Documents / Bibliothèque
-  generateDocument: (doc_type: string, title: string, prompt: string, item_ids: number[]) =>
-    request<any>('/api/v1/documents/generate', { method: 'POST', body: JSON.stringify({ doc_type, title, prompt, item_ids }) }),
+  generateDocument: (doc_type: string, title: string, prompt: string, item_ids: number[], sujet_id?: number | null) =>
+    request<any>('/api/v1/documents/generate', { method: 'POST', body: JSON.stringify({ doc_type, title, prompt, item_ids, sujet_id }) }),
   saveDocument: (data: any) =>
     request<any>('/api/v1/documents', { method: 'POST', body: JSON.stringify(data) }),
   getDocuments: (params: Record<string, any> = {}) => {
     const qs = new URLSearchParams(params as any).toString()
     return request<any>(`/api/v1/documents?${qs}`)
   },
-  searchDocuments: (q: string, semantic = false, doc_type?: string) => {
+  searchDocuments: (q: string, semantic = false, doc_type?: string, sujet_id?: number) => {
     const p: any = { q, semantic }
     if (doc_type && doc_type !== 'all') p.doc_type = doc_type
+    if (sujet_id != null) p.sujet_id = sujet_id
     const qs = new URLSearchParams(p).toString()
     return request<any>(`/api/v1/documents/search?${qs}`)
   },
@@ -124,6 +133,29 @@ export const api = {
   deleteDocument: (id: number) => request<any>(`/api/v1/documents/${id}`, { method: 'DELETE' }),
   deleteDocuments: (ids: number[]) => request<any>('/api/v1/documents', { method: 'DELETE', body: JSON.stringify({ ids }) }),
   indexDocument: (id: number) => request<any>(`/api/v1/documents/${id}/index`, { method: 'POST' }),
+
+  // Dossiers & Sujets
+  getWorkspaces: () => request<any>('/api/v1/workspaces-list'),
+  createWorkspace: (data: any) => request<any>('/api/v1/workspaces-list', { method: 'POST', body: JSON.stringify(data) }),
+  getSujets: (workspace_id?: number) => {
+    const qs = workspace_id !== undefined ? `?workspace_id=${workspace_id}` : ''
+    return request<any>(`/api/v1/sujets${qs}`)
+  },
+  createSujet: (data: any) => request<any>('/api/v1/sujets', { method: 'POST', body: JSON.stringify(data) }),
+  getSujet: (id: number) => request<any>(`/api/v1/sujets/${id}`),
+  updateSujet: (id: number, data: any) => request<any>(`/api/v1/sujets/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteSujet: (id: number) => request<any>(`/api/v1/sujets/${id}`, { method: 'DELETE' }),
+  deleteWorkspace: (id: number) => request<any>(`/api/v1/workspaces-list/${id}`, { method: 'DELETE' }),
+  updateWorkspace: (id: number, data: any) => request<any>(`/api/v1/workspaces-list/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  updateKnowledgeProfile: (id: number, data: any) => request<any>(`/api/v1/sujets/${id}/knowledge-profile`, { method: 'PATCH', body: JSON.stringify(data) }),
+  suggestKnowledgeProfile: (id: number) => request<any>(`/api/v1/sujets/${id}/suggest-profile`, { method: 'POST' }),
+  assignSourceSujet: (source_id: number, sujet_id: number | null) => request<any>(`/api/v1/sources/${source_id}/sujet`, { method: 'PATCH', body: JSON.stringify({ sujet_id }) }),
+
+  // RAG Hygiene alerts
+  getHygieneAlerts: (status = 'pending', limit = 20) =>
+    request<any>(`/api/v1/hygiene/alerts?status=${status}&limit=${limit}`),
+  resolveHygieneAlert: (id: number, status: 'ignored' | 'archived' | 'confirmed') =>
+    request<any>(`/api/v1/hygiene/alerts/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
 
   // RAG
   ragQuery: (query: string, workspace_id?: number) =>

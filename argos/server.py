@@ -7,6 +7,8 @@ import logging
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,6 +16,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from argos.config import settings
 from argos.api import api_router, veille_router, assistant_router
+from argos.mcp_server import mcp
 
 
 # ============================================
@@ -29,12 +32,44 @@ logger = logging.getLogger(__name__)
 # ============================================
 # FastAPI app
 # ============================================
+# Initialise le streamable_http_app MCP (crée le session_manager)
+_mcp_starlette = mcp.streamable_http_app()
+
+
+async def _run_startup():
+    """Forward reference shim — appelle startup_event() après sa définition."""
+    # startup_event est défini plus bas dans ce module ; on l'importe dynamiquement
+    import sys
+    mod = sys.modules[__name__]
+    fn = getattr(mod, "startup_event", None)
+    if fn:
+        await fn()
+
+
+async def _run_shutdown():
+    import sys
+    mod = sys.modules[__name__]
+    fn = getattr(mod, "shutdown_event", None)
+    if fn:
+        await fn()
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    """Lifespan combiné FastAPI + MCP session manager."""
+    async with mcp.session_manager.run():
+        await _run_startup()
+        yield
+        await _run_shutdown()
+
+
 app = FastAPI(
     title="Argos Server",
     description="Web browsing infrastructure for AI agents — Model Context Protocol",
     version="1.0.0",
     docs_url="/docs" if settings.environment == "development" else None,
     redoc_url="/redoc" if settings.environment == "development" else None,
+    lifespan=_lifespan,
 )
 
 # ============================================
@@ -54,6 +89,14 @@ app.add_middleware(
 app.include_router(api_router)
 app.include_router(veille_router)
 app.include_router(assistant_router)
+
+# ── MCP Server (Streamable HTTP) ──────────────────────────────────────────────
+# On ajoute directement la route /mcp en passant l'ASGI handler du session manager.
+# Cela évite le double-préfixe /mcp/mcp tout en gardant les routes FastAPI intactes.
+# FastMCP utilise streamable_http_path="/" en interne.
+# En montant sur /mcp, FastAPI strip le préfixe /mcp et passe "/" à l'app FastMCP.
+# Les routes FastAPI (/health, /api/v1/*, /rpc) restent intactes.
+app.mount("/mcp", _mcp_starlette)
 
 
 # ============================================
@@ -356,7 +399,6 @@ async def root():
 # Startup Event - Register Tools
 # ============================================
 
-@app.on_event("startup")
 async def startup_event():
     """Register all MCP tools at startup."""
     logger.info("Starting Argos Server...")
@@ -540,7 +582,6 @@ async def startup_event():
     logger.info("Argos Server ready!")
 
 
-@app.on_event("shutdown")
 async def shutdown_event():
     logger.info("Shutting down Argos Server...")
 

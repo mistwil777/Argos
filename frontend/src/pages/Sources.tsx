@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Globe, Rss, Github, Radio, Trash2, ToggleLeft, ToggleRight, Eye, X, Loader2 } from 'lucide-react'
+import { Plus, Globe, Rss, Github, Radio, Trash2, ToggleLeft, ToggleRight, Eye, Play, Zap, CheckCircle2, Loader2 } from 'lucide-react'
 import { api } from '@/services/api'
 import { timeAgo } from '@/lib/utils'
 import PageHint from '@/components/ui/PageHint'
+
+const API_BASE = 'http://localhost:8000/api/v1'
 
 const TYPE_ICON: Record<string, any> = { rss: Rss, website: Globe, github: Github, api: Radio }
 const TYPE_STYLE: Record<string, string> = {
@@ -31,12 +33,15 @@ const TYPE_EXPLAIN: Record<string, { what: string; format: string }> = {
 }
 
 export default function Sources() {
-  const [sources, setSources]   = useState<any[]>([])
-  const [loading, setLoading]   = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [form, setForm]         = useState(INIT)
-  const [saving, setSaving]     = useState(false)
-  const [error, setError]       = useState<string | null>(null)
+  const [sources, setSources]       = useState<any[]>([])
+  const [loading, setLoading]       = useState(true)
+  const [showForm, setShowForm]     = useState(false)
+  const [form, setForm]             = useState(INIT)
+  const [saving, setSaving]         = useState(false)
+  const [error, setError]           = useState<string | null>(null)
+  const [pipelining, setPipelining] = useState<Record<number, boolean>>({})
+  const [pipelinedAll, setPipelinedAll] = useState(false)
+  const [pipeliningAll, setPipeliningAll] = useState(false)
 
   useEffect(() => { loadSources() }, [])
 
@@ -63,6 +68,25 @@ export default function Sources() {
     try { await api.deleteSource(id); setSources(s => s.filter(x => x.id !== id)) } catch {}
   }
 
+  async function pipelineOne(id: number) {
+    setPipelining(p => ({ ...p, [id]: true }))
+    try {
+      await fetch(`${API_BASE}/sources/${id}/pipeline`, { method: 'POST' })
+    } finally {
+      setPipelining(p => ({ ...p, [id]: false }))
+    }
+  }
+
+  async function pipelineAll() {
+    setPipeliningAll(true)
+    try {
+      await fetch(`${API_BASE}/sources/pipeline/all`, { method: 'POST' })
+      setPipelinedAll(true)
+    } finally {
+      setPipeliningAll(false)
+    }
+  }
+
   const inp = "w-full bg-[hsl(var(--bg-3))] border border-[hsl(var(--line))] rounded-lg px-3 py-2 text-[13px] text-[hsl(var(--text))] outline-none focus:border-[hsl(var(--accent-line))] focus:shadow-[0_0_0_3px_hsl(var(--accent-dim))] placeholder:text-[hsl(var(--text-3))] transition-all"
 
   return (
@@ -72,21 +96,35 @@ export default function Sources() {
         { title: 'Intervalle de collecte', body: 'L\'intervalle (en minutes) définit la fréquence de vérification automatique. 60 min est un bon défaut pour les flux actifs.' },
       ]} />
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <p className="text-[12px] font-mono text-[hsl(var(--text-3))]">
           <span className="text-[hsl(var(--text))] font-bold">{sources.length}</span> source{sources.length !== 1 ? 's' : ''} configurée{sources.length !== 1 ? 's' : ''}
         </p>
-        <motion.button whileTap={{ scale: 0.95 }} onClick={() => setShowForm(v => !v)}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded text-[12.5px] font-bold transition-all border ${
-            showForm
-              ? 'border-[hsl(var(--line))] text-[hsl(var(--text-2))] bg-transparent'
-              : 'border-[hsl(var(--accent-line))] text-[hsl(var(--accent))] bg-[hsl(var(--accent-dim))]'
-          }`}>
-          <motion.div animate={{ rotate: showForm ? 45 : 0 }} transition={{ duration: 0.2 }}>
-            <Plus className="w-3.5 h-3.5" />
-          </motion.div>
-          {showForm ? 'Annuler' : 'Ajouter'}
-        </motion.button>
+        <div className="flex items-center gap-2">
+          {sources.length > 0 && (
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              onClick={pipelineAll}
+              disabled={pipeliningAll}
+              title="Collecter, classifier et indexer toutes les sources actives"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-[12px] font-mono border border-emerald-700/40 text-emerald-400 bg-emerald-900/20 hover:bg-emerald-900/30 disabled:opacity-50 transition-all"
+            >
+              {pipeliningAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : pipelinedAll ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Zap className="w-3.5 h-3.5" />}
+              {pipeliningAll ? 'En cours…' : pipelinedAll ? 'Lancé' : 'Tout pipeliner'}
+            </motion.button>
+          )}
+          <motion.button whileTap={{ scale: 0.95 }} onClick={() => setShowForm(v => !v)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded text-[12.5px] font-bold transition-all border ${
+              showForm
+                ? 'border-[hsl(var(--line))] text-[hsl(var(--text-2))] bg-transparent'
+                : 'border-[hsl(var(--accent-line))] text-[hsl(var(--accent))] bg-[hsl(var(--accent-dim))]'
+            }`}>
+            <motion.div animate={{ rotate: showForm ? 45 : 0 }} transition={{ duration: 0.2 }}>
+              <Plus className="w-3.5 h-3.5" />
+            </motion.div>
+            {showForm ? 'Annuler' : 'Ajouter'}
+          </motion.button>
+        </div>
       </div>
 
       {/* Form */}
@@ -177,7 +215,7 @@ export default function Sources() {
       {/* List */}
       <div className="panel overflow-hidden">
         {/* Table header */}
-        <div className="grid grid-cols-[auto_1fr_100px_80px] gap-3 items-center px-4 py-2.5 bg-[hsl(var(--bg-2))] border-b border-[hsl(var(--line))]">
+        <div className="grid grid-cols-[auto_1fr_100px_100px] gap-3 items-center px-4 py-2.5 bg-[hsl(var(--bg-2))] border-b border-[hsl(var(--line))]">
           <div className="w-7" />
           <p className="text-[10.5px] font-mono text-[hsl(var(--text-3))] uppercase tracking-[.08em]">Source</p>
           <p className="text-[10.5px] font-mono text-[hsl(var(--text-3))] uppercase tracking-[.08em]">Monitor</p>
@@ -199,7 +237,7 @@ export default function Sources() {
                 initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 8, height: 0 }}
                 transition={{ delay: i * 0.04, type: 'spring', stiffness: 280, damping: 28 }}
-                className={`grid grid-cols-[auto_1fr_100px_80px] gap-3 items-center px-4 py-3.5 hover:bg-[hsl(var(--bg-2))] transition-colors ${i > 0 ? 'border-t border-[hsl(var(--line))]' : ''}`}
+                className={`grid grid-cols-[auto_1fr_100px_100px] gap-3 items-center px-4 py-3.5 hover:bg-[hsl(var(--bg-2))] transition-colors ${i > 0 ? 'border-t border-[hsl(var(--line))]' : ''}`}
               >
                 <div className={`w-7 h-7 rounded flex items-center justify-center border ${style}`}>
                   <Icon className="w-3.5 h-3.5" />
@@ -217,6 +255,17 @@ export default function Sources() {
                   )}
                 </div>
                 <div className="flex items-center gap-1">
+                  <motion.button
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => pipelineOne(src.id)}
+                    disabled={pipelining[src.id]}
+                    title="Collecter, classifier et indexer cette source"
+                    className="p-1 rounded text-emerald-400 hover:bg-emerald-900/20 disabled:opacity-40 transition-colors"
+                  >
+                    {pipelining[src.id]
+                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      : <Play className="w-3.5 h-3.5" />}
+                  </motion.button>
                   <motion.button
                     whileTap={{ scale: 0.9 }}
                     onClick={() => toggle(src.id, src.active)}

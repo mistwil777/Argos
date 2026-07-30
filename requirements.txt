@@ -3,10 +3,10 @@
 # ========================================
 
 # Core Framework
-fastapi==0.109.2
-uvicorn[standard]==0.27.1
-pydantic==2.6.1
-pydantic-settings==2.1.0
+fastapi>=0.109.2
+uvicorn[standard]>=0.27.1
+pydantic>=2.8.0,<3.0.0
+pydantic-settings>=2.5.2
 
 # Database
 psycopg2-binary==2.9.9
@@ -51,6 +51,9 @@ scikit-learn>=1.4.0
 textstat==0.7.3
 tldextract==5.1.2
 hdbscan==0.8.40
+
+# Model Context Protocol
+mcp[cli]==1.29.0
 
 # Development & testing
 pytest==7.4.4

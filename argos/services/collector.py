@@ -456,6 +456,28 @@ class CollectorService:
                             duplicates += 1
                             continue
                 
+                # Persister le score de fiabilité si présent
+                if item_id and item.get("_reliability_score") is not None:
+                    try:
+                        with self.db.get_connection() as conn:
+                            with conn.cursor() as cur:
+                                cur.execute("""
+                                    UPDATE items SET
+                                        reliability_passed = TRUE,
+                                        reliability_score  = %s,
+                                        reliability_tier   = %s,
+                                        reliability_reason = %s
+                                    WHERE id = %s
+                                """, (
+                                    item["_reliability_score"],
+                                    item.get("_reliability_tier"),
+                                    item.get("_reliability_reason"),
+                                    item_id,
+                                ))
+                                conn.commit()
+                    except Exception:
+                        pass  # non bloquant
+
                 logger.info(f"Inserted item {item_id}: {item['title'][:50]}...")
                 inserted += 1
                 

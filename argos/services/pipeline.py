@@ -107,9 +107,47 @@ async def _step_collect(
         logger.warning(f"[PIPELINE] Type source '{src_type}' non supporté")
         return 0
 
+    # ── Filtre de fiabilité ───────────────────────────────────────────
+    items, rejected = _filter_reliable_items(items)
+    if rejected:
+        logger.info(f"[PIPELINE] Reliability — {rejected} item(s) rejeté(s) avant insertion")
+
     inserted, duplicates = collector.insert_items(items)
-    logger.info(f"[PIPELINE] Collect — fetched={len(items)} inserted={inserted} dupes={duplicates}")
+    logger.info(f"[PIPELINE] Collect — fetched={len(items)+rejected} inserted={inserted} dupes={duplicates} rejected={rejected}")
     return inserted
+
+
+def _filter_reliable_items(items: list[dict]) -> tuple[list[dict], int]:
+    """
+    Filtre les items via le reliability scorer avant insertion.
+    Retourne (items_acceptés, nb_rejetés).
+    """
+    from argos.services.reliability_scorer import check_item_reliability, log_rejection
+
+    accepted = []
+    rejected = 0
+
+    for item in items:
+        url    = item.get("url") or item.get("source_url") or ""
+        text   = item.get("content") or item.get("summary") or item.get("description") or ""
+        title  = item.get("title") or ""
+        author = item.get("author") or ""
+        date   = item.get("published") or item.get("published_date") or ""
+
+        result = check_item_reliability(url=url, text=text, title=title, author=author, published_date=date)
+
+        if result.passed:
+            # Stocker le score dans l'item pour traçabilité en base
+            item["_reliability_score"] = result.score
+            item["_reliability_tier"]  = result.domain_tier
+            item["_reliability_reason"] = result.reason
+            accepted.append(item)
+        else:
+            rejected += 1
+            log_rejection(None, url, result.reason)
+            logger.debug(f"[RELIABILITY] REJETÉ {url[:80]} — {result.reason}")
+
+    return accepted, rejected
 
 
 async def _step_classify(src_url: str, db) -> list[int]:

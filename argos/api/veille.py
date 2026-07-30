@@ -102,8 +102,10 @@ async def confirm_veille(body: Dict[str, Any]):
             s["workspace_id"] = workspace_id
 
         created = await discovery_svc.create_sources(sources)
+        source_ids = [s["id"] for s in created if s.get("id")]
         return {
             "created": len(created),
+            "source_ids": source_ids,
             "sources": created,
             "message": f"{len(created)} sources créées — premier collect en cours",
         }

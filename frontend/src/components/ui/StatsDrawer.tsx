@@ -71,8 +71,6 @@ function ToolCard({ tool }: { tool: any }) {
     finally { setRunning(false) }
   }
 
-  const rpcExample = JSON.stringify({ jsonrpc: '2.0', id: 1, method: tool.name, params: JSON.parse(params.trim() || '{}') }, null, 2)
-
   return (
     <div className={`rounded-lg border transition-all ${open ? 'border-[hsl(var(--accent-line))] bg-[hsl(var(--bg-2))]' : 'border-[hsl(var(--line))] bg-[hsl(var(--bg-2))] hover:border-[hsl(var(--line-bright))]'}`}>
       {/* Header */}
@@ -237,7 +235,7 @@ export default function StatsDrawer({ type, onClose }: Props) {
   useEffect(() => {
     if (!type) return
     setLoading(true); setData(null)
-    const fetch = async () => {
+    const loadData = async () => {
       try {
         switch (type) {
           case 'tools':   setData(await api.getToolsList()); break
@@ -266,7 +264,7 @@ export default function StatsDrawer({ type, onClose }: Props) {
         }
       } finally { setLoading(false) }
     }
-    fetch()
+    loadData()
   }, [type])
 
   const titles: Record<string, string> = {

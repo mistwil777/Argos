@@ -52,6 +52,13 @@ async def route(
             await on_status(msg)
         logger.info(f"[ROUTER STATUS] {msg}")
 
+    # ── 0. Détection intent d'action (pipeline, collecte, indexation) ──
+    action_intent = _detect_action_intent(transcript)
+    if action_intent:
+        result = await _handle_action_intent(action_intent, transcript, db, workspace_id, on_status=on_status)
+        if result is not None:
+            return result
+
     # ── 1. Essai RAG rapide ──────────────────────────────────────────
     await _status("Je cherche dans votre base de connaissances…")
     vs = get_vector_store()
@@ -98,8 +105,31 @@ async def route(
             "new_sources_created": 0,
         }
 
-    # ── 2b. Discovery flow ───────────────────────────────────────────
-    await _status("Aucune source dans ma base sur ce sujet. Je lance la recherche de sources correspondantes…")
+    # ── 2b. Vérifier sources existantes avant de relancer une discovery ──
+    await _status("Ma base est vide sur ce sujet. Je vérifie si des sources configurées correspondent…")
+
+    existing_matching = _find_matching_sources(db, transcript)
+    if existing_matching:
+        await _status(f"{len(existing_matching)} source(s) existante(s) détectée(s). Je relance la collecte et l'indexation…")
+        from argos.services.pipeline import run_pipeline_for_source
+        import asyncio as _aio
+        async def _repipeline():
+            for src_id in existing_matching[:5]:
+                try:
+                    await run_pipeline_for_source(src_id)
+                except Exception as e:
+                    logger.warning(f"[ROUTER] Re-pipeline source {src_id} : {e}")
+        _aio.ensure_future(_repipeline())
+        return {
+            "flow":                "discovery",
+            "answer":              f"J'ai trouvé {len(existing_matching)} source(s) déjà configurée(s) sur ce sujet. Je relance la collecte et l'indexation. Relancez votre question dans quelques instants pour obtenir une réponse.",
+            "sources":             [{"id": sid} for sid in existing_matching],
+            "confidence":          0.0,
+            "intent":              None,
+            "new_sources_created": 0,
+        }
+
+    await _status("Aucune source existante. Je lance la recherche de nouvelles sources…")
 
     from argos.services.intent_discovery import IntentService, DiscoveryService
     from argos.services.pipeline import run_pipeline_for_source
@@ -221,6 +251,129 @@ def _apply_preferences(candidates: list[dict], prefs: list[dict]) -> list[dict]:
         filtered.append(c)
 
     return filtered
+
+
+_ACTION_PATTERNS = [
+    # (regex, action_type)
+    (r"(transforme|indexe|pipeline|traite|collecte|analyse)\s+(toutes?\s+les?\s+)?sources?", "pipeline_all"),
+    (r"(transforme|indexe|pipeline|traite|collecte|analyse)\s+(ce(tte)?|les?|ces)\s+sources?", "pipeline_all"),
+    (r"(lance|démarre|exécute|run)\s+(le\s+)?(pipeline|traitement|collecte)", "pipeline_all"),
+    (r"(met[sz]?\s+à\s+jour|actualise|rafraîchi[st]?)\s+(les?\s+)?sources?", "pipeline_all"),
+    (r"(génère|crée|produis?)\s+(un\s+)?(résumé|rapport|synthèse|document|fiche)", "generate_doc"),
+    (r"(liste|montre|affiche|quelles?)\s+(sont\s+)?(les?\s+)?(mes?\s+)?sources?", "list_sources"),
+]
+
+import re as _re
+
+def _detect_action_intent(transcript: str) -> str | None:
+    """Retourne le type d'action si le transcript est une commande d'action, None sinon."""
+    lower = transcript.lower().strip()
+    for pattern, action in _ACTION_PATTERNS:
+        if _re.search(pattern, lower):
+            return action
+    return None
+
+
+async def _handle_action_intent(action: str, transcript: str, db, workspace_id, on_status=None) -> dict:
+    """Exécute une action directe sans passer par le RAG."""
+    async def _status(msg: str):
+        if on_status:
+            await on_status(msg)
+        logger.info(f"[ACTION] {msg}")
+
+    if action == "pipeline_all":
+        await _status("Je lance le pipeline sur toutes vos sources actives : collecte, classification et indexation…")
+        try:
+            with db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT id, name FROM sources WHERE active = TRUE")
+                    rows = cur.fetchall()
+
+            if not rows:
+                return {
+                    "flow": "action",
+                    "answer": "Aucune source active trouvée. Ajoutez des sources depuis la page Sources.",
+                    "sources": [], "confidence": 1.0, "intent": None, "new_sources_created": 0,
+                }
+
+            await _status(f"{len(rows)} source(s) active(s) détectée(s). Pipeline en cours en arrière-plan…")
+
+            from argos.services.pipeline import run_pipeline_for_source
+            import asyncio as _aio
+
+            async def _run_all():
+                for src_id, _ in rows:
+                    try:
+                        await run_pipeline_for_source(src_id)
+                    except Exception as e:
+                        logger.warning(f"[ACTION] pipeline source {src_id} : {e}")
+
+            _aio.ensure_future(_run_all())
+
+            names = ", ".join(r[1] for r in rows[:5])
+            suffix = f" (et {len(rows) - 5} autres)" if len(rows) > 5 else ""
+            answer = (
+                f"Pipeline lancé sur {len(rows)} source(s) : {names}{suffix}. "
+                f"La collecte, la classification et l'indexation se font en arrière-plan. "
+                f"Dans quelques minutes, vous pourrez interroger l'assistant sur le contenu collecté."
+            )
+            return {
+                "flow": "action",
+                "answer": answer,
+                "sources": [{"id": r[0], "name": r[1]} for r in rows],
+                "confidence": 1.0, "intent": None, "new_sources_created": 0,
+            }
+        except Exception as e:
+            return {
+                "flow": "action",
+                "answer": f"Erreur lors du pipeline : {e}",
+                "sources": [], "confidence": 0.0, "intent": None, "new_sources_created": 0,
+            }
+
+    if action == "list_sources":
+        await _status("Je récupère la liste de vos sources…")
+        try:
+            with db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT name, type, url FROM sources WHERE active = TRUE ORDER BY name")
+                    rows = cur.fetchall()
+            if not rows:
+                answer = "Aucune source active configurée. Utilisez la page Sources pour en ajouter."
+            else:
+                lines = "\n".join(f"- **{r[0]}** ({r[1]}) — {r[2]}" for r in rows)
+                answer = f"Vos {len(rows)} source(s) active(s) :\n\n{lines}"
+            return {"flow": "action", "answer": answer, "sources": [], "confidence": 1.0, "intent": None, "new_sources_created": 0}
+        except Exception as e:
+            return {"flow": "action", "answer": f"Erreur : {e}", "sources": [], "confidence": 0.0, "intent": None, "new_sources_created": 0}
+
+    # generate_doc → tombe dans le RAG normal
+    return None
+
+
+def _find_matching_sources(db, transcript: str) -> list[int]:
+    """
+    Cherche des sources existantes dont le nom ou l'URL contient des mots du transcript.
+    Retourne une liste d'IDs (max 10).
+    """
+    try:
+        words = [w for w in transcript.lower().split() if len(w) > 3]
+        if not words:
+            return []
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                # Recherche ILIKE sur nom + url pour chaque mot significatif
+                conditions = " OR ".join(
+                    [f"(LOWER(name) LIKE %s OR LOWER(url) LIKE %s)" for _ in words]
+                )
+                params = [p for w in words for p in (f"%{w}%", f"%{w}%")]
+                cur.execute(
+                    f"SELECT id FROM sources WHERE active = TRUE AND ({conditions}) LIMIT 10",
+                    params
+                )
+                return [r[0] for r in cur.fetchall()]
+    except Exception as e:
+        logger.debug(f"[ROUTER] _find_matching_sources : {e}")
+        return []
 
 
 def _log_session(db, transcript: str, flow: str, user_id: str) -> None:

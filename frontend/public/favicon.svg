@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Background rounded square -->
+  <rect width="32" height="32" rx="7" fill="#0e0e1c"/>
+
+  <!-- Outer glow ring (subtle) -->
+  <path d="M3 16 C7 8, 25 8, 29 16 C25 24, 7 24, 3 16 Z"
+        fill="none" stroke="#3987e5" stroke-width="0.6" opacity="0.35"/>
+
+  <!-- Eye shape -->
+  <path d="M4.5 16 C8.5 9.5, 23.5 9.5, 27.5 16 C23.5 22.5, 8.5 22.5, 4.5 16 Z"
+        fill="none" stroke="#3987e5" stroke-width="1.4"/>
+
+  <!-- Iris gradient -->
+  <defs>
+    <radialGradient id="iris" cx="45%" cy="40%" r="55%">
+      <stop offset="0%" stop-color="#9085e9"/>
+      <stop offset="100%" stop-color="#3987e5"/>
+    </radialGradient>
+  </defs>
+  <circle cx="16" cy="16" r="5" fill="url(#iris)"/>
+
+  <!-- Pupil -->
+  <circle cx="16" cy="16" r="2.2" fill="#0e0e1c"/>
+
+  <!-- Specular highlight -->
+  <circle cx="14.4" cy="14.4" r="1.1" fill="white" opacity="0.55"/>
+</svg>

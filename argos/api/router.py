@@ -24,6 +24,12 @@ api_router = APIRouter(prefix="/api/v1", tags=["api"])
 from argos.api.workspaces import router as workspaces_router
 api_router.include_router(workspaces_router)
 
+from argos.api.sujets import router as sujets_router
+api_router.include_router(sujets_router)
+
+from argos.api.hygiene import router as hygiene_router
+api_router.include_router(hygiene_router)
+
 # Database instance
 db = DatabaseManager(settings.database_url)
 
@@ -2015,6 +2021,50 @@ async def collect_from_source(source_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@api_router.post("/sources/pipeline/all")
+async def pipeline_all_sources(background_tasks: BackgroundTasks, data: Dict[str, Any] = {}):
+    """Lance le pipeline complet (collect → classify → score → RAG) sur toutes les sources actives."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id FROM sources WHERE active = TRUE ORDER BY id")
+                ids = [r[0] for r in cur.fetchall()]
+
+        if not ids:
+            return {"message": "Aucune source active", "count": 0}
+
+        async def _run_all():
+            from argos.services.pipeline import run_pipeline_for_source
+            for src_id in ids:
+                try:
+                    await run_pipeline_for_source(src_id)
+                except Exception as e:
+                    logger.warning(f"[PIPELINE-ALL] source {src_id} : {e}")
+
+        background_tasks.add_task(lambda: asyncio.ensure_future(_run_all()))
+        return {"message": f"Pipeline lancé sur {len(ids)} source(s)", "count": len(ids), "source_ids": ids}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/sources/{source_id}/pipeline")
+async def pipeline_one_source(source_id: int, background_tasks: BackgroundTasks):
+    """Lance le pipeline complet (collect → classify → score → RAG) sur une source."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id FROM sources WHERE id = %s", (source_id,))
+                if not cur.fetchone():
+                    raise HTTPException(status_code=404, detail="Source not found")
+
+        background_tasks.add_task(_auto_collect_and_classify, source_id)
+        return {"message": "Pipeline lancé", "source_id": source_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @api_router.post("/workspaces/{workspace_id}/collect")
 async def collect_workspace_sources(workspace_id: int):
     """Trigger collection for ALL active sources of a workspace."""
@@ -2755,6 +2805,324 @@ async def generate_document(data: Dict[str, Any]):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+_RAG_DOC_SYSTEM = """Tu es un analyste de veille technologique expert en rédaction structurée.
+Tu génères des documents professionnels STRICTEMENT ancrés dans les sources fournies.
+
+RÈGLES ABSOLUES :
+- Chaque affirmation factuelle doit être suivie de sa citation : [Source N]
+- N'écris AUCUN fait qui ne soit pas couvert par au moins une source fournie
+- Si les sources sont insuffisantes pour un sous-thème, écris explicitement : "Les sources disponibles ne couvrent pas ce point."
+- Ne paraphrase pas les titres — analyse, relie, tire des conclusions
+- Langue : français sauf citation directe en anglais
+- Jamais de formulation "d'après les sources" en début de phrase — intègre les faits directement"""
+
+_RAG_DOC_PROMPTS = {
+    "fiche": """Génère une fiche de veille à partir des sources suivantes.
+
+SUJET : {topic}
+
+SOURCES RÉCUPÉRÉES :
+{sources}
+
+Format obligatoire :
+## {topic}
+
+### Résumé
+(3 phrases factuelles avec citations [Source N] — pas d'introduction générale)
+
+### Points clés
+(5 bullets max, chacun suivi de [Source N])
+
+### Pourquoi maintenant
+(1 paragraphe — qu'est-ce qui a changé récemment selon les sources [Source N])
+
+### Sources
+{sources_list}""",
+
+    "synthese": """Génère une synthèse thématique à partir des sources suivantes.
+
+SUJET : {topic}
+
+SOURCES RÉCUPÉRÉES :
+{sources}
+
+Format obligatoire :
+## Synthèse : {topic}
+
+### Vue d'ensemble
+(2-3 paragraphes, citations [Source N] sur chaque fait)
+
+### [2-4 sections thématiques issues des sources]
+(chaque section = un aspect couvert par les sources, avec citations [Source N])
+
+### Ce qui manque
+(sujets non couverts par les sources actuelles — 1-3 points)
+
+### Sources
+{sources_list}""",
+
+    "rapport": """Génère un rapport de veille complet à partir des sources suivantes.
+
+SUJET : {topic}
+
+SOURCES RÉCUPÉRÉES :
+{sources}
+
+Format obligatoire :
+## Rapport de veille : {topic}
+
+### Résumé exécutif
+(5-7 lignes pour un lecteur pressé, avec citations [Source N])
+
+### Analyse
+(sous-sections par axe thématique, toutes les affirmations citées [Source N])
+
+### Tendances et signaux
+(ce qui émerge des sources, avec citations [Source N])
+
+### Points non couverts
+(lacunes identifiées dans la couverture RAG)
+
+### Sources
+{sources_list}""",
+}
+
+
+@api_router.post("/documents/generate-from-rag")
+async def generate_document_from_rag(data: Dict[str, Any]):
+    """
+    Génère un document ancré RAG : retrieval automatique → score de couverture → génération avec citations.
+    Optionnellement sauvegarde en bibliothèque (save=true).
+
+    Body:
+      topic       : str   — sujet / question de veille
+      doc_type    : str   — "fiche" | "synthese" | "rapport" (défaut: "fiche")
+      top_k       : int   — nb chunks à récupérer (défaut: 12)
+      min_coverage: float — score min acceptable 0-1 (défaut: 0.3)
+      save        : bool  — sauvegarder en bibliothèque (défaut: false)
+      workspace_id: int   — filtrage workspace
+    """
+    try:
+        import json as _json
+        import asyncio as _asyncio
+        from argos.services.llm_provider import create_llm_provider
+        from argos.services.rag import RAGService
+        from argos.services.vector_store_singleton import get_vector_store
+
+        topic = (data.get("topic") or "").strip()
+        if not topic:
+            raise HTTPException(status_code=400, detail="topic is required")
+
+        doc_type = data.get("doc_type", "fiche")
+        if doc_type not in _RAG_DOC_PROMPTS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"doc_type must be one of: {list(_RAG_DOC_PROMPTS.keys())}"
+            )
+
+        top_k        = int(data.get("top_k", 12))
+        min_coverage = float(data.get("min_coverage", 0.3))
+        save_doc     = bool(data.get("save", False))
+        workspace_id = data.get("workspace_id")
+        sujet_id     = data.get("sujet_id")
+
+        # ── 1. Retrieval hybride ────────────────────────────────────────
+        llm = create_llm_provider(
+            provider_type=settings.llm_provider,
+            openai_api_key=settings.openai_api_key,
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            aws_region=settings.aws_region,
+            model=settings.aws_bedrock_model,
+        )
+        vs  = get_vector_store()
+        rag = RAGService(llm_provider=llm, vector_store=vs, db_manager=db, top_k=top_k)
+
+        search_results = await _asyncio.to_thread(
+            vs.hybrid_search,
+            query=topic,
+            limit=top_k,
+            filter_source_type=None,
+            workspace_id=workspace_id,
+        )
+
+        # ── 2. Score de couverture RAG ──────────────────────────────────
+        rag_coverage = _compute_rag_coverage(search_results)
+
+        if rag_coverage < min_coverage:
+            return {
+                "error":        "insufficient_coverage",
+                "rag_coverage": round(rag_coverage, 3),
+                "min_coverage": min_coverage,
+                "message":      (
+                    f"Couverture RAG insuffisante ({rag_coverage:.0%}) pour générer un document fiable sur ce sujet. "
+                    f"Lancez d'abord le pipeline sur des sources pertinentes."
+                ),
+                "chunks_found": len(search_results),
+            }
+
+        # ── 3. Formatter les sources pour le prompt ─────────────────────
+        sources_prompt, sources_list, item_ids = _format_rag_sources_for_doc(search_results)
+
+        prompt = _RAG_DOC_PROMPTS[doc_type].format(
+            topic=topic,
+            sources=sources_prompt[:14000],
+            sources_list=sources_list,
+        )
+
+        # ── 4. Génération LLM ───────────────────────────────────────────
+        max_tokens = {"fiche": 1500, "synthese": 3500, "rapport": 5000}.get(doc_type, 2000)
+        markdown, usage = await llm.generate(
+            prompt=prompt,
+            system_prompt=_RAG_DOC_SYSTEM,
+            temperature=0.45,
+            max_tokens=max_tokens,
+            top_p=0.9,
+        )
+
+        result = {
+            "markdown":      markdown,
+            "doc_type":      doc_type,
+            "topic":         topic,
+            "rag_coverage":  round(rag_coverage, 3),
+            "chunks_used":   len(search_results),
+            "item_ids":      list(set(item_ids)),
+            "cited_sources": [
+                {
+                    "n":     s["n"],
+                    "title": s["title"],
+                    "url":   s.get("url", ""),
+                    "tier":  s.get("tier", ""),
+                    "score": s.get("score", 0.0),
+                }
+                for s in _parse_source_list(sources_list)
+            ],
+            "tokens_used":   usage.get("total_tokens", 0),
+            "cost_usd":      llm.calculate_cost(
+                                 usage.get("prompt_tokens", 0),
+                                 usage.get("completion_tokens", 0)
+                             ) if hasattr(llm, "calculate_cost") else 0.0,
+        }
+
+        # ── 5. Sauvegarde optionnelle ───────────────────────────────────
+        if save_doc:
+            with db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """INSERT INTO documents
+                           (title, doc_type, content_markdown, content_json,
+                            source_item_ids, source_prompt, workspace_id, sujet_id)
+                           VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s, %s)
+                           RETURNING id, created_at""",
+                        (
+                            topic, doc_type, markdown,
+                            _json.dumps({
+                                "rag_coverage": rag_coverage,
+                                "chunks_used":  len(search_results),
+                                "cited_sources": result["cited_sources"],
+                            }),
+                            list(set(item_ids)),
+                            f"[RAG] {topic}",
+                            workspace_id,
+                            sujet_id,
+                        )
+                    )
+                    row = cur.fetchone()
+                    conn.commit()
+            result["saved_id"]     = row[0]
+            result["saved_at"]     = row[1].isoformat()
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in generate-from-rag: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _compute_rag_coverage(search_results: list) -> float:
+    """
+    Calcule un score de couverture RAG 0-1 basé sur la qualité des chunks récupérés.
+    - Nombre de chunks : plus = mieux (plafonné à 10)
+    - Scores de similarité : distance LanceDB → confiance
+    """
+    if not search_results:
+        return 0.0
+    n = len(search_results)
+    # Score quantité (0.4 de poids) : 5 chunks = bon
+    qty_score = min(n / 8.0, 1.0)
+    # Score similarité (0.6 de poids) : distance LanceDB → confiance
+    distances = [r.get("_distance", 1.0) for r in search_results]
+    avg_dist   = sum(distances) / len(distances)
+    sim_score  = max(0.0, min(1.0, 1.0 - avg_dist / 2.0))
+
+    return round(qty_score * 0.4 + sim_score * 0.6, 3)
+
+
+def _format_rag_sources_for_doc(search_results: list) -> tuple[str, str, list[int]]:
+    """
+    Formate les chunks RAG en (texte prompt, liste sources markdown, item_ids).
+    Chaque source est numérotée [Source N] pour les citations dans le doc.
+    """
+    prompt_parts = []
+    list_lines   = []
+    item_ids     = []
+    seen_ids     = set()
+
+    for idx, r in enumerate(search_results, 1):
+        title      = r.get("title", "Source inconnue")
+        chunk_text = r.get("chunk_text", "")
+        url        = r.get("url", "") or r.get("source_url", "")
+        item_id    = r.get("source_id") or r.get("item_id")
+
+        if item_id and item_id not in seen_ids:
+            item_ids.append(item_id)
+            seen_ids.add(item_id)
+
+        # Récupérer l'URL depuis la DB si manquante
+        if not url and item_id:
+            try:
+                with db.get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("SELECT url, reliability_tier FROM items WHERE id = %s", (item_id,))
+                        row = cur.fetchone()
+                        if row:
+                            url = row[0] or ""
+                            tier = row[1] or "unknown"
+            except Exception:
+                tier = "unknown"
+        else:
+            tier = "unknown"
+
+        prompt_parts.append(
+            f"[Source {idx}] {title}\n{chunk_text[:1200]}"
+        )
+        list_lines.append(f"{idx}. **{title}** — {url} `[{tier}]`")
+
+    sources_prompt = "\n\n---\n\n".join(prompt_parts)
+    sources_list   = "\n".join(list_lines)
+
+    return sources_prompt, sources_list, item_ids
+
+
+def _parse_source_list(sources_list: str) -> list[dict]:
+    """Parse the formatted sources_list markdown back to dicts."""
+    import re
+    result = []
+    for line in sources_list.strip().splitlines():
+        m = re.match(r'^(\d+)\.\s+\*\*(.+?)\*\*\s+—\s+(https?://\S+)?\s*`\[(\w+)\]`', line)
+        if m:
+            result.append({
+                "n":    int(m.group(1)),
+                "title": m.group(2),
+                "url":   m.group(3) or "",
+                "tier":  m.group(4),
+                "score": 0.0,
+            })
+    return result
+
+
 @api_router.post("/documents")
 async def create_document(data: Dict[str, Any]):
     """Save a generated document to the library."""
@@ -2770,8 +3138,8 @@ async def create_document(data: Dict[str, Any]):
             with conn.cursor() as cur:
                 cur.execute(
                     """INSERT INTO documents
-                       (title, doc_type, content_markdown, content_json, source_item_ids, source_prompt, workspace_id)
-                       VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s)
+                       (title, doc_type, content_markdown, content_json, source_item_ids, source_prompt, workspace_id, sujet_id)
+                       VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s, %s)
                        RETURNING id, created_at""",
                     (
                         title, doc_type, content_markdown,
@@ -2779,6 +3147,7 @@ async def create_document(data: Dict[str, Any]):
                         data.get("source_item_ids") or [],
                         data.get("source_prompt", ""),
                         data.get("workspace_id"),
+                        data.get("sujet_id"),
                     )
                 )
                 row = cur.fetchone()
@@ -2909,6 +3278,7 @@ async def search_documents(
 async def list_documents(
     doc_type: Optional[str] = Query(default=None),
     workspace_id: Optional[int] = Query(default=None),
+    sujet_id: Optional[int] = Query(default=None),
     rag_indexed: Optional[bool] = Query(default=None),
     sort: Optional[str] = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
@@ -2922,6 +3292,8 @@ async def list_documents(
             conditions.append("doc_type = %s"); params.append(doc_type)
         if workspace_id is not None:
             conditions.append("workspace_id = %s"); params.append(workspace_id)
+        if sujet_id is not None:
+            conditions.append("sujet_id = %s"); params.append(sujet_id)
         if rag_indexed is not None:
             conditions.append("rag_indexed = %s"); params.append(rag_indexed)
         where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
@@ -2938,7 +3310,8 @@ async def list_documents(
                     f"""SELECT id, title, doc_type, source_prompt,
                                array_length(source_item_ids, 1) AS nb_sources,
                                rag_indexed, created_at, updated_at,
-                               LEFT(content_markdown, 300) AS excerpt
+                               LEFT(content_markdown, 300) AS excerpt,
+                               sujet_id
                         FROM documents {where}
                         ORDER BY {order}
                         LIMIT %s OFFSET %s""",
@@ -2957,6 +3330,7 @@ async def list_documents(
                     "created_at": r[6].isoformat() if r[6] else None,
                     "updated_at": r[7].isoformat() if r[7] else None,
                     "excerpt": r[8],
+                    "sujet_id": r[9],
                 }
                 for r in rows
             ],
@@ -3358,82 +3732,266 @@ Critères : pertinence au sujet, contenu substantiel, sources diversifiées, év
 # ============================================
 
 _BRIEFING_SYSTEM = """Tu es un analyste de veille technologique senior.
-Tu rédiges des briefings matinaux concis, factuels et actionnables.
-Ton style : direct, informatif, structuré. Pas de jargon inutile.
+Tu rédiges des briefings Delta : uniquement ce qui a changé ou émergé aujourd'hui.
+Style : factuel, direct, sans introduction ni conclusion de politesse.
+Tu NE paraphrases PAS les titres — tu donnes des faits nouveaux, des impacts concrets.
 Réponds UNIQUEMENT en français."""
 
-_BRIEFING_PROMPT = """Voici les items de veille collectés sur les dernières {hours}h classifiés high ou critical :
+_BRIEFING_PROMPT = """Voici les items de veille validés (fiabilité confirmée) des dernières {hours}h, groupés par sujet :
 
 {items_text}
 
-Génère un briefing de veille structuré avec EXACTEMENT ce format markdown :
+Génère un briefing Delta avec EXACTEMENT ce format markdown :
 
-## Résumé exécutif
-(3-4 phrases maximum qui capturent l'essentiel de ce qui s'est passé)
+## Delta du {date}
 
-## Signaux importants
-(Liste de 3-6 bullets, chacun sur une ligne, format : **Sujet** — ce qui se passe et pourquoi c'est important)
+### Résumé en 3 lignes
+(Ce qui change concrètement aujourd'hui dans l'écosystème — 3 phrases max, aucune redite des titres)
 
-## Tendances émergentes
-(2-3 tendances détectées dans ces contenus, avec leur potentiel d'impact)
+{groups_section}
 
-## À surveiller
-(1-2 sujets à suivre de près dans les prochains jours)"""
+## Signal faible à surveiller
+(1 tendance émergente non encore couverte par les items — signe avant-coureur, pas une certitude)"""
+
+_BRIEFING_GROUP_TEMPLATE = """### {group_name}
+{items_block}"""
+
+_BRIEFING_ITEM_TEMPLATE = """- **{title}** `[{tier}]`
+  {summary_line}
+  → {url}"""
+
+
+def _group_items_by_entity(items: list[dict]) -> dict[str, list[dict]]:
+    """
+    Groupe les items par entité/sujet surveillé.
+    Utilise les keywords, source_type et domain pour inférer le groupe.
+    """
+    from argos.services.reliability_scorer import _extract_domain
+
+    ENTITY_MAP = {
+        # Anthropic / Claude
+        "anthropic": "Anthropic · Claude",
+        "claude": "Anthropic · Claude",
+        "docs.anthropic.com": "Anthropic · Claude",
+        "modelcontextprotocol.io": "MCP · Model Context Protocol",
+        "mcp": "MCP · Model Context Protocol",
+        # OpenAI
+        "openai": "OpenAI · GPT",
+        "gpt": "OpenAI · GPT",
+        "platform.openai.com": "OpenAI · GPT",
+        # Google DeepMind
+        "deepmind": "Google · DeepMind",
+        "gemini": "Google · DeepMind",
+        "ai.google.dev": "Google · DeepMind",
+        "research.google": "Google · DeepMind",
+        # Meta AI
+        "llama": "Meta AI · LLaMA",
+        "ai.meta.com": "Meta AI · LLaMA",
+        # Hugging Face
+        "huggingface": "Hugging Face",
+        "huggingface.co": "Hugging Face",
+        # LangChain / LlamaIndex
+        "langchain": "LangChain · LlamaIndex",
+        "llamaindex": "LangChain · LlamaIndex",
+        "python.langchain.com": "LangChain · LlamaIndex",
+        # Recherche / Papers
+        "arxiv": "Recherche · Papers",
+        "arxiv.org": "Recherche · Papers",
+        "paperswithcode": "Recherche · Papers",
+        # MLOps / Infra
+        "mlops": "MLOps · Infra",
+        "kubernetes": "MLOps · Infra",
+        "docker": "MLOps · Infra",
+        "kubernetes.io": "MLOps · Infra",
+    }
+
+    groups: dict[str, list[dict]] = {}
+
+    for item in items:
+        domain = _extract_domain(item.get("url", ""))
+        kws = [k.lower() for k in (item.get("keywords") or [])]
+        title_lower = (item.get("title") or "").lower()
+
+        assigned = None
+
+        # 1. Par domaine exact
+        assigned = ENTITY_MAP.get(domain)
+
+        # 2. Par keywords
+        if not assigned:
+            for kw in kws:
+                assigned = ENTITY_MAP.get(kw)
+                if assigned:
+                    break
+
+        # 3. Par titre
+        if not assigned:
+            for token, group in ENTITY_MAP.items():
+                if token in title_lower:
+                    assigned = group
+                    break
+
+        # 4. Fallback : source_type ou domain brut
+        if not assigned:
+            src = item.get("source_type") or ""
+            if src == "github":
+                assigned = "GitHub · Open Source"
+            elif src in ("rss", "website"):
+                assigned = f"Web · {domain}" if domain else "Web · Divers"
+            else:
+                assigned = "Divers"
+
+        groups.setdefault(assigned, []).append(item)
+
+    # Trier les groupes par nb d'items desc
+    return dict(sorted(groups.items(), key=lambda x: len(x[1]), reverse=True))
 
 
 async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int] = None) -> dict:
-    """Core briefing generation logic — reused by both on-demand and scheduled."""
+    """
+    Génère le briefing Delta quotidien.
+    N'utilise QUE les items avec reliability_passed = TRUE des dernières {hours}h.
+    Groupés par entité/sujet. Format Delta : ce qui change, avec sources citées.
+    """
+    import datetime as _dt
     import json as _json
     from argos.services.llm_provider import create_llm_provider
 
-    # Fetch high/critical items from the period
-    window_filter = "AND created_at > NOW() - INTERVAL '%s hours'" % hours
     ws_filter = f"AND workspace_id = {workspace_id}" if workspace_id is not None else ""
+    today_str = _dt.date.today().strftime("%d/%m/%Y")
 
+    # ── Requête : uniquement items reliability_passed=TRUE ──────────────────
     with db.get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(f"""
-                SELECT id, title, summary, url, importance, item_type, keywords, source_type
+                SELECT id, title, summary, url, importance, item_type,
+                       keywords, source_type, reliability_tier, reliability_score,
+                       created_at
                 FROM items
-                WHERE classification_status = 'classified'
+                WHERE reliability_passed = TRUE
+                  AND classification_status = 'classified'
                   AND importance IN ('high', 'critical')
-                  {window_filter}
+                  AND created_at > NOW() - INTERVAL '{hours} hours'
                   {ws_filter}
-                ORDER BY importance DESC, created_at DESC
-                LIMIT 30
+                ORDER BY importance DESC, reliability_score DESC NULLS LAST, created_at DESC
+                LIMIT 40
             """)
             rows = cur.fetchall()
 
+    # Fallback 1 : élargir la fenêtre si aucun item récent
     if not rows:
-        # Fallback: take most recent classified items regardless of time
         with db.get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(f"""
-                    SELECT id, title, summary, url, importance, item_type, keywords, source_type
+                    SELECT id, title, summary, url, importance, item_type,
+                           keywords, source_type, reliability_tier, reliability_score,
+                           created_at
                     FROM items
-                    WHERE classification_status = 'classified'
-                      AND importance IN ('high', 'critical')
+                    WHERE reliability_passed = TRUE
+                      AND classification_status = 'classified'
                       {ws_filter}
                     ORDER BY created_at DESC
-                    LIMIT 15
+                    LIMIT 20
                 """)
                 rows = cur.fetchall()
 
+    # Fallback 2 : scorer à la volée les items classifiés non encore scorés
+    # (items antérieurs à la migration reliability)
+    if not rows:
+        from argos.services.reliability_scorer import score_domain
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"""
+                    SELECT id, title, summary, url, importance, item_type,
+                           keywords, source_type,
+                           NULL as reliability_tier, NULL as reliability_score,
+                           created_at
+                    FROM items
+                    WHERE classification_status = 'classified'
+                      AND reliability_passed IS NULL
+                      {ws_filter}
+                    ORDER BY created_at DESC
+                    LIMIT 20
+                """)
+                rows_unscored = cur.fetchall()
+
+        # Appliquer le scorer domaine uniquement (rapide, pas de fetch HTTP)
+        rows_pass = []
+        for r in rows_unscored:
+            url = r[3] or ""
+            domain_result = score_domain(url)
+            if domain_result.passed:
+                rows_pass.append(r[:8] + (domain_result.domain_tier, domain_result.score, r[10]))
+                # Mettre à jour en base pour les prochains appels
+                try:
+                    with db.get_connection() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute("""
+                                UPDATE items SET
+                                  reliability_passed = TRUE,
+                                  reliability_score  = %s,
+                                  reliability_tier   = %s,
+                                  reliability_reason = %s
+                                WHERE id = %s
+                            """, (domain_result.score, domain_result.domain_tier,
+                                  domain_result.reason, r[0]))
+                            conn.commit()
+                except Exception:
+                    pass
+        rows = rows_pass
+
+    if not rows:
+        return {
+            "error": "no_items",
+            "message": "Aucun item fiable disponible pour générer un briefing. "
+                       "Lancez d'abord le pipeline sur vos sources."
+        }
+
     items = [
-        {"id": r[0], "title": r[1], "summary": (r[2] or "")[:300],
-         "url": r[3], "importance": r[4], "item_type": r[5],
-         "keywords": r[6] or [], "source_type": r[7]}
+        {
+            "id":               r[0],
+            "title":            r[1] or "",
+            "summary":          (r[2] or "")[:400],
+            "url":              r[3] or "",
+            "importance":       r[4] or "high",
+            "item_type":        r[5] or "",
+            "keywords":         r[6] or [],
+            "source_type":      r[7] or "",
+            "reliability_tier": r[8] or "unknown",
+            "reliability_score": float(r[9]) if r[9] else 0.0,
+            "created_at":       r[10].isoformat() if r[10] else None,
+        }
         for r in rows
     ]
 
-    if not items:
-        return {"error": "no_items", "message": "Aucun item high/critical disponible pour générer un briefing"}
+    # ── Grouper par entité ─────────────────────────────────────────────────
+    groups = _group_items_by_entity(items)
 
-    # Build prompt
-    items_text = "\n\n".join([
-        f"**{i['importance'].upper()}** — {i['title']}\n{i['summary']}\nSource: {i['url']}"
-        for i in items
-    ])
+    # ── Construire le texte des groupes pour le prompt ─────────────────────
+    groups_section_parts = []
+    for group_name, group_items in groups.items():
+        block_lines = []
+        for it in group_items[:5]:  # max 5 items par groupe
+            summary_line = it["summary"][:200].replace("\n", " ").strip()
+            if not summary_line:
+                summary_line = "(pas de résumé disponible)"
+            block_lines.append(
+                _BRIEFING_ITEM_TEMPLATE.format(
+                    title=it["title"][:100],
+                    tier=it["reliability_tier"],
+                    summary_line=summary_line,
+                    url=it["url"],
+                )
+            )
+        groups_section_parts.append(
+            _BRIEFING_GROUP_TEMPLATE.format(
+                group_name=group_name,
+                items_block="\n".join(block_lines),
+            )
+        )
+
+    groups_section = "\n\n".join(groups_section_parts)
+    items_text = groups_section  # pour le prompt
 
     llm = create_llm_provider(
         provider_type=settings.llm_provider,
@@ -3444,16 +4002,22 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
         model=settings.aws_bedrock_model,
     )
 
-    prompt = _BRIEFING_PROMPT.format(hours=hours, items_text=items_text[:12000])
+    prompt = _BRIEFING_PROMPT.format(
+        hours=hours,
+        date=today_str,
+        items_text=items_text[:14000],
+        groups_section=groups_section[:12000],
+    )
+
     markdown, usage = await llm.generate(
         prompt=prompt,
         system_prompt=_BRIEFING_SYSTEM,
-        temperature=0.6,
-        max_tokens=2000,
+        temperature=0.4,
+        max_tokens=2500,
         top_p=0.9,
     )
 
-    # Extract trends from keywords
+    # ── Stats ──────────────────────────────────────────────────────────────
     from collections import Counter
     kw_counter: Counter = Counter()
     for item in items:
@@ -3461,23 +4025,39 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
             kw_counter[kw.lower()] += 1
     top_trends = [{"keyword": kw, "count": cnt} for kw, cnt in kw_counter.most_common(8)]
 
-    # Stats
+    tiers = [i["reliability_tier"] for i in items]
     stats = {
-        "total_items": len(items),
-        "critical": sum(1 for i in items if i["importance"] == "critical"),
-        "high": sum(1 for i in items if i["importance"] == "high"),
-        "sources": list({i["source_type"] for i in items}),
-        "period_hours": hours,
+        "total_items":    len(items),
+        "critical":       sum(1 for i in items if i["importance"] == "critical"),
+        "high":           sum(1 for i in items if i["importance"] == "high"),
+        "groups":         list(groups.keys()),
+        "tiers":          dict(Counter(tiers)),
+        "period_hours":   hours,
+        "reliability_filtered": True,
     }
 
+    # ── Construire les sources citées ──────────────────────────────────────
+    cited_sources = [
+        {
+            "id":    it["id"],
+            "title": it["title"],
+            "url":   it["url"],
+            "tier":  it["reliability_tier"],
+            "score": it["reliability_score"],
+        }
+        for it in items
+    ]
+
     return {
-        "markdown": markdown,
-        "top_items": items[:10],
-        "trends": top_trends,
-        "stats": stats,
-        "tokens_used": usage.get("total_tokens", 0),
-        "cost_usd": llm.calculate_cost(usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
-        if hasattr(llm, "calculate_cost") else 0.0,
+        "markdown":        markdown,
+        "top_items":       items[:10],
+        "cited_sources":   cited_sources,
+        "groups":          {k: [i["id"] for i in v] for k, v in groups.items()},
+        "trends":          top_trends,
+        "stats":           stats,
+        "tokens_used":     usage.get("total_tokens", 0),
+        "cost_usd":        llm.calculate_cost(usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
+                           if hasattr(llm, "calculate_cost") else 0.0,
     }
 
 
@@ -3512,15 +4092,19 @@ async def generate_briefing(data: Dict[str, Any] = {}):
             with conn.cursor() as cur:
                 cur.execute(
                     """INSERT INTO daily_briefings
-                       (briefing_date, executive_summary, top_items, trends, stats, workspace_id, tokens_used, cost_usd)
-                       VALUES (%s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s, %s)
+                       (briefing_date, executive_summary, top_items, trends, stats,
+                        workspace_id, tokens_used, cost_usd, cited_sources, groups)
+                       VALUES (%s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s, %s,
+                               %s::jsonb, %s::jsonb)
                        ON CONFLICT (briefing_date) DO UPDATE SET
                          executive_summary = EXCLUDED.executive_summary,
-                         top_items = EXCLUDED.top_items,
-                         trends = EXCLUDED.trends,
-                         stats = EXCLUDED.stats,
-                         tokens_used = EXCLUDED.tokens_used,
-                         generated_at = NOW()
+                         top_items         = EXCLUDED.top_items,
+                         trends            = EXCLUDED.trends,
+                         stats             = EXCLUDED.stats,
+                         tokens_used       = EXCLUDED.tokens_used,
+                         cited_sources     = EXCLUDED.cited_sources,
+                         groups            = EXCLUDED.groups,
+                         generated_at      = NOW()
                        RETURNING id""",
                     (
                         today,
@@ -3531,20 +4115,24 @@ async def generate_briefing(data: Dict[str, Any] = {}):
                         workspace_id,
                         result["tokens_used"],
                         result["cost_usd"],
+                        _json.dumps(result.get("cited_sources", [])),
+                        _json.dumps(result.get("groups", {})),
                     )
                 )
                 briefing_id = cur.fetchone()[0]
                 conn.commit()
 
         return {
-            "success": True,
-            "id": briefing_id,
-            "date": str(today),
-            "markdown": result["markdown"],
-            "top_items": result["top_items"],
-            "trends": result["trends"],
-            "stats": result["stats"],
-            "tokens_used": result["tokens_used"],
+            "success":       True,
+            "id":            briefing_id,
+            "date":          str(today),
+            "markdown":      result["markdown"],
+            "top_items":     result["top_items"],
+            "cited_sources": result.get("cited_sources", []),
+            "groups":        result.get("groups", {}),
+            "trends":        result["trends"],
+            "stats":         result["stats"],
+            "tokens_used":   result["tokens_used"],
         }
     except HTTPException:
         raise
@@ -3583,35 +4171,6 @@ async def list_briefings(limit: int = Query(default=30, ge=1, le=90)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.get("/briefing/{briefing_id}")
-async def get_briefing(briefing_id: int):
-    """Get a single briefing by ID."""
-    try:
-        with db.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """SELECT id, briefing_date, executive_summary, top_items, trends, stats,
-                              tokens_used, cost_usd, generated_at
-                       FROM daily_briefings WHERE id = %s""",
-                    (briefing_id,)
-                )
-                row = cur.fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Briefing not found")
-        return {
-            "id": row[0], "date": str(row[1]),
-            "markdown": row[2], "top_items": row[3],
-            "trends": row[4], "stats": row[5],
-            "tokens_used": row[6], "cost_usd": float(row[7] or 0),
-            "generated_at": row[8].isoformat() if row[8] else None,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error fetching briefing: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @api_router.get("/briefing/today")
 async def get_today_briefing():
     """Get today's briefing if it exists."""
@@ -3622,7 +4181,8 @@ async def get_today_briefing():
             with conn.cursor() as cur:
                 cur.execute(
                     """SELECT id, briefing_date, executive_summary, top_items, trends, stats,
-                              tokens_used, cost_usd, generated_at
+                              tokens_used, cost_usd, generated_at,
+                              cited_sources, groups
                        FROM daily_briefings WHERE briefing_date = %s""",
                     (today,)
                 )
@@ -3636,9 +4196,74 @@ async def get_today_briefing():
             "trends": row[4], "stats": row[5],
             "tokens_used": row[6], "cost_usd": float(row[7] or 0),
             "generated_at": row[8].isoformat() if row[8] else None,
+            "cited_sources": row[9] or [],
+            "groups": row[10] or {},
         }
     except Exception as e:
         logger.error(f"Error fetching today briefing: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/briefing/{briefing_id}")
+async def get_briefing(briefing_id: int):
+    """Get a single briefing by ID."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT id, briefing_date, executive_summary, top_items, trends, stats,
+                              tokens_used, cost_usd, generated_at,
+                              cited_sources, groups
+                       FROM daily_briefings WHERE id = %s""",
+                    (briefing_id,)
+                )
+                row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Briefing not found")
+        return {
+            "id": row[0], "date": str(row[1]),
+            "markdown": row[2], "top_items": row[3],
+            "trends": row[4], "stats": row[5],
+            "tokens_used": row[6], "cost_usd": float(row[7] or 0),
+            "generated_at": row[8].isoformat() if row[8] else None,
+            "cited_sources": row[9] or [],
+            "groups": row[10] or {},
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching briefing: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.delete("/briefing/{briefing_id}")
+async def delete_briefing(briefing_id: int):
+    """Supprime un briefing de l'historique."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM daily_briefings WHERE id = %s RETURNING id", (briefing_id,))
+                if not cur.fetchone():
+                    raise HTTPException(status_code=404, detail="Briefing introuvable")
+                conn.commit()
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.delete("/briefing")
+async def delete_all_briefings():
+    """Vide tout l'historique des briefings."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM daily_briefings RETURNING id")
+                count = cur.rowcount
+                conn.commit()
+        return {"ok": True, "deleted": count}
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 

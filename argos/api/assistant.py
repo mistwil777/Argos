@@ -99,8 +99,8 @@ async def vocal_query(request: Dict[str, Any]):
             if result.get("intent"):
                 yield f"data: [INTENT]{json.dumps(result['intent'], ensure_ascii=False)}\n\n"
 
-            # ── RAG direct : stream la réponse ──────────────────────
-            if flow == "rag_direct" and result.get("answer"):
+            # ── Action directe ou RAG direct : stream la réponse ───
+            if flow in ("rag_direct", "action") and result.get("answer"):
                 words = result["answer"].split(" ")
                 for i, word in enumerate(words):
                     chunk = word if i == 0 else f" {word}"
@@ -131,6 +131,7 @@ async def vocal_query(request: Dict[str, Any]):
         except Exception as e:
             logger.error(f"[ASSISTANT] vocal_query : {e}", exc_info=True)
             yield f"data: [ERROR]{str(e)}\n\n"
+        finally:
             yield "data: [DONE]\n\n"
 
     return StreamingResponse(
