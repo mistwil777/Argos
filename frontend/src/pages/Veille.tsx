@@ -14,6 +14,8 @@ const DOMAIN_THEMES: Record<string, { label: string; desc: string; icon: string;
   'Intelligence Artificielle': [
     { label: 'LLMs & Modèles de langage', desc: 'GPT, Claude, Gemini, Llama — avancées et benchmarks', icon: '🧠', sources_hint: 'arxiv, huggingface, openai blog' },
     { label: 'Agents IA & Systèmes multi-agents', desc: 'AutoGPT, CrewAI, LangGraph, architectures agentiques', icon: '🤖', sources_hint: 'github, arxiv, lmsys' },
+    { label: 'Machine Learning classique', desc: 'XGBoost, scikit-learn, feature engineering, modèles tabulaires', icon: '📐', sources_hint: 'arxiv, kaggle, scikit-learn.org' },
+    { label: 'Deep Learning & Réseaux de neurones', desc: 'Transformers, CNN, RNN, architectures avancées, PyTorch', icon: '🔬', sources_hint: 'arxiv, paperswithcode, pytorch.org' },
     { label: 'RAG & Bases vectorielles', desc: 'LanceDB, Weaviate, Pinecone, patterns de retrieval', icon: '🔍', sources_hint: 'github, blog.llamaindex.ai' },
     { label: 'MLOps & Infrastructure IA', desc: 'MLflow, Ray, déploiement de modèles, monitoring', icon: '⚙️', sources_hint: 'mlflow.org, ray.io, neptune.ai' },
     { label: 'Vision par ordinateur', desc: 'Diffusion, CLIP, détection d\'objets, génération d\'images', icon: '👁️', sources_hint: 'arxiv, paperswithcode' },
