@@ -3,10 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Bell, Volume2, VolumeX, Check, ChevronDown, RefreshCw, Loader2,
   Plug, Users, User, Settings2, Copy, CheckCheck, HelpCircle,
-  Crown, Eye, Edit3, UserPlus, Trash2, X,
+  Crown, Eye, Edit3, UserPlus, Trash2, X, Sun, Moon,
 } from 'lucide-react'
 import { useVoice } from '@/context/VoiceContext'
 import { useAuth } from '@/context/AuthContext'
+import { useTheme } from '@/context/ThemeContext'
 import { api } from '@/services/api'
 import TourOverlay from '@/components/tour/TourOverlay'
 import type { TourStep } from '@/components/tour/TourOverlay'
@@ -69,6 +70,7 @@ function Panel({ title, icon: Icon, children }: { title: string; icon: any; chil
 
 function SectionGeneral() {
   const { ttsEnabled, setTtsEnabled } = useVoice()
+  const { theme, toggleTheme } = useTheme()
   const [hours,     setHours]     = useState(loadHours)
   const [briefTime, setBriefTime] = useState(loadBriefH)
   const [saved,     setSaved]     = useState(false)
@@ -132,6 +134,27 @@ function SectionGeneral() {
             className={`relative w-11 h-6 rounded-full transition-colors ${ttsEnabled ? 'bg-[hsl(var(--accent))]' : 'bg-[hsl(var(--bg-3))]'}`}>
             <motion.div animate={{ x: ttsEnabled ? 20 : 2 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }}
               className="absolute top-1 w-4 h-4 rounded-full bg-white shadow" />
+          </button>
+        </div>
+      </Panel>
+
+      <Panel title="Apparence" icon={theme === 'dark' ? Moon : Sun}>
+        <div className="px-4 py-4 flex items-center justify-between">
+          <div>
+            <p className="text-[12.5px] text-[hsl(var(--text-2))]">Thème {theme === 'dark' ? 'sombre' : 'clair'}</p>
+            <p className="text-[11px] text-[hsl(var(--text-3))] mt-0.5">
+              {theme === 'dark' ? 'Fond navy foncé, adapté aux environnements peu éclairés' : 'Fond clair, palette Capgemini — recommandé'}
+            </p>
+          </div>
+          <button onClick={toggleTheme}
+            className={`relative w-11 h-6 rounded-full transition-colors ${theme === 'dark' ? 'bg-[hsl(var(--accent))]' : 'bg-[hsl(var(--bg-3))]'}`}>
+            <motion.div animate={{ x: theme === 'dark' ? 20 : 2 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+              className="absolute top-1 w-4 h-4 rounded-full bg-white shadow flex items-center justify-center">
+              {theme === 'dark'
+                ? <Moon className="w-2.5 h-2.5 text-[hsl(var(--accent))]" />
+                : <Sun className="w-2.5 h-2.5 text-yellow-500" />
+              }
+            </motion.div>
           </button>
         </div>
       </Panel>

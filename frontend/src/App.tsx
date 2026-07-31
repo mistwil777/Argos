@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { VoiceProvider } from '@/context/VoiceContext'
 import { CollectProvider } from '@/context/CollectContext'
 import { AuthProvider } from '@/context/AuthContext'
+import { ThemeProvider } from '@/context/ThemeContext'
 import PrivateRoute from '@/components/auth/PrivateRoute'
 import AppLayout from '@/components/layout/AppLayout'
 import Login from '@/pages/Login'
@@ -13,6 +14,7 @@ import Reglages from '@/pages/Reglages'
 
 export default function App() {
   return (
+    <ThemeProvider>
     <BrowserRouter>
       <AuthProvider>
       <VoiceProvider>
@@ -50,5 +52,6 @@ export default function App() {
       </VoiceProvider>
       </AuthProvider>
     </BrowserRouter>
+    </ThemeProvider>
   )
 }

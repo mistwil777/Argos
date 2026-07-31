@@ -74,7 +74,7 @@ export default function AppLayout() {
 
   return (
     <>
-    <div className="flex h-screen bg-[hsl(var(--bg))] overflow-hidden dark">
+    <div className="flex bg-[hsl(var(--bg))] overflow-hidden" style={{ height: 'calc(100vh - 22px)' }}>
 
       {/* ─── Sidebar ────────────────────────────────────────────────── */}
       <aside className="relative w-52 flex-shrink-0 flex flex-col">
@@ -211,6 +211,16 @@ export default function AppLayout() {
         </main>
       </div>
     </div>
+
+    {/* ─── Credit line ─────────────────────────────────────────────── */}
+    <div className="fixed bottom-0 left-0 right-0 h-[22px] flex items-center justify-center
+                    bg-[hsl(var(--bg-1))] border-t border-[hsl(var(--line))] z-40 pointer-events-none">
+      <p className="text-[10px] font-mono text-[hsl(var(--text-3))] tracking-wide select-none">
+        Argos — Conceived, designed and built by{' '}
+        <span className="text-[hsl(var(--accent))] font-semibold">Wilfried Leroulier</span>
+      </p>
+    </div>
+
     <ProductTour />
     </>
   )

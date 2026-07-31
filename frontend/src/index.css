@@ -4,39 +4,42 @@
 @tailwind utilities;
 
 /* ─────────────────────────────────────────────────────────────────────────
-   DESIGN SYSTEM — OpenWebMCP
-   Inspired by technical precision: dark ground, electric glows, grid fabric
+   DESIGN SYSTEM — Argos
+   Light-first. Capgemini palette (#0070AD / #00B4E1). Optional dark mode.
 ───────────────────────────────────────────────────────────────────────── */
 
 @layer base {
   :root {
-    /* ── Ground ── */
-    --bg:         9 10% 4%;          /* #070809 almost black */
-    --bg-1:       220 18% 7%;        /* panels */
-    --bg-2:       220 15% 10%;       /* elevated panels */
-    --bg-3:       220 12% 13%;       /* hovered, inputs */
+    /* ── Ground (light) ── */
+    --bg:         210 33% 98%;        /* #F8FAFC */
+    --bg-1:       0 0% 100%;          /* #FFFFFF cards */
+    --bg-2:       210 25% 96%;        /* #F1F5F9 elevated */
+    --bg-3:       210 20% 92%;        /* #E8EEF4 inputs/hover */
 
     /* ── Borders ── */
-    --line:       220 10% 16%;       /* default border */
-    --line-bright:220 20% 24%;       /* hover border */
+    --line:       210 18% 88%;        /* #D6E0EC */
+    --line-bright:210 25% 76%;        /* #B3C5D9 hover */
 
     /* ── Type ── */
-    --text:       210 20% 96%;       /* near-white */
-    --text-2:     215 16% 58%;       /* secondary */
-    --text-3:     215 12% 38%;       /* tertiary / disabled */
+    --text:       214 40% 12%;        /* #0F1C2E navy */
+    --text-2:     214 20% 40%;        /* #526070 secondary */
+    --text-3:     214 14% 58%;        /* #8A9DB0 tertiary */
 
-    /* ── Accent — electric indigo ── */
-    --accent:     235 85% 65%;       /* #5B6EF5 */
-    --accent-dim: 235 85% 65% / .12;
-    --accent-glow:235 85% 65% / .25;
-    --accent-line:235 85% 65% / .35;
+    /* ── Accent — Capgemini blue ── */
+    --accent:     204 100% 34%;       /* #0070AD */
+    --accent-dim: 204 100% 34% / .08;
+    --accent-glow:204 100% 34% / .18;
+    --accent-line:204 100% 34% / .30;
+
+    /* ── Accent secondary — Capgemini cyan ── */
+    --cyan-cap:   196 100% 44%;       /* #00B4E1 */
 
     /* ── Status ── */
-    --green:  142 70% 50%;
-    --amber:  38 92% 52%;
-    --red:    0 72% 58%;
-    --cyan:   186 80% 54%;
-    --violet: 262 80% 65%;
+    --green:  152 64% 38%;
+    --amber:  38 90% 48%;
+    --red:    0 68% 52%;
+    --cyan:   196 100% 44%;
+    --violet: 262 72% 58%;
 
     /* ── Aliases for Tailwind theme ── */
     --background:   var(--bg);
@@ -47,14 +50,45 @@
     --input:        var(--bg-3);
     --ring:         var(--accent);
     --primary:      var(--accent);
-    --primary-foreground: 220 100% 6%;
+    --primary-foreground: 0 0% 100%;
     --secondary:    var(--bg-2);
     --secondary-foreground: var(--text-2);
     --muted:        var(--bg-2);
     --muted-foreground: var(--text-2);
     --accent-css:   var(--accent);
-    --accent-foreground: var(--text);
+    --accent-foreground: 0 0% 100%;
     --radius: 0.5rem;
+  }
+
+  /* ── Dark theme ── */
+  .dark {
+    --bg:         220 22% 8%;         /* #0D1320 */
+    --bg-1:       220 20% 11%;        /* #141B27 panels */
+    --bg-2:       220 18% 14%;        /* #1C2435 elevated */
+    --bg-3:       220 16% 18%;        /* #242E40 inputs */
+
+    --line:       220 14% 22%;        /* #2C3A50 */
+    --line-bright:220 18% 30%;        /* #3D506A hover */
+
+    --text:       210 20% 94%;        /* #EEF2F7 */
+    --text-2:     215 14% 58%;        /* #899AB0 */
+    --text-3:     215 10% 40%;        /* #5C6E82 */
+
+    --accent:     204 92% 50%;        /* #0BA8E0 — cyan-shifted for dark bg contrast */
+    --accent-dim: 204 92% 50% / .12;
+    --accent-glow:204 92% 50% / .22;
+    --accent-line:204 92% 50% / .32;
+
+    --cyan-cap:   196 100% 52%;
+
+    --green:  152 60% 45%;
+    --amber:  38 88% 52%;
+    --red:    0 70% 58%;
+    --cyan:   196 100% 52%;
+    --violet: 262 72% 65%;
+
+    --primary-foreground: 220 22% 8%;
+    --accent-foreground:  220 22% 8%;
   }
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -79,11 +113,14 @@
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
-   DOT-GRID BACKGROUND — the fabric of the app
+   DOT-GRID BACKGROUND
 ───────────────────────────────────────────────────────────────────────── */
 .dot-grid {
-  background-image: radial-gradient(circle, hsl(220 15% 22% / .7) 1px, transparent 1px);
+  background-image: radial-gradient(circle, hsl(210 18% 78% / .6) 1px, transparent 1px);
   background-size: 28px 28px;
+}
+.dark .dot-grid {
+  background-image: radial-gradient(circle, hsl(220 15% 28% / .5) 1px, transparent 1px);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -214,9 +251,9 @@
 @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
 .skeleton {
   background: linear-gradient(90deg,
-    hsl(var(--bg-1)) 25%,
+    hsl(var(--bg-2)) 25%,
     hsl(var(--bg-3)) 50%,
-    hsl(var(--bg-1)) 75%
+    hsl(var(--bg-2)) 75%
   );
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;
