@@ -64,7 +64,7 @@ export default function Register() {
                 </label>
                 <input
                   type="text" value={fullName} onChange={e => setFullName(e.target.value)}
-                  autoFocus
+                  autoFocus autoComplete="name" name="name"
                   className="w-full bg-[hsl(var(--bg))] border border-[hsl(var(--line))] rounded px-3 py-2
                              text-[13px] text-[hsl(var(--text))] outline-none
                              focus:border-[hsl(var(--accent-line))] transition-colors"
@@ -77,6 +77,7 @@ export default function Register() {
                 </label>
                 <input
                   type="email" value={email} onChange={e => setEmail(e.target.value)} required
+                  autoComplete="email" name="email"
                   className="w-full bg-[hsl(var(--bg))] border border-[hsl(var(--line))] rounded px-3 py-2
                              text-[13px] text-[hsl(var(--text))] outline-none
                              focus:border-[hsl(var(--accent-line))] transition-colors"
@@ -91,6 +92,7 @@ export default function Register() {
                   <input
                     type={showPwd ? 'text' : 'password'} value={password}
                     onChange={e => setPassword(e.target.value)} required
+                    autoComplete="new-password" name="password"
                     className="w-full bg-[hsl(var(--bg))] border border-[hsl(var(--line))] rounded px-3 py-2 pr-9
                                text-[13px] text-[hsl(var(--text))] outline-none
                                focus:border-[hsl(var(--accent-line))] transition-colors"

@@ -61,7 +61,8 @@ export default function Login() {
                 </label>
                 <input
                   type="email" value={email} onChange={e => setEmail(e.target.value)}
-                  required autoFocus
+                  required autoFocus autoComplete="email"
+                  name="email" id="login-email"
                   className="w-full bg-[hsl(var(--bg))] border border-[hsl(var(--line))] rounded px-3 py-2
                              text-[13px] text-[hsl(var(--text))] outline-none
                              focus:border-[hsl(var(--accent-line))] transition-colors"
@@ -76,6 +77,7 @@ export default function Login() {
                   <input
                     type={showPwd ? 'text' : 'password'} value={password}
                     onChange={e => setPassword(e.target.value)} required
+                    autoComplete="current-password" name="password" id="login-password"
                     className="w-full bg-[hsl(var(--bg))] border border-[hsl(var(--line))] rounded px-3 py-2 pr-9
                                text-[13px] text-[hsl(var(--text))] outline-none
                                focus:border-[hsl(var(--accent-line))] transition-colors"
