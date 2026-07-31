@@ -68,18 +68,20 @@ function CadrageVeille({ onDone }: { onDone: () => void }) {
     setTargetWorkspace(null)
     await new Promise(r => setTimeout(r, 600))
     const detected = detectDomain(query)
-    const { items } = detected || { domain: '', items: DOMAIN_THEMES['Intelligence Artificielle'] }
+    const { domain, items } = detected || { domain: 'Intelligence Artificielle', items: DOMAIN_THEMES['Intelligence Artificielle'] }
     setThemes(items)
 
     // Cherche si un workspace existant correspond au domaine détecté
     try {
       const data = await api.getWorkspaces()
       const workspaces: { id: number; name: string }[] = data.workspaces || data
-      const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2)
-      const match = workspaces.find(ws =>
-        queryWords.some(w => ws.name.toLowerCase().includes(w)) ||
-        ws.name.toLowerCase().split(/\s+/).some(w => w.length > 2 && query.toLowerCase().includes(w))
-      )
+      // Mots-clés du domaine (ex: "Intelligence Artificielle" → ["intelligence", "artificielle", "ia"])
+      const domainWords = domain.toLowerCase().split(/[\s&]+/).filter(w => w.length > 1)
+      const domainAbbrev = domainWords.map(w => w[0]).join('')  // "ia", "dl", etc.
+      const match = workspaces.find(ws => {
+        const wsLow = ws.name.toLowerCase()
+        return domainWords.some(w => wsLow.includes(w)) || wsLow === domainAbbrev || wsLow.includes(domainAbbrev)
+      })
       if (match) setTargetWorkspace(match)
     } catch { /* silencieux */ }
 
