@@ -55,6 +55,10 @@ hdbscan==0.8.40
 # Model Context Protocol
 mcp[cli]==1.29.0
 
+# Auth
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
 # Development & testing
 pytest==7.4.4
 pytest-asyncio==0.23.4

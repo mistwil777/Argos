@@ -1,9 +1,14 @@
 // Use relative URLs so Vite proxy handles routing — no hardcoded host
 const BASE = import.meta.env.VITE_API_URL || ''
 
+function getAuthHeaders(): Record<string, string> {
+  const token = localStorage.getItem('argos_token')
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const resp = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     ...options,
   })
   if (!resp.ok) {
@@ -26,6 +31,14 @@ async function rpc(method: string, params: Record<string, any> = {}) {
 }
 
 export const api = {
+  // Auth
+  register: (email: string, password: string, full_name?: string) =>
+    request<any>('/auth/register', { method: 'POST', body: JSON.stringify({ email, password, full_name }) }),
+  login: (email: string, password: string) =>
+    request<any>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  me: () => request<any>('/auth/me'),
+  updateMe: (data: any) => request<any>('/auth/me', { method: 'PUT', body: JSON.stringify(data) }),
+
   // Health
   healthCheck: () => request<any>('/health'),
 
@@ -82,6 +95,8 @@ export const api = {
   getBrowseHistory: (limit = 20) => request<any[]>(`/api/v1/web/browse/history?limit=${limit}`),
 
   // HITL / LLM filter
+  getItemContent: (item_id: number) =>
+    request<any>(`/api/v1/items/${item_id}/content`),
   getItemRawContent: (item_id: number, translate = false) =>
     request<any>(`/api/v1/items/${item_id}/raw-content?translate=${translate}`),
   previewPdfUrl: (url: string) =>
@@ -137,6 +152,11 @@ export const api = {
   // Dossiers & Sujets
   getWorkspaces: () => request<any>('/api/v1/workspaces-list'),
   createWorkspace: (data: any) => request<any>('/api/v1/workspaces-list', { method: 'POST', body: JSON.stringify(data) }),
+  getWorkspaceMembers: (id: number) => request<any>(`/workspaces/${id}/members`),
+  addWorkspaceMember: (id: number, user_identifier: string, role: string) =>
+    request<any>(`/workspaces/${id}/members`, { method: 'POST', body: JSON.stringify({ user_identifier, role }) }),
+  removeWorkspaceMember: (id: number, user_identifier: string) =>
+    request<any>(`/workspaces/${id}/members/${encodeURIComponent(user_identifier)}`, { method: 'DELETE' }),
   getSujets: (workspace_id?: number) => {
     const qs = workspace_id !== undefined ? `?workspace_id=${workspace_id}` : ''
     return request<any>(`/api/v1/sujets${qs}`)
@@ -164,4 +184,11 @@ export const api = {
       body: JSON.stringify({ query, user_identifier: 'frontend', workspace_id }),
     }),
   rebuildRagIndex: () => request<any>('/api/v1/rag/index-all-items', { method: 'POST' }),
+  rebuildRag: () => request<any>('/api/v1/rag/rebuild', { method: 'POST' }),
+
+  // Knowledge Graph
+  getKgNodes: () => request<any>('/api/v1/kg/nodes'),
+  getKgEdges: () => request<any>('/api/v1/kg/edges'),
+  updateKgNode: (id: number, data: any) => request<any>(`/api/v1/kg/nodes/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  rebuildKg: () => request<any>('/api/v1/kg/rebuild', { method: 'POST' }),
 }

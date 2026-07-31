@@ -833,19 +833,31 @@ async def get_item_raw_content(item_id: int, translate: bool = Query(default=Fal
         raise HTTPException(status_code=500, detail=str(e))
 
 
-async def _auto_rag_index(item_id: int, title: str, summary: str):
-    """Index an item into LanceDB immediately after creation."""
+async def _auto_rag_index(item_id: int, title: str, summary: str, digest_markdown: str = ""):
+    """Index an item into LanceDB using digest_markdown (fallback: summary). Never raw content."""
     try:
         import asyncio as _asyncio
         from argos.services.vector_store_singleton import get_vector_store
         vs = get_vector_store()
-        item_data = {"id": item_id, "title": title, "summary": summary[:2000], "workspace_id": None}
+        content = (digest_markdown or summary or "").strip()
+        if not content:
+            return
+        item_data = {"id": item_id, "title": title, "summary": content[:2000], "content": content, "workspace_id": None}
         await _asyncio.to_thread(vs.index_item, item_data)
         with db.get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("UPDATE items SET rag_indexed=TRUE, rag_indexed_at=NOW() WHERE id=%s", (item_id,))
                 conn.commit()
         logger.info(f"Auto-indexed item {item_id} into RAG")
+
+        # KG extraction en arrière-plan (non bloquant)
+        if digest_markdown:
+            try:
+                from argos.services.knowledge_graph import extract_and_index as kg_extract
+                await kg_extract(item_id, title, digest_markdown, db=db)
+            except Exception as kg_err:
+                logger.warning(f"KG extraction failed for item {item_id}: {kg_err}")
+
     except Exception as e:
         logger.warning(f"Auto-RAG indexing failed for item {item_id}: {e}")
 
@@ -973,7 +985,7 @@ async def ingest_pdf_from_url(data: Dict[str, Any]):
                 row = cur.fetchone()
                 conn.commit()
 
-        await _auto_rag_index(row[0], row[1], json_data.get("summary", ""))
+        await _auto_rag_index(row[0], row[1], json_data.get("summary", ""), json_data.get("digest_markdown", ""))
 
         return {
             "success": True,
@@ -1282,6 +1294,33 @@ async def ingest_item(item_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@api_router.get("/items/{item_id}/content")
+async def get_item_content(item_id: int):
+    """Retourne le contenu stocké en base pour un item (sans appel LLM ni refetch web)."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT i.id, i.title, i.url, i.summary, i.digest_markdown,
+                           i.source_url, i.created_at, i.importance, i.classification_status,
+                           s.sujet_id
+                    FROM items i
+                    LEFT JOIN sources s ON s.url = i.source_url
+                    WHERE i.id = %s
+                """, (item_id,))
+                row = cur.fetchone()
+                if not row:
+                    raise HTTPException(status_code=404, detail="Item introuvable")
+                cols = [d[0] for d in cur.description]
+                item = dict(zip(cols, row))
+                item["created_at"] = item["created_at"].isoformat() if item["created_at"] else None
+        return item
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @api_router.patch("/items/{item_id}/summary")
 async def update_item_summary(item_id: int, data: Dict[str, Any]):
     """Update the summary of an item (pre-ingestion editing)."""
@@ -1451,7 +1490,7 @@ async def upload_document_as_item(
                 row = cur.fetchone()
                 conn.commit()
 
-        await _auto_rag_index(row[0], row[1], json_data.get("summary", ""))
+        await _auto_rag_index(row[0], row[1], json_data.get("summary", ""), json_data.get("digest_markdown", ""))
 
         return {
             "success": True,
@@ -1692,6 +1731,239 @@ async def index_all_items():
 
     except Exception as e:
         logger.error(f"Error indexing items: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/rag/rebuild")
+async def rebuild_rag():
+    """
+    Vide LanceDB et réindexe uniquement depuis digest_markdown (fallback: summary).
+    Ignore le contenu brut scrappe pour éviter le bruit.
+    """
+    try:
+        from argos.services.vector_store_singleton import get_vector_store
+        import asyncio as _asyncio
+
+        vector_store = get_vector_store()
+
+        # 1. Vider LanceDB
+        if vector_store.table_name in vector_store.db.table_names():
+            vector_store.db.drop_table(vector_store.table_name)
+            logger.info("LanceDB table dropped for rebuild")
+
+        # 2. Marquer tous les items comme non indexés
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE items SET rag_indexed=FALSE, rag_indexed_at=NULL")
+                conn.commit()
+
+        # 3. Récupérer les items avec digest_markdown ou summary
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT id, title, digest_markdown, summary, workspace_id
+                    FROM items
+                    WHERE classification_status = 'classified'
+                      AND (digest_markdown IS NOT NULL OR summary IS NOT NULL)
+                    ORDER BY created_at DESC
+                """)
+                rows = cur.fetchall()
+
+        if not rows:
+            return {"message": "Aucun item à indexer", "indexed": 0, "total_chunks": 0}
+
+        # 4. Réindexer depuis digest_markdown en priorité
+        indexed = 0
+        total_chunks = 0
+        errors = []
+        ids_indexed = []
+
+        for item_id, title, digest_md, summary, workspace_id in rows:
+            content = (digest_md or summary or "").strip()
+            if not content:
+                continue
+            try:
+                n = await _asyncio.to_thread(
+                    vector_store.index_item,
+                    {"id": item_id, "title": title or "", "summary": content[:2000], "content": content, "workspace_id": workspace_id}
+                )
+                total_chunks += n
+                indexed += 1
+                ids_indexed.append(item_id)
+            except Exception as e:
+                logger.error(f"Rebuild: erreur item {item_id}: {e}")
+                errors.append({"item_id": item_id, "error": str(e)})
+
+        # 5. Marquer comme indexés en BDD
+        if ids_indexed:
+            with db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE items SET rag_indexed=TRUE, rag_indexed_at=NOW() WHERE id = ANY(%s)",
+                        (ids_indexed,)
+                    )
+                    conn.commit()
+
+        logger.info(f"RAG rebuild terminé: {indexed} items, {total_chunks} chunks")
+        return {
+            "message": f"Rebuild terminé — {indexed} items indexés depuis digest_markdown ({total_chunks} chunks)",
+            "indexed": indexed,
+            "total_chunks": total_chunks,
+            "errors": errors if errors else None,
+        }
+
+    except Exception as e:
+        logger.error(f"Erreur rebuild RAG: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/kg/nodes")
+async def kg_list_nodes(
+    type: Optional[str] = Query(default=None),
+    tension: Optional[bool] = Query(default=None),
+    validated: Optional[bool] = Query(default=None),
+    limit: int = Query(default=100, le=500),
+):
+    """Liste les nœuds du Knowledge Graph."""
+    try:
+        conditions = []
+        params: list = []
+        if type:
+            conditions.append("type = %s"); params.append(type)
+        if tension is not None:
+            conditions.append("tension_flag = %s"); params.append(tension)
+        if validated is not None:
+            conditions.append("hitl_validated = %s"); params.append(validated)
+        where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+        params.append(limit)
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"""
+                    SELECT id, label, type, confidence_score, source_count,
+                           hitl_validated, tension_flag, item_ids,
+                           first_seen_at, last_updated_at
+                    FROM kg_nodes {where}
+                    ORDER BY source_count DESC, last_updated_at DESC
+                    LIMIT %s
+                """, params)
+                cols = [d[0] for d in cur.description]
+                nodes = [dict(zip(cols, r)) for r in cur.fetchall()]
+                for n in nodes:
+                    n["first_seen_at"] = n["first_seen_at"].isoformat() if n["first_seen_at"] else None
+                    n["last_updated_at"] = n["last_updated_at"].isoformat() if n["last_updated_at"] else None
+        return {"nodes": nodes, "count": len(nodes)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/kg/edges")
+async def kg_list_edges(node_id: Optional[int] = Query(default=None), limit: int = Query(default=200, le=1000)):
+    """Liste les arêtes du Knowledge Graph, optionnellement filtrées par nœud."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                if node_id:
+                    cur.execute("""
+                        SELECT e.id, e.source_node_id, n1.label as source_label,
+                               e.target_node_id, n2.label as target_label,
+                               e.relation_type, e.weight
+                        FROM kg_edges e
+                        JOIN kg_nodes n1 ON n1.id = e.source_node_id
+                        JOIN kg_nodes n2 ON n2.id = e.target_node_id
+                        WHERE e.source_node_id = %s OR e.target_node_id = %s
+                        ORDER BY e.weight DESC LIMIT %s
+                    """, (node_id, node_id, limit))
+                else:
+                    cur.execute("""
+                        SELECT e.id, e.source_node_id, n1.label as source_label,
+                               e.target_node_id, n2.label as target_label,
+                               e.relation_type, e.weight
+                        FROM kg_edges e
+                        JOIN kg_nodes n1 ON n1.id = e.source_node_id
+                        JOIN kg_nodes n2 ON n2.id = e.target_node_id
+                        ORDER BY e.weight DESC LIMIT %s
+                    """, (limit,))
+                cols = [d[0] for d in cur.description]
+                edges = [dict(zip(cols, r)) for r in cur.fetchall()]
+        return {"edges": edges, "count": len(edges)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.patch("/kg/nodes/{node_id}")
+async def kg_update_node(node_id: int, data: Dict[str, Any]):
+    """Valider ou marquer en tension un nœud (HITL)."""
+    try:
+        fields = []
+        params = []
+        if "hitl_validated" in data:
+            fields.append("hitl_validated = %s"); params.append(data["hitl_validated"])
+            if data["hitl_validated"]:
+                fields.append("confidence_score = LEAST(confidence_score + 0.2, 1.0)")
+        if "tension_flag" in data:
+            fields.append("tension_flag = %s"); params.append(data["tension_flag"])
+        if not fields:
+            raise HTTPException(status_code=400, detail="Nothing to update")
+        fields.append("last_updated_at = NOW()")
+        params.append(node_id)
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"UPDATE kg_nodes SET {', '.join(fields)} WHERE id = %s RETURNING id", params)
+                if not cur.fetchone():
+                    raise HTTPException(status_code=404, detail="Node not found")
+                conn.commit()
+        return {"ok": True, "node_id": node_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/kg/rebuild")
+async def kg_rebuild():
+    """Reconstruit le Knowledge Graph depuis tous les items avec digest_markdown."""
+    try:
+        from argos.services.knowledge_graph import extract_and_index as kg_extract
+
+        # Vider le KG existant
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("TRUNCATE kg_node_sources, kg_edges, kg_nodes RESTART IDENTITY CASCADE")
+                conn.commit()
+
+        # Récupérer tous les items avec digest
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT id, title, digest_markdown, source_url
+                    FROM items
+                    WHERE digest_markdown IS NOT NULL
+                      AND classification_status = 'classified'
+                    ORDER BY created_at DESC
+                    LIMIT 200
+                """)
+                rows = cur.fetchall()
+
+        processed = 0
+        for item_id, title, digest, source_url in rows:
+            await kg_extract(item_id, title or "", digest or "", source_url or "", db=db)
+            processed += 1
+
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM kg_nodes")
+                node_count = cur.fetchone()[0]
+                cur.execute("SELECT COUNT(*) FROM kg_edges")
+                edge_count = cur.fetchone()[0]
+
+        return {
+            "message": f"KG reconstruit — {node_count} nœuds, {edge_count} relations depuis {processed} items",
+            "nodes": node_count,
+            "edges": edge_count,
+            "items_processed": processed,
+        }
+    except Exception as e:
+        logger.error(f"KG rebuild error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -3279,6 +3551,7 @@ async def list_documents(
     doc_type: Optional[str] = Query(default=None),
     workspace_id: Optional[int] = Query(default=None),
     sujet_id: Optional[int] = Query(default=None),
+    unclassified: Optional[bool] = Query(default=None),
     rag_indexed: Optional[bool] = Query(default=None),
     sort: Optional[str] = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
@@ -3294,6 +3567,8 @@ async def list_documents(
             conditions.append("workspace_id = %s"); params.append(workspace_id)
         if sujet_id is not None:
             conditions.append("sujet_id = %s"); params.append(sujet_id)
+        elif unclassified:
+            conditions.append("sujet_id IS NULL")
         if rag_indexed is not None:
             conditions.append("rag_indexed = %s"); params.append(rag_indexed)
         where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
@@ -3382,6 +3657,8 @@ async def update_document(doc_id: int, data: Dict[str, Any]):
             fields.append("title = %s"); params.append(data["title"])
         if "content_markdown" in data:
             fields.append("content_markdown = %s"); params.append(data["content_markdown"])
+        if "sujet_id" in data:
+            fields.append("sujet_id = %s"); params.append(data["sujet_id"])
         if not fields:
             raise HTTPException(status_code=400, detail="Nothing to update")
         fields.append("updated_at = NOW()")
@@ -3860,6 +4137,25 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
     ws_filter = f"AND workspace_id = {workspace_id}" if workspace_id is not None else ""
     today_str = _dt.date.today().strftime("%d/%m/%Y")
 
+    # ── IDs déjà cités dans les briefings précédents (7 derniers jours) ─────
+    already_cited_ids: set = set()
+    with db.get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT cited_sources
+                FROM daily_briefings
+                WHERE briefing_date < CURRENT_DATE
+                  AND briefing_date >= CURRENT_DATE - INTERVAL '7 days'
+                ORDER BY briefing_date DESC
+            """)
+            for (cs,) in cur.fetchall():
+                if isinstance(cs, list):
+                    for s in cs:
+                        if isinstance(s, dict) and s.get("id"):
+                            already_cited_ids.add(s["id"])
+
+    exclude_clause = f"AND id NOT IN ({','.join(str(i) for i in already_cited_ids)})" if already_cited_ids else ""
+
     # ── Requête : uniquement items reliability_passed=TRUE ──────────────────
     with db.get_connection() as conn:
         with conn.cursor() as cur:
@@ -3872,6 +4168,7 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
                   AND classification_status = 'classified'
                   AND importance IN ('high', 'critical')
                   AND created_at > NOW() - INTERVAL '{hours} hours'
+                  {exclude_clause}
                   {ws_filter}
                 ORDER BY importance DESC, reliability_score DESC NULLS LAST, created_at DESC
                 LIMIT 40
@@ -3945,6 +4242,21 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
             "error": "no_items",
             "message": "Aucun item fiable disponible pour générer un briefing. "
                        "Lancez d'abord le pipeline sur vos sources."
+        }
+
+    # Si tous les items sont déjà connus (rien de nouveau depuis le dernier brief)
+    all_item_ids = {r[0] for r in rows}
+    if already_cited_ids and all_item_ids.issubset(already_cited_ids):
+        return {
+            "markdown": f"## Delta du {today_str}\n\nPas de nouveauté aujourd'hui — les sources surveillées n'ont rien publié de nouveau depuis le dernier briefing.",
+            "executive_summary": "Pas de nouveauté aujourd'hui.",
+            "top_items": [],
+            "cited_sources": [],
+            "trends": [],
+            "groups": {},
+            "stats": {"total_items": 0, "reliability_filtered": True, "period_hours": hours},
+            "tokens_used": 0,
+            "cost_usd": 0.0,
         }
 
     items = [

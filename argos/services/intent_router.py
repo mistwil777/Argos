@@ -52,7 +52,14 @@ async def route(
             await on_status(msg)
         logger.info(f"[ROUTER STATUS] {msg}")
 
-    # ── 0. Détection intent d'action (pipeline, collecte, indexation) ──
+    # ── 0a. Questions méta sur l'état de la base ────────────────────
+    meta_intent = _detect_meta_intent(transcript)
+    if meta_intent:
+        result = await _handle_meta_intent(meta_intent, transcript, db, workspace_id, on_status=on_status)
+        if result is not None:
+            return result
+
+    # ── 0b. Détection intent d'action (pipeline, collecte, indexation) ──
     action_intent = _detect_action_intent(transcript)
     if action_intent:
         result = await _handle_action_intent(action_intent, transcript, db, workspace_id, on_status=on_status)
@@ -105,99 +112,38 @@ async def route(
             "new_sources_created": 0,
         }
 
-    # ── 2b. Vérifier sources existantes avant de relancer une discovery ──
-    await _status("Ma base est vide sur ce sujet. Je vérifie si des sources configurées correspondent…")
-
-    existing_matching = _find_matching_sources(db, transcript)
-    if existing_matching:
-        await _status(f"{len(existing_matching)} source(s) existante(s) détectée(s). Je relance la collecte et l'indexation…")
-        from argos.services.pipeline import run_pipeline_for_source
-        import asyncio as _aio
-        async def _repipeline():
-            for src_id in existing_matching[:5]:
-                try:
-                    await run_pipeline_for_source(src_id)
-                except Exception as e:
-                    logger.warning(f"[ROUTER] Re-pipeline source {src_id} : {e}")
-        _aio.ensure_future(_repipeline())
+    # ── 2b. Confiance insuffisante → réponse honnête, pas de discovery ──
+    chunk_count = len(search_results)
+    if chunk_count > 0:
+        await _status(f"J'ai trouvé {chunk_count} passage(s) mais la confiance est faible ({rag_confidence:.0%}). Je tente quand même une réponse…")
+        from argos.services.llm_provider import create_llm_provider
+        llm = create_llm_provider(
+            provider_type=settings.llm_provider,
+            openai_api_key=settings.openai_api_key,
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            aws_region=settings.aws_region,
+            model=settings.default_classification_model,
+        )
+        rag = RAGService(llm_provider=llm, vector_store=vs, db_manager=db, top_k=8)
+        result = await rag.ask(query=transcript, use_hybrid_search=True, workspace_id=workspace_id)
         return {
-            "flow":                "discovery",
-            "answer":              f"J'ai trouvé {len(existing_matching)} source(s) déjà configurée(s) sur ce sujet. Je relance la collecte et l'indexation. Relancez votre question dans quelques instants pour obtenir une réponse.",
-            "sources":             [{"id": sid} for sid in existing_matching],
-            "confidence":          0.0,
+            "flow":                "rag_direct",
+            "answer":              result.get("answer", ""),
+            "sources":             result.get("sources", []),
+            "confidence":          rag_confidence,
             "intent":              None,
             "new_sources_created": 0,
         }
 
-    await _status("Aucune source existante. Je lance la recherche de nouvelles sources…")
-
-    from argos.services.intent_discovery import IntentService, DiscoveryService
-    from argos.services.pipeline import run_pipeline_for_source
-
-    intent_svc    = IntentService(anthropic_api_key=settings.anthropic_api_key)
-    discovery_svc = DiscoveryService(db_manager=db)
-
-    await _status("J'analyse votre demande pour identifier les axes de recherche…")
-    intent_data = await intent_svc.decompose(transcript)
-
-    themes = intent_data.get("themes", [])
-    if themes:
-        await _status(f"Axes identifiés : {', '.join(themes[:3])}. Je cherche les meilleures sources…")
-    else:
-        await _status("Recherche de sources en cours, cela peut prendre quelques secondes…")
-
-    # Appliquer les préférences utilisateur pour filtrer les sources
-    user_prefs = _load_user_preferences(db, user_id)
-    candidates  = await discovery_svc.find_sources(intent_data, workspace_id=workspace_id)
-    candidates  = _apply_preferences(candidates, user_prefs)
-
-    if not candidates:
-        await _status("Aucune source pertinente trouvée. Voulez-vous reformuler votre demande ?")
-        return {
-            "flow":                "discovery",
-            "answer":              "Je n'ai pas trouvé de sources pertinentes pour cette demande. Voulez-vous reformuler ?",
-            "sources":             [],
-            "confidence":          0.0,
-            "intent":              intent_data,
-            "new_sources_created": 0,
-        }
-
-    await _status(f"{len(candidates)} sources trouvées. Je les configure et lance la collecte…")
-
-    # Créer les sources et collecter en background
-    created = await discovery_svc.create_sources(candidates[:10])
-    await _status(f"{len(created)} source(s) configurée(s). Collecte et analyse du contenu lancées en arrière-plan.")
-
-    # Lancer le pipeline sur chaque source créée (asyncio background)
-    async def _run_pipelines():
-        for src in created:
-            src_id = src.get("id")
-            if src_id:
-                try:
-                    await run_pipeline_for_source(src_id)
-                except Exception as e:
-                    logger.warning(f"[ROUTER] Pipeline source {src_id} : {e}")
-
-    asyncio.ensure_future(_run_pipelines())
-
-    # Résumé synthétique des sources
-    summary_parts = []
-    by_type: dict = {}
-    for c in candidates[:10]:
-        t = c.get("type", "website")
-        by_type[t] = by_type.get(t, 0) + 1
-    for t, n in by_type.items():
-        summary_parts.append(f"{n} {t}")
-    summary = f"Sources : {', '.join(summary_parts)}."
-
+    await _status("Aucun contenu indexé sur ce sujet.")
     return {
-        "flow":                "discovery",
-        "answer":              None,
-        "sources":             candidates,
+        "flow":                "rag_direct",
+        "answer":              "Je n'ai pas de contenu indexé sur ce sujet. Vérifiez que vos sources sont actives et que le pipeline a été lancé récemment (commande : \"lance le pipeline\").",
+        "sources":             [],
         "confidence":          0.0,
-        "intent":              intent_data,
-        "new_sources_created": len(created),
-        "sources_summary":     summary,
+        "intent":              None,
+        "new_sources_created": 0,
     }
 
 
@@ -252,6 +198,15 @@ def _apply_preferences(candidates: list[dict], prefs: list[dict]) -> list[dict]:
 
     return filtered
 
+
+_META_PATTERNS = [
+    # Questions sur l'état de la base / ce qui a été collecté
+    (r"(qu[ei]ls?|combien|liste|montre|affiche|quoi|qu'est[- ]ce).*(collect[ée]|index[ée]|récup[ée]r|ingér|ajout)", "meta_collected"),
+    (r"(qu[ei]ls?|combien|liste|montre|affiche).*(article|document|source|sujet|contenu).*(semaine|jour|hier|récent|derni|cette)", "meta_collected"),
+    (r"(cette semaine|cette année|aujourd'hui|dernière[s]? (jours?|semaines?|heures?)).*(collect|article|sujet|ajout|index)", "meta_collected"),
+    (r"(état|status|résumé).*(base|collect|index|source)", "meta_collected"),
+    (r"(quoi de neuf|nouveaut[ée]s?|qu'est[- ]ce.*(nouveau|récent))", "meta_collected"),
+]
 
 _ACTION_PATTERNS = [
     # (regex, action_type)
@@ -374,6 +329,77 @@ def _find_matching_sources(db, transcript: str) -> list[int]:
     except Exception as e:
         logger.debug(f"[ROUTER] _find_matching_sources : {e}")
         return []
+
+
+def _detect_meta_intent(transcript: str) -> str | None:
+    lower = transcript.lower().strip()
+    for pattern, intent_type in _META_PATTERNS:
+        if _re.search(pattern, lower):
+            return intent_type
+    return None
+
+
+async def _handle_meta_intent(intent: str, transcript: str, db, workspace_id, on_status=None) -> dict | None:
+    async def _status(msg: str):
+        if on_status:
+            await on_status(msg)
+
+    if intent == "meta_collected":
+        await _status("Je consulte votre base pour lister le contenu collecté récemment…")
+        try:
+            with db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    # Articles des 7 derniers jours
+                    cur.execute("""
+                        SELECT i.title, i.source_url, i.published_at, s.name as source_name
+                        FROM items i
+                        LEFT JOIN sources s ON i.source_id = s.id
+                        WHERE i.published_at >= NOW() - INTERVAL '7 days'
+                           OR i.created_at  >= NOW() - INTERVAL '7 days'
+                        ORDER BY COALESCE(i.published_at, i.created_at) DESC
+                        LIMIT 30
+                    """)
+                    rows = cur.fetchall()
+
+                    # Compte par source
+                    cur.execute("""
+                        SELECT s.name, COUNT(*) as cnt
+                        FROM items i
+                        JOIN sources s ON i.source_id = s.id
+                        WHERE i.created_at >= NOW() - INTERVAL '7 days'
+                        GROUP BY s.name
+                        ORDER BY cnt DESC
+                        LIMIT 10
+                    """)
+                    by_source = cur.fetchall()
+
+            if not rows:
+                answer = "Aucun article collecté au cours des 7 derniers jours. Vérifiez que vos sources sont actives et que le pipeline a été lancé."
+            else:
+                lines = []
+                for title, url, pub_at, src_name in rows:
+                    date_str = pub_at.strftime("%d/%m") if pub_at else "?"
+                    src = f" ({src_name})" if src_name else ""
+                    lines.append(f"- **{title}**{src} — {date_str}")
+
+                summary_parts = [f"{cnt} de {name}" for name, cnt in by_source]
+                summary = f"\n\n**Répartition :** {', '.join(summary_parts)}." if summary_parts else ""
+
+                answer = f"**{len(rows)} articles collectés cette semaine :**\n\n" + "\n".join(lines) + summary
+
+            return {
+                "flow": "action",
+                "answer": answer,
+                "sources": [],
+                "confidence": 1.0,
+                "intent": None,
+                "new_sources_created": 0,
+            }
+        except Exception as e:
+            logger.warning(f"[META] Erreur : {e}")
+            return None  # fallback vers RAG normal
+
+    return None
 
 
 def _log_session(db, transcript: str, flow: str, user_id: str) -> None:

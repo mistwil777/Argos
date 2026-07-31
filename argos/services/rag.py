@@ -36,11 +36,12 @@ Règles absolues :
 RAG_USER_PROMPT_TEMPLATE = """Voici les sources disponibles dans la base de connaissances :
 
 {sources}
-
+{kg_context}
 Question : {query}
 
 Consignes :
 - Synthétise les informations pertinentes des sources ci-dessus
+- Si le graphe de connaissances apporte des relations entre entités, intègre-les dans ta réponse
 - Illustre avec des exemples concrets tirés des sources ou de ta connaissance du domaine
 - Structure ta réponse de façon lisible (paragraphes, listes si pertinent)
 - Cite les sources utilisées (→ Source N) après chaque point clé
@@ -162,10 +163,14 @@ class RAGService:
         
         # 2. Build context from sources
         sources_text, sources_list = self._format_sources(search_results)
-        
+
+        # 2b. Enrich with KG context (entities + relations relevant to the query)
+        kg_context = self._get_kg_context(query)
+
         # 3. Build prompt
         user_prompt = RAG_USER_PROMPT_TEMPLATE.format(
             sources=sources_text,
+            kg_context=kg_context,
             query=query
         )
         
@@ -281,7 +286,77 @@ class RAGService:
     # ============================================
     # Helper Methods
     # ============================================
-    
+
+    def _get_kg_context(self, query: str) -> str:
+        """
+        Cherche dans PostgreSQL les entités KG dont le label apparaît dans la query,
+        puis récupère leurs relations. Retourne un bloc texte à injecter dans le prompt.
+        """
+        try:
+            words = [w.strip(".,;:?!()\"'").lower() for w in query.split() if len(w) > 3]
+            if not words:
+                return ""
+
+            placeholders = ",".join(["%s"] * len(words))
+            with self.db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    # Nœuds dont le label correspond à un mot de la query
+                    cur.execute(f"""
+                        SELECT id, label, type
+                        FROM kg_nodes
+                        WHERE LOWER(label) = ANY(ARRAY[{placeholders}]::text[])
+                           OR EXISTS (
+                               SELECT 1 FROM unnest(ARRAY[{placeholders}]::text[]) w
+                               WHERE LOWER(label) LIKE '%%' || w || '%%'
+                           )
+                        LIMIT 10
+                    """, words + words)
+                    nodes = cur.fetchall()
+
+                    if not nodes:
+                        return ""
+
+                    node_ids = [n[0] for n in nodes]
+                    node_labels = {n[0]: n[1] for n in nodes}
+
+                    id_placeholders = ",".join(["%s"] * len(node_ids))
+                    cur.execute(f"""
+                        SELECT e.relation_type,
+                               ns.label AS src_label,
+                               nt.label AS tgt_label,
+                               e.weight
+                        FROM kg_edges e
+                        JOIN kg_nodes ns ON ns.id = e.source_node_id
+                        JOIN kg_nodes nt ON nt.id = e.target_node_id
+                        WHERE e.source_node_id IN ({id_placeholders})
+                           OR e.target_node_id IN ({id_placeholders})
+                        ORDER BY e.weight DESC
+                        LIMIT 20
+                    """, node_ids + node_ids)
+                    edges = cur.fetchall()
+
+            if not edges and not nodes:
+                return ""
+
+            lines = ["\n---\nContexte du graphe de connaissances (entités et relations connues) :"]
+            seen_nodes = set()
+            for nid, label, ntype in nodes:
+                if nid not in seen_nodes:
+                    lines.append(f"- {label} [{ntype}]")
+                    seen_nodes.add(nid)
+
+            if edges:
+                lines.append("Relations :")
+                for rel_type, src, tgt, weight in edges:
+                    lines.append(f"  • {src} → {rel_type} → {tgt}")
+
+            lines.append("---\n")
+            return "\n".join(lines)
+
+        except Exception as e:
+            logger.warning(f"KG context retrieval failed: {e}")
+            return ""
+
     def _format_sources(self, search_results: List[Dict]) -> Tuple[str, List[Dict]]:
         """Format search results into prompt-ready text and metadata."""
         sources_text_parts = []

@@ -50,7 +50,7 @@ export default function Dossiers() {
   const [editProfile, setEditProfile] = useState(false)
   // profileDraft stocke le texte brut (une entrée par ligne) pour ne pas perdre les sauts de ligne en cours de frappe
   const [profileDraftRaw, setProfileDraftRaw] = useState<Record<string, string>>({})
-  const [profileDraft, setProfileDraft] = useState<Sujet['knowledge_profile'] | null>(null)
+  const [, setProfileDraft] = useState<Sujet['knowledge_profile'] | null>(null)
   const [suggesting, setSuggesting] = useState(false)
   const [sourcesOpen, setSourcesOpen] = useState(false)
 

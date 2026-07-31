@@ -197,6 +197,18 @@ class Settings(BaseSettings):
         description="Secret token for admin-only endpoints (set ADMIN_TOKEN env var)"
     )
 
+    # ============================================
+    # JWT Auth
+    # ============================================
+    jwt_secret: str = Field(
+        default="change-me-in-production-32-chars-min",
+        description="Secret key for JWT token signing (set JWT_SECRET env var)"
+    )
+    jwt_expire_minutes: int = Field(
+        default=10080,  # 7 jours
+        description="JWT token expiry in minutes"
+    )
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

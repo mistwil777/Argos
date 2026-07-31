@@ -418,3 +418,82 @@ async def list_recent(
     except Exception as e:
         logger.error(f"[MCP] list_recent error: {e}", exc_info=True)
         return {"error": str(e), "items": [], "total": 0}
+
+
+# ── Tool 5 : argos_ask ────────────────────────────────────────────────────────
+
+@mcp.tool()
+async def argos_ask(
+    query: str,
+    workspace_id: Optional[int] = None,
+) -> dict:
+    """
+    Interroge la base de connaissances Argos (RAG + Knowledge Graph) et retourne
+    une réponse synthétisée avec les sources et les relations d'entités pertinentes.
+
+    À utiliser quand la question implique :
+    - un choix d'outil ou de librairie (ex: "quel framework RAG en 2026 ?")
+    - une architecture ou un pattern de conception
+    - la génération d'un CDC, PRD, ou document technique
+    - les meilleures pratiques ou tendances récentes indexées par Argos
+
+    Ne pas utiliser pour : corrections syntaxiques, refactoring mécanique,
+    renommages, tests unitaires simples.
+
+    Args:
+        query: Question technique ou demande de contexte
+        workspace_id: Filtre optionnel par espace de travail Argos
+
+    Returns:
+        dict avec:
+          - answer: réponse synthétisée (RAG + KG)
+          - sources: liste des sources utilisées (titre, url)
+          - kg_entities: entités du Knowledge Graph trouvées
+          - confidence: score de confiance (0-1)
+    """
+    try:
+        rag = _get_rag()
+        result = await rag.ask(
+            query=query,
+            use_hybrid_search=True,
+            workspace_id=workspace_id,
+        )
+
+        # Extraire aussi les entités KG directement pour les exposer
+        kg_entities = []
+        db = _get_db()
+        try:
+            words = [w.strip(".,;:?!()\"'").lower() for w in query.split() if len(w) > 3]
+            if words:
+                placeholders = ",".join(["%s"] * len(words))
+                with db.get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(f"""
+                            SELECT label, type, source_count
+                            FROM kg_nodes
+                            WHERE LOWER(label) = ANY(ARRAY[{placeholders}]::text[])
+                               OR EXISTS (
+                                   SELECT 1 FROM unnest(ARRAY[{placeholders}]::text[]) w
+                                   WHERE LOWER(label) LIKE '%%' || w || '%%'
+                               )
+                            ORDER BY source_count DESC
+                            LIMIT 8
+                        """, words + words)
+                        kg_entities = [
+                            {"label": r[0], "type": r[1], "source_count": r[2]}
+                            for r in cur.fetchall()
+                        ]
+        except Exception:
+            pass
+
+        return {
+            "answer":      result.get("answer", ""),
+            "sources":     [{"title": s.get("title", ""), "url": s.get("url", "")} for s in result.get("sources", [])],
+            "kg_entities": kg_entities,
+            "confidence":  result.get("confidence_score", 0.0),
+            "tokens_used": result.get("tokens_used", 0),
+        }
+
+    except Exception as e:
+        logger.error(f"[MCP] argos_ask error: {e}", exc_info=True)
+        return {"error": str(e), "answer": "", "sources": [], "kg_entities": []}

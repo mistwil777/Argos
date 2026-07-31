@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from argos.config import settings
 from argos.api import api_router, veille_router, assistant_router
+from argos.api.auth import auth_router
 from argos.mcp_server import mcp
 
 
@@ -86,6 +87,7 @@ app.add_middleware(
 # ============================================
 # REST API Router
 # ============================================
+app.include_router(auth_router)
 app.include_router(api_router)
 app.include_router(veille_router)
 app.include_router(assistant_router)

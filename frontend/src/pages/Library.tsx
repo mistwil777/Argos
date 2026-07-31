@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   FileText, BookOpen, Map, BarChart3,
   X, Copy, Check, Download, DatabaseZap,
-  Pencil, Trash2, Loader2, RefreshCw,
+  Pencil, Trash2, Loader2,
   Search, Sparkles, SlidersHorizontal, Wand2, RotateCcw,
   CheckSquare, Square, Folder, Tag, ChevronRight, Library as LibraryIcon,
 } from 'lucide-react'
@@ -66,11 +66,15 @@ export default function Library() {
 
   // ── Sélection / édition ──
   const [selected, setSelected]   = useState<any | null>(null)
+  const [docReadPct, setDocReadPct] = useState(0)
+  const [readFilter, setReadFilter] = useState<'all'|'unread'|'reading'|'done'>('all')
+  const docScrollRef = useRef<HTMLDivElement>(null)
+  const readPctTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [editMode, setEditMode]   = useState(false)
   const [editTitle, setEditTitle] = useState('')
   const [editContent, setEditContent] = useState('')
   const [saving, setSaving]       = useState(false)
-  const [indexing, setIndexing]   = useState(false)
+
   const [copied, setCopied]       = useState(false)
   const [deleting, setDeleting]   = useState<number | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
@@ -91,7 +95,7 @@ export default function Library() {
   }, [])
 
   // ── Chargement documents ──
-  const loadDocs = useCallback(async (sujetId?: number) => {
+  const loadDocs = useCallback(async (sujetId?: number | null) => {
     setLoading(true)
     setSearchMode(false)
     setQuery('')
@@ -99,6 +103,7 @@ export default function Library() {
       const params: any = {}
       if (filterType !== 'all') params.doc_type = filterType
       if (sujetId != null) params.sujet_id = sujetId
+      else if (sujetId === null) params.unclassified = true
       const sortMap = { date_desc: 'created_at DESC', date_asc: 'created_at ASC', title: 'title ASC' }
       params.sort = sortMap[sortBy]
       const d = await api.getDocuments(params)
@@ -116,15 +121,20 @@ export default function Library() {
     if (q) { setGenModal({ prefill: q }); window.history.replaceState({}, '') }
   }, [location.state])
 
-  // Recherche
+  // Recherche — fonctionne depuis n'importe quel niveau
   useEffect(() => {
-    if (level !== 'docs') return
-    if (!query.trim()) { if (searchMode) loadDocs(activeSujet?.id); return }
+    if (!query.trim()) {
+      if (searchMode) { setSearchMode(false); if (level === 'docs') loadDocs(activeSujet?.id ?? null) }
+      return
+    }
     if (searchTimeout.current) clearTimeout(searchTimeout.current)
     searchTimeout.current = setTimeout(async () => {
       setSearching(true); setSearchMode(true)
+      // Si on est à la racine ou dans un dossier, basculer en mode docs sans sujet
+      if (level !== 'docs') setLevel('docs')
       try {
-        const d = await api.searchDocuments(query, semantic, filterType !== 'all' ? filterType : undefined, activeSujet?.id)
+        const sujetId = level === 'docs' ? activeSujet?.id : undefined
+        const d = await api.searchDocuments(query, semantic, filterType !== 'all' ? filterType : undefined, sujetId)
         setDocs(d.results || [])
       } catch {} finally { setSearching(false) }
     }, 400)
@@ -141,11 +151,11 @@ export default function Library() {
     setLevel('docs')
     loadDocs(s.id)
   }
-  function goBack() {
-    if (level === 'docs') { setLevel('sujets'); setActiveSujet(null); setDocs([]) }
-    else if (level === 'sujets') { setLevel('workspaces'); setActiveWs(null) }
+  function enterUnclassified() {
+    setActiveSujet({ id: null, name: 'Non classés', _unclassified: true })
+    setLevel('docs')
+    loadDocs(undefined) // no sujet_id filter → returns docs with sujet_id IS NULL
   }
-
   // ── Sélection multiple ──
   function toggleSelect(id: number, e: React.MouseEvent) {
     e.stopPropagation()
@@ -167,6 +177,26 @@ export default function Library() {
   async function openDoc(doc: any) {
     const full = await api.getDocument(doc.id)
     setSelected(full); setEditTitle(full.title); setEditContent(full.content_markdown); setEditMode(false)
+    setDocReadPct(full.reading_progress || 0)
+    setTimeout(() => {
+      const el = docScrollRef.current
+      if (el && full.reading_progress > 0) {
+        el.scrollTop = ((full.reading_progress / 100) * (el.scrollHeight - el.clientHeight))
+      }
+    }, 100)
+  }
+
+  function onDocScroll() {
+    const el = docScrollRef.current
+    if (!el || !selected) return
+    const pct = Math.round((el.scrollTop / Math.max(1, el.scrollHeight - el.clientHeight)) * 100)
+    const newPct = Math.min(100, pct)
+    setDocReadPct(newPct)
+    if (readPctTimer.current) clearTimeout(readPctTimer.current)
+    readPctTimer.current = setTimeout(() => {
+      api.updateDocument(selected.id, { reading_progress: newPct })
+      setDocs(prev => prev.map(d => d.id === selected.id ? { ...d, reading_progress: newPct } : d))
+    }, 800)
   }
   async function applyAiEdit() {
     if (!selected || !aiInstruction.trim()) return
@@ -186,14 +216,7 @@ export default function Library() {
       setEditMode(false)
     } finally { setSaving(false) }
   }
-  async function indexDoc() {
-    if (!selected) return; setIndexing(true)
-    try {
-      await api.indexDocument(selected.id)
-      setSelected({ ...selected, rag_indexed: true })
-      setDocs(prev => prev.map(d => d.id === selected.id ? { ...d, rag_indexed: true } : d))
-    } finally { setIndexing(false) }
-  }
+
   async function deleteDoc(id: number) {
     setDeleting(id)
     try {
@@ -218,6 +241,12 @@ export default function Library() {
 
   const TYPES = ['all', 'fiche', 'synthese', 'guide', 'rapport']
   const visibleSujets = sujets.filter(s => s.workspace_id === activeWs?.id)
+  const visibleDocs = docs.filter(d => {
+    if (readFilter === 'unread') return !d.reading_progress || d.reading_progress === 0
+    if (readFilter === 'reading') return d.reading_progress > 0 && d.reading_progress < 100
+    if (readFilter === 'done') return d.reading_progress === 100
+    return true
+  })
 
   // ─── RENDU ────────────────────────────────────────────────────────────────
 
@@ -231,7 +260,8 @@ export default function Library() {
     <div className="h-full flex flex-col overflow-hidden">
 
       {/* ── Breadcrumb + bouton retour ── */}
-      <div className="flex-shrink-0 px-8 pt-6 pb-2 flex items-center gap-2 text-[12px] font-mono">
+      <div className="flex-shrink-0 px-8 pt-6 pb-4 space-y-3">
+      <div className="flex items-center gap-2 text-[12px] font-mono">
         <button onClick={() => { setLevel('workspaces'); setActiveWs(null); setActiveSujet(null); setDocs([]) }}
           className={`transition-colors ${level === 'workspaces' ? 'text-[hsl(var(--text))] font-bold' : 'text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))]'}`}>
           Bibliothèque
@@ -251,6 +281,28 @@ export default function Library() {
             <span className="text-[hsl(var(--text))] font-bold">{activeSujet.name}</span>
           </>
         )}
+      </div>
+
+      {/* ── Barre de recherche globale ── */}
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[hsl(var(--text-3))]" />
+          {searching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-[hsl(var(--text-3))]" />}
+          <input value={query} onChange={e => setQuery(e.target.value)}
+            placeholder="Rechercher dans les titres et contenus…"
+            className="w-full pl-9 pr-4 py-2 bg-[hsl(var(--bg-2))] border border-[hsl(var(--line))] rounded-lg text-[13px] text-[hsl(var(--text))] outline-none focus:border-[hsl(var(--accent-line))] placeholder:text-[hsl(var(--text-3))] transition-all" />
+        </div>
+        <button onClick={() => setSemantic(v => !v)}
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-[11.5px] font-mono font-semibold transition-all ${semantic ? 'border-[hsl(var(--accent-line))] bg-[hsl(var(--accent-dim))] text-[hsl(var(--accent))]' : 'border-[hsl(var(--line))] text-[hsl(var(--text-3))] hover:border-[hsl(var(--line-bright))]'}`}>
+          <Sparkles className="w-3.5 h-3.5" />{semantic ? 'Sémantique ✓' : 'Sémantique'}
+        </button>
+        {(query || searchMode) && (
+          <button onClick={() => { setQuery(''); if (level === 'docs') loadDocs(activeSujet?.id ?? null) }}
+            className="px-3 py-2 rounded-lg border border-[hsl(var(--line))] text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))] transition-colors">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
       </div>
 
       <AnimatePresence mode="wait">
@@ -314,6 +366,19 @@ export default function Library() {
                     <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[hsl(var(--text-3))] opacity-0 group-hover:opacity-100 transition-opacity" />
                   </motion.button>
                 ))}
+                {/* Tuile documents non rattachés à un sujet */}
+                <motion.button
+                  initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: visibleSujets.length * 0.06 }}
+                  whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                  onClick={enterUnclassified}
+                  className="relative p-6 rounded-xl border bg-gradient-to-br from-[hsl(var(--bg-2))] to-[hsl(var(--bg-3))] border-[hsl(var(--line))] text-left transition-all group"
+                >
+                  <FileText className="w-7 h-7 mb-3 text-[hsl(var(--text-3))]" />
+                  <p className="text-[15px] font-bold text-[hsl(var(--text-2))]">Non classés</p>
+                  <p className="text-[11px] font-mono text-[hsl(var(--text-3))] mt-1">documents sans sujet</p>
+                  <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[hsl(var(--text-3))] opacity-0 group-hover:opacity-100 transition-opacity" />
+                </motion.button>
               </div>
             )}
           </motion.div>
@@ -326,31 +391,6 @@ export default function Library() {
 
             {/* Barre de contrôle */}
             <div className="flex-shrink-0 px-8 py-3 space-y-2 border-b border-[hsl(var(--line))]">
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[hsl(var(--text-3))]" />
-                  {searching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-[hsl(var(--text-3))]" />}
-                  <input value={query} onChange={e => setQuery(e.target.value)}
-                    placeholder="Rechercher dans les titres et contenus…"
-                    className="w-full pl-9 pr-4 py-2 bg-[hsl(var(--bg-2))] border border-[hsl(var(--line))] rounded-lg text-[13px] text-[hsl(var(--text))] outline-none focus:border-[hsl(var(--accent-line))] placeholder:text-[hsl(var(--text-3))] transition-all" />
-                </div>
-                <button onClick={() => setSemantic(v => !v)}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-[11.5px] font-mono font-semibold transition-all ${semantic ? 'border-[hsl(var(--accent-line))] bg-[hsl(var(--accent-dim))] text-[hsl(var(--accent))]' : 'border-[hsl(var(--line))] text-[hsl(var(--text-3))] hover:border-[hsl(var(--line-bright))]'}`}>
-                  <Sparkles className="w-3.5 h-3.5" />{semantic ? 'Sémantique ✓' : 'Sémantique'}
-                </button>
-                {(query || searchMode) && (
-                  <button onClick={() => { setQuery(''); loadDocs(activeSujet?.id) }}
-                    className="px-3 py-2 rounded-lg border border-[hsl(var(--line))] text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))] transition-colors">
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-                <motion.button whileHover={{ rotate: 180 }} transition={{ duration: 0.4 }}
-                  onClick={() => loadDocs(activeSujet?.id)} disabled={loading}
-                  className="w-10 h-10 flex items-center justify-center rounded-lg border border-[hsl(var(--line))] hover:border-[hsl(var(--line-bright))] text-[hsl(var(--text-2))] transition-colors">
-                  <RefreshCw className="w-3.5 h-3.5" />
-                </motion.button>
-              </div>
-
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2">
                   <SlidersHorizontal className="w-3.5 h-3.5 text-[hsl(var(--text-3))]" />
@@ -370,6 +410,15 @@ export default function Library() {
                   </select>
                 </div>
                 <div className="flex items-center gap-2">
+                  {/* Filtre lecture */}
+                  <div className="flex items-center rounded border border-[hsl(var(--line))] overflow-hidden text-[10.5px] font-mono">
+                    {([['all','Tous'],['unread','Non lus'],['reading','En cours'],['done','Terminés']] as const).map(([val, label]) => (
+                      <button key={val} onClick={() => setReadFilter(val)}
+                        className={`px-2 py-1 transition-colors ${readFilter === val ? 'bg-[hsl(var(--bg-2))] text-[hsl(var(--text))]' : 'text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))]'}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                   {docs.length > 0 && (
                     <button onClick={selectedIds.size === docs.length ? clearSelection : selectAll}
                       className="flex items-center gap-1.5 px-2 py-1 rounded border border-[hsl(var(--line))] text-[11px] font-mono text-[hsl(var(--text-3))] hover:border-[hsl(var(--accent-line))] hover:text-[hsl(var(--accent))] transition-colors">
@@ -415,12 +464,12 @@ export default function Library() {
                 <div className="flex flex-col items-center justify-center h-full gap-4 text-[hsl(var(--text-3))]">
                   <LibraryIcon className="w-12 h-12 opacity-30" />
                   <p className="text-[13px] font-mono">Aucun document dans ce sujet</p>
-                  <p className="text-[11px] font-mono text-[hsl(var(--text-3))]">Générez-en un depuis la page Veille ou l'Assistant</p>
+                  <p className="text-[11px] font-mono text-[hsl(var(--text-3))]">Générez-en un depuis le Briefing ou l'Assistant</p>
                 </div>
               )}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <AnimatePresence>
-                  {docs.map((doc, i) => {
+                  {visibleDocs.map((doc, i) => {
                     const meta = DOC_TYPE_META[doc.doc_type] ?? DOC_TYPE_META.fiche
                     const Icon = meta.icon
                     return (
@@ -444,7 +493,12 @@ export default function Library() {
                           </div>
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className={`pill border text-[10px] ${meta.pill}`}>{meta.label}</span>
-                            {doc.rag_indexed && <span className="pill pill-green text-[10px]"><DatabaseZap className="w-2.5 h-2.5" />RAG</span>}
+                            {!doc.reading_progress || doc.reading_progress === 0
+                              ? <span className="pill text-[10px] bg-[hsl(var(--bg-3))] text-[hsl(var(--text-3))] border border-[hsl(var(--line))]">Non lu</span>
+                              : doc.reading_progress === 100
+                                ? <span className="pill text-[10px] bg-green-500/10 text-[hsl(var(--green))] border border-green-500/20">✓ Terminé</span>
+                                : <span className="pill text-[10px] bg-yellow-500/10 text-[hsl(var(--amber))] border border-yellow-500/20">{doc.reading_progress}%</span>
+                            }
                           </div>
                         </div>
                         <p className="text-[13.5px] font-semibold text-[hsl(var(--text))] leading-snug mb-2 line-clamp-2">{doc.title}</p>
@@ -503,7 +557,11 @@ export default function Library() {
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              <div className="flex-1 overflow-auto p-6">
+              {/* Barre progression lecture */}
+              <div className="h-0.5 bg-[hsl(var(--bg-3))] flex-shrink-0">
+                <div className="h-full bg-[hsl(var(--accent))] transition-all duration-300" style={{ width: `${docReadPct}%` }} />
+              </div>
+              <div ref={docScrollRef} onScroll={onDocScroll} className="flex-1 overflow-auto p-6">
                 {editMode
                   ? <div className="flex flex-col gap-3 h-full">
                       <div className="panel-accent p-3 flex-shrink-0">
@@ -559,12 +617,10 @@ export default function Library() {
                     </>
                   )}
                 </div>
-                {!selected.rag_indexed && !editMode && (
-                  <motion.button onClick={indexDoc} disabled={indexing} whileTap={{ scale: 0.95 }}
-                    className="flex items-center gap-2 px-4 py-1.5 rounded border border-[hsl(var(--accent-line))] bg-[hsl(var(--accent-dim))] text-[hsl(var(--accent))] text-[12px] font-bold disabled:opacity-50">
-                    {indexing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <DatabaseZap className="w-3.5 h-3.5" />}
-                    {indexing ? 'Indexation…' : 'Indexer dans le RAG'}
-                  </motion.button>
+                {!editMode && docReadPct > 0 && (
+                  <span className={`text-[10.5px] font-mono ${docReadPct === 100 ? 'text-[hsl(var(--green))]' : 'text-[hsl(var(--amber))]'}`}>
+                    {docReadPct === 100 ? '✓ Terminé' : `${docReadPct}% lu`}
+                  </span>
                 )}
               </div>
             </motion.div>

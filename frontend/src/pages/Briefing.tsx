@@ -1,13 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Newspaper, RefreshCw, Loader2, Sparkles, ChevronDown,
   TrendingUp, Clock, ExternalLink, ShieldCheck, Tag,
-  AlertTriangle, GitMerge, Check, X, Archive, Trash2, Info
+  AlertTriangle, GitMerge, Check, X, Archive, Trash2, Info,
+  MessageSquare, PanelRightOpen, PanelRightClose
 } from 'lucide-react'
 import { api } from '@/services/api'
 import { timeAgo } from '@/lib/utils'
 import ReactMarkdown from 'react-markdown'
+
+const AssistantPanel = lazy(() => import('@/pages/Assistant'))
 
 const TIER_COLOR: Record<string, string> = {
   official:   'bg-blue-500/15 text-blue-400 border-blue-500/25',
@@ -17,6 +20,7 @@ const TIER_COLOR: Record<string, string> = {
 }
 
 export default function Briefing() {
+  const [assistantOpen, setAssistantOpen] = useState(false)
   const [today, setToday]       = useState<any>(null)
   const [history, setHistory]   = useState<any[]>([])
   const [selected, setSelected] = useState<any>(null)
@@ -105,7 +109,8 @@ export default function Briefing() {
   const displayBriefing = selected
 
   return (
-    <div className="p-8 max-w-4xl mx-auto space-y-6">
+    <div className="flex h-full">
+    <div className={`flex-1 overflow-y-auto p-8 space-y-6 transition-all duration-300 ${assistantOpen ? '' : 'max-w-4xl mx-auto'}`}>
 
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
@@ -120,6 +125,16 @@ export default function Briefing() {
         </div>
 
         <div className="flex items-center gap-2">
+          <button onClick={() => setAssistantOpen(v => !v)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded border text-[11.5px] font-mono transition-all ${
+              assistantOpen
+                ? 'border-[hsl(var(--accent-line))] bg-[hsl(var(--accent-dim))] text-[hsl(var(--accent))]'
+                : 'border-[hsl(var(--line))] text-[hsl(var(--text-2))] hover:border-[hsl(var(--accent-line))] hover:text-[hsl(var(--accent))]'
+            }`}>
+            {assistantOpen ? <PanelRightClose className="w-3.5 h-3.5" /> : <PanelRightOpen className="w-3.5 h-3.5" />}
+            <MessageSquare className="w-3.5 h-3.5" />
+            Assistant
+          </button>
           <select value={hours} onChange={e => setHours(+e.target.value)}
             className="bg-[hsl(var(--bg-2))] border border-[hsl(var(--line))] rounded px-2 py-1.5 text-[11.5px] font-mono text-[hsl(var(--text-2))] outline-none">
             <option value={24}>24h</option>
@@ -459,6 +474,20 @@ export default function Briefing() {
           </AnimatePresence>
         </div>
       )}
+    </div>{/* fin panneau scrollable */}
+
+    {/* Panneau assistant latéral */}
+    {assistantOpen && (
+      <div className="flex-shrink-0 w-[420px] border-l border-[hsl(var(--line))] overflow-hidden bg-[hsl(var(--bg-1))]">
+        <Suspense fallback={
+          <div className="flex items-center justify-center h-full">
+            <Loader2 className="w-5 h-5 animate-spin text-[hsl(var(--accent))]" />
+          </div>
+        }>
+          <AssistantPanel />
+        </Suspense>
+      </div>
+    )}
     </div>
   )
 }

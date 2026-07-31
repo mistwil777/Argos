@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/hygiene", tags=["hygiene"])
+router = APIRouter(prefix="/hygiene", tags=["hygiene"])
 
 
 class AlertResolveRequest(BaseModel):
