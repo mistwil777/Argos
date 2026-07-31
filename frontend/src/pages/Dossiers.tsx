@@ -186,6 +186,9 @@ export default function Dossiers() {
   }
 
   const visibleSujets = sujets.filter(s => s.workspace_id === activeWs)
+  function wsItemCount(wsId: number) {
+    return sujets.filter(s => s.workspace_id === wsId).reduce((acc, s) => acc + (s.item_count ?? 0), 0)
+  }
 
   if (loading) return (
     <div className="h-full flex items-center justify-center">
@@ -264,7 +267,7 @@ export default function Dossiers() {
                     }`}>
                     <Folder className="w-3.5 h-3.5 flex-shrink-0" />
                     <span className="text-[12px] font-medium truncate flex-1">{ws.name}</span>
-                    <span className="text-[10px] font-mono text-[hsl(var(--text-3))] group-hover/ws:hidden">{ws.sujet_count}</span>
+                    <span className="text-[10px] font-mono text-[hsl(var(--text-3))] group-hover/ws:hidden">{wsItemCount(ws.id)} docs</span>
                     <div className="hidden group-hover/ws:flex items-center gap-0.5">
                       <button onClick={e => { e.stopPropagation(); setRenameWsId(ws.id); setRenameWsVal(ws.name) }}
                         className="p-0.5 rounded hover:text-[hsl(var(--accent))] text-[hsl(var(--text-3))] transition-colors">
@@ -357,7 +360,7 @@ export default function Dossiers() {
                       <span className={`text-[12px] flex-1 truncate ${activeSujet?.id === s.id ? 'text-[hsl(var(--accent))] font-semibold' : 'text-[hsl(var(--text-2))]'}`}>
                         {s.name}
                       </span>
-                      <span className="text-[10px] font-mono text-[hsl(var(--text-3))] group-hover/s:hidden">{s.source_count}</span>
+                      <span className="text-[10px] font-mono text-[hsl(var(--text-3))] group-hover/s:hidden">{s.item_count} docs</span>
                       <div className="hidden group-hover/s:flex items-center gap-0.5">
                         <button onClick={e => { e.stopPropagation(); setRenameSujetId(s.id); setRenameSujetVal(s.name) }}
                           className="p-0.5 rounded hover:text-[hsl(var(--accent))] text-[hsl(var(--text-3))] transition-colors">
