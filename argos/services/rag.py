@@ -507,7 +507,15 @@ class RAGService:
             raise ValueError(f"Item {item_id} not found")
         
         chunks_count = self.vector_store.index_item(item)
-        
+
+        with self.db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE items SET rag_indexed = TRUE, rag_indexed_at = NOW() WHERE id = %s",
+                    (item_id,)
+                )
+                conn.commit()
+
         return {
             "item_id": item_id,
             "title": item["title"],

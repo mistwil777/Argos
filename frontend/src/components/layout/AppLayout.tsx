@@ -23,14 +23,9 @@ const META: Record<string, { title: string; badge?: string; desc?: string }> = {
   '/reglages':   { title: 'Réglages',   desc: 'Général, connexions IDE, équipe et compte' },
 }
 
-/* Capgemini diamond logo — inline SVG approximation */
 function CapgeminiMark({ size = 18 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M16 2C8.268 2 2 8.268 2 16s6.268 14 14 14 14-6.268 14-14S23.732 2 16 2z" fill="#00B4E1" />
-      <path d="M16 5C9.925 5 5 9.925 5 16s4.925 11 11 11 11-4.925 11-11S22.075 5 16 5z" fill="#0070AD" />
-      <path d="M12 11.5c0-2.485 1.79-4.5 4-4.5 1.38 0 2.6.72 3.33 1.82L21 7.3C19.74 5.88 17.97 5 16 5c-3.866 0-7 3.358-7 7.5S12.134 20 16 20c1.97 0 3.74-.88 5-2.3l-1.67-1.52C18.6 17.28 17.38 18 16 18c-2.21 0-4-2.015-4-4.5z" fill="white" />
-    </svg>
+    <img src="/capgemini-logo.png" alt="Capgemini" width={size} height={size} style={{ objectFit: 'contain' }} />
   )
 }
 

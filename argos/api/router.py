@@ -437,6 +437,7 @@ async def list_items(
     source: str = Query(default="all", description="Filter by source"),
     importance: str = Query(default="all", description="Filter by importance: all, critical, high, medium, low"),
     workspace_id: Optional[int] = Query(default=None, description="Filter by workspace ID"),
+    sujet_id: Optional[int] = Query(default=None, description="Filter by sujet ID"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0)
 ):
@@ -463,7 +464,11 @@ async def list_items(
                 if workspace_id is not None:
                     where_conditions.append("workspace_id = %s")
                     params.append(workspace_id)
-                
+
+                if sujet_id is not None:
+                    where_conditions.append("sujet_id = %s")
+                    params.append(sujet_id)
+
                 where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
                 
                 query = f"""
@@ -471,7 +476,7 @@ async def list_items(
                         id, title, summary, url, source_type, source_url,
                         item_type, importance, classification_status,
                         published_at, created_at, workspace_id,
-                        keywords, digest_markdown, rag_indexed
+                        keywords, digest_markdown, rag_indexed, sujet_id
                     FROM items
                     WHERE {where_clause}
                     ORDER BY created_at DESC
@@ -501,6 +506,7 @@ async def list_items(
                         "topics": row[12] or [],
                         "digest_markdown": row[13],
                         "rag_indexed": bool(row[14]),
+                        "sujet_id": row[15],
                     })
                 
                 # Get total count
@@ -2313,7 +2319,7 @@ async def pipeline_all_sources(background_tasks: BackgroundTasks, data: Dict[str
                 except Exception as e:
                     logger.warning(f"[PIPELINE-ALL] source {src_id} : {e}")
 
-        background_tasks.add_task(lambda: asyncio.ensure_future(_run_all()))
+        background_tasks.add_task(_run_all)
         return {"message": f"Pipeline lancé sur {len(ids)} source(s)", "count": len(ids), "source_ids": ids}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

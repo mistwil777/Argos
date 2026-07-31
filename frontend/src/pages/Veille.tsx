@@ -2,7 +2,7 @@ import { useState, lazy, Suspense } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Sparkles, Loader2, Check,
-  Folder, Plus, X,
+  Folder, Plus,
 } from 'lucide-react'
 import { api } from '@/services/api'
 
@@ -41,6 +41,10 @@ function CadrageVeille({ onDone }: { onDone: () => void }) {
   const [query, setQuery]               = useState('')
   const [loading, setLoading]           = useState(false)
   const [themes, setThemes]             = useState<typeof DOMAIN_THEMES[string] | null>(null)
+  const [unknown, setUnknown]           = useState(false)   // domaine non reconnu
+  const [wsName, setWsName]             = useState('')      // nom du dossier à créer
+  const [freeLabel, setFreeLabel]       = useState('')      // sous-thème libre
+  const [freeList, setFreeList]         = useState<string[]>([])
   const [selected, setSelected]         = useState<Set<string>>(new Set())
   const [creating, setCreating]         = useState(false)
   const [done, setDone]                 = useState(false)
@@ -64,27 +68,74 @@ function CadrageVeille({ onDone }: { onDone: () => void }) {
     if (!query.trim()) return
     setLoading(true)
     setThemes(null)
+    setUnknown(false)
+    setFreeList([])
     setSelected(new Set())
     setTargetWorkspace(null)
-    await new Promise(r => setTimeout(r, 600))
+    await new Promise(r => setTimeout(r, 400))
     const detected = detectDomain(query)
-    const { domain, items } = detected || { domain: 'Intelligence Artificielle', items: DOMAIN_THEMES['Intelligence Artificielle'] }
-    setThemes(items)
+    if (!detected) {
+      const q = query.trim()
+      // 1. Extraire le domaine principal : ce qui suit "sur", "en", "concernant", "autour de", "dans le domaine de"
+      const domainPatterns = [
+        /(?:sur|concernant|autour\s+de|dans\s+le\s+domaine\s+de|de\s+la|du|de\s+l[''])\s+(.+?)(?:\s+avec|\s+et\s+|\s+pour\s+|$)/i,
+        /(?:veille|suivi|monitoring)\s+(?:sur\s+)?(.+?)(?:\s+avec|\s+et\s+|\s+pour\s+|$)/i,
+      ]
+      let domainName = ''
+      for (const pat of domainPatterns) {
+        const m = q.match(pat)
+        if (m?.[1]) { domainName = m[1].trim(); break }
+      }
+      // Fallback : mots significatifs après nettoyage
+      if (!domainName) {
+        const stopwords = new Set(['je', 'jaimerai', 'jaimerais', 'jaimerais', 'créer', 'une', 'sur', 'la', 'le', 'les', 'de', 'du', 'des', 'avec', 'dans', 'ce', 'domaine', 'veille', 'faire', 'avoir', 'pour', 'un', 'et', 'en', 'par', 'voudrais', 'veux', 'aimerais', 'aimerai', 'faire', 'mes'])
+        const words = q.toLowerCase().replace(/['']/g, '').split(/\s+/).filter(w => w.length > 2 && !stopwords.has(w))
+        domainName = words.slice(0, 3).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+      }
+      // Supprimer les articles en début ("la", "le", "les", "l'", "un", "une", "des")
+      domainName = domainName.replace(/^(la|le|les|l['']|un|une|des)\s+/i, '')
+      // Capitaliser proprement
+      domainName = domainName.charAt(0).toUpperCase() + domainName.slice(1)
+      setWsName(domainName)
 
-    // Cherche si un workspace existant correspond au domaine détecté
+      // 2. Générer des sous-thèmes suggérés selon le domaine extrait
+      const dl = domainName.toLowerCase()
+      let suggestions: string[] = []
+      if (dl.includes('projet') || dl.includes('équipe') || dl.includes('management')) {
+        suggestions = ['Planification & Roadmap', 'Gestion des risques', 'Agilité & Scrum', 'Leadership', 'Communication d\'équipe', 'OKR & KPI']
+      } else if (dl.includes('marketing') || dl.includes('communic')) {
+        suggestions = ['SEO & Content', 'Réseaux sociaux', 'Growth hacking', 'Branding', 'Email marketing', 'Analytics']
+      } else if (dl.includes('finance') || dl.includes('compta')) {
+        suggestions = ['Comptabilité', 'Contrôle de gestion', 'Fiscalité', 'Fintech', 'Investissement', 'Trésorerie']
+      } else if (dl.includes('juridique') || dl.includes('droit') || dl.includes('legal')) {
+        suggestions = ['Droit du travail', 'RGPD & données', 'Contrats', 'Propriété intellectuelle', 'Conformité']
+      } else if (dl.includes('cyber') || dl.includes('sécurité')) {
+        suggestions = ['Menaces & vulnérabilités', 'Pentest', 'Gouvernance SSI', 'Zero Trust', 'SOC & SIEM']
+      } else if (dl.includes('cloud') || dl.includes('infra')) {
+        suggestions = ['AWS', 'Azure', 'GCP', 'Kubernetes', 'Terraform', 'FinOps']
+      } else {
+        // Suggestions génériques
+        suggestions = ['Actualités', 'Bonnes pratiques', 'Outils & Méthodes', 'Tendances', 'Cas d\'usage', 'Réglementation']
+      }
+      setFreeList(suggestions)
+      setSelected(new Set())
+      setUnknown(true)
+      setLoading(false)
+      return
+    }
+    const { domain, items } = detected
+    setThemes(items)
     try {
       const data = await api.getWorkspaces()
       const workspaces: { id: number; name: string }[] = data.workspaces || data
-      // Mots-clés du domaine (ex: "Intelligence Artificielle" → ["intelligence", "artificielle", "ia"])
       const domainWords = domain.toLowerCase().split(/[\s&]+/).filter(w => w.length > 1)
-      const domainAbbrev = domainWords.map(w => w[0]).join('')  // "ia", "dl", etc.
+      const domainAbbrev = domainWords.map(w => w[0]).join('')
       const match = workspaces.find(ws => {
         const wsLow = ws.name.toLowerCase()
         return domainWords.some(w => wsLow.includes(w)) || wsLow === domainAbbrev || wsLow.includes(domainAbbrev)
       })
       if (match) setTargetWorkspace(match)
     } catch { /* silencieux */ }
-
     setLoading(false)
   }
 
@@ -96,35 +147,46 @@ function CadrageVeille({ onDone }: { onDone: () => void }) {
     })
   }
 
+  function addFree() {
+    const val = freeLabel.trim()
+    if (!val || freeList.includes(val)) return
+    setFreeList(prev => [...prev, val])
+    setFreeLabel('')
+  }
+
+  // Création pour domaine connu (thèmes prédéfinis)
   async function createDossiers() {
     if (!selected.size) return
     setCreating(true)
     try {
       if (targetWorkspace) {
-        // Ajoute comme sujets dans le workspace existant
         for (const label of selected) {
-          await api.createSujet({
-            name: label,
-            description: themes?.find(t => t.label === label)?.desc || '',
-            workspace_id: targetWorkspace.id,
-          })
+          await api.createSujet({ name: label, description: themes?.find(t => t.label === label)?.desc || '', workspace_id: targetWorkspace.id })
         }
       } else {
-        // Crée un nouveau workspace par sélection
         for (const label of selected) {
-          await api.createWorkspace({
-            name: label,
-            description: themes?.find(t => t.label === label)?.desc || '',
-            icon: 'folder',
-            color: '#6366f1',
-          })
+          await api.createWorkspace({ name: label, description: themes?.find(t => t.label === label)?.desc || '', icon: 'folder', color: '#6366f1' })
         }
       }
       setDone(true)
       setTimeout(() => { setDone(false); setThemes(null); setQuery(''); onDone() }, 1200)
-    } catch (e) {
-      console.error(e)
-    } finally { setCreating(false) }
+    } catch (e) { console.error(e) }
+    finally { setCreating(false) }
+  }
+
+  // Création pour domaine libre (inconnu)
+  async function createFree() {
+    if (!wsName.trim()) return
+    setCreating(true)
+    try {
+      const ws = await api.createWorkspace({ name: wsName.trim(), icon: 'folder', color: '#6366f1' })
+      for (const label of selected) {
+        await api.createSujet({ name: label, workspace_id: ws.id })
+      }
+      setDone(true)
+      setTimeout(() => { setDone(false); setUnknown(false); setFreeList([]); setQuery(''); onDone() }, 1200)
+    } catch (e) { console.error(e) }
+    finally { setCreating(false) }
   }
 
   return (
@@ -169,7 +231,82 @@ function CadrageVeille({ onDone }: { onDone: () => void }) {
 
         {/* Sous-thèmes */}
         <AnimatePresence>
-          {themes && (
+          {unknown && (
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-4">
+              {/* Nom du dossier */}
+              <div>
+                <p className="text-[11px] font-mono text-[hsl(var(--text-3))] uppercase tracking-wider mb-2">Dossier principal</p>
+                <input
+                  value={wsName}
+                  onChange={e => setWsName(e.target.value)}
+                  placeholder="Nom du dossier"
+                  className="w-full pl-3 pr-3 py-2.5 bg-[hsl(var(--bg))] border border-[hsl(var(--accent-line))] rounded-lg text-[13px] font-semibold text-[hsl(var(--text))] placeholder:text-[hsl(var(--text-3))] outline-none focus:border-[hsl(var(--accent))] transition-colors"
+                />
+              </div>
+
+              {/* Sous-thèmes suggérés */}
+              <div>
+                <p className="text-[11px] font-mono text-[hsl(var(--text-3))] uppercase tracking-wider mb-2">
+                  Sous-dossiers suggérés — cochez ce qui vous intéresse
+                </p>
+                <div className="grid grid-cols-1 gap-2">
+                  {freeList.map(label => {
+                    const isOn = selected.has(label)
+                    return (
+                      <motion.button key={label} onClick={() => toggle(label)}
+                        whileTap={{ scale: 0.99 }}
+                        className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${
+                          isOn
+                            ? 'border-[hsl(var(--accent-line))] bg-[hsl(var(--accent-dim))]'
+                            : 'border-[hsl(var(--line))] bg-[hsl(var(--bg-2))] hover:border-[hsl(var(--line-bright))]'
+                        }`}>
+                        <div className={`w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center transition-all ${
+                          isOn ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent))]' : 'border-[hsl(var(--text-3))]'
+                        }`}>
+                          {isOn && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+                        </div>
+                        <span className={`text-[12.5px] font-medium ${isOn ? 'text-[hsl(var(--accent))]' : 'text-[hsl(var(--text))]'}`}>{label}</span>
+                      </motion.button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Ajouter un sous-thème personnalisé */}
+              <div className="flex gap-2">
+                <input
+                  value={freeLabel}
+                  onChange={e => setFreeLabel(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addFree()}
+                  placeholder="Ajouter un sous-dossier personnalisé…"
+                  className="flex-1 pl-3 pr-3 py-2 bg-[hsl(var(--bg))] border border-[hsl(var(--line))] rounded-lg text-[12px] text-[hsl(var(--text))] placeholder:text-[hsl(var(--text-3))] outline-none focus:border-[hsl(var(--accent-line))] transition-colors"
+                />
+                <button onClick={addFree}
+                  className="px-3 py-2 rounded-lg text-white"
+                  style={{ background: 'linear-gradient(90deg, #0070AD 0%, #00B4E1 100%)' }}>
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+
+              <motion.button
+                initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+                onClick={createFree}
+                disabled={creating || done || !wsName.trim()}
+                whileTap={{ scale: 0.97 }}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-lg text-white text-[13px] font-bold disabled:opacity-60 transition-all"
+                style={{ background: 'linear-gradient(90deg, #0070AD 0%, #00B4E1 100%)' }}
+              >
+                {done ? (
+                  <><Check className="w-4 h-4" /> Dossier créé ✓</>
+                ) : creating ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Création en cours…</>
+                ) : (
+                  <><Plus className="w-4 h-4" /> Créer "{wsName.trim()}"{selected.size > 0 ? ` + ${selected.size} sous-dossier${selected.size > 1 ? 's' : ''}` : ''}</>
+                )}
+              </motion.button>
+            </motion.div>
+          )}
+          {themes && themes.length > 0 && (
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-[11px] font-mono text-[hsl(var(--text-3))] uppercase tracking-wider">
@@ -238,7 +375,7 @@ function CadrageVeille({ onDone }: { onDone: () => void }) {
 
 export default function Veille() {
   const [refresh, setRefresh] = useState(0)
-  const [showCadrage, setShowCadrage] = useState(true)
+  const [showCadrage] = useState(true)
 
   return (
     <div className="h-full overflow-y-auto">
@@ -253,19 +390,12 @@ export default function Veille() {
           )}
         </AnimatePresence>
 
-        {/* Toggle cadrage */}
+        {/* Titre section dossiers */}
         <div className="flex items-center justify-between">
           <h3 className="text-[13px] font-bold text-[hsl(var(--text))] flex items-center gap-2">
             <Folder className="w-4 h-4 text-[hsl(var(--accent))]" />
             Vos dossiers de veille
           </h3>
-          <button onClick={() => setShowCadrage(v => !v)}
-            className="flex items-center gap-1.5 text-[11px] font-mono text-[hsl(var(--text-3))] hover:text-[hsl(var(--accent))] transition-colors">
-            {showCadrage
-              ? <><X className="w-3 h-3" /> Fermer le cadrage</>
-              : <><Plus className="w-3 h-3" /> Ajouter des dossiers</>
-            }
-          </button>
         </div>
 
         {/* Dossiers existants */}

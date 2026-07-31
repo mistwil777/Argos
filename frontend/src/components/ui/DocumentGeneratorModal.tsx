@@ -7,6 +7,10 @@ import {
 import { api } from '@/services/api'
 import ReactMarkdown from 'react-markdown'
 
+function todayLabel() {
+  return new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
 const DOC_TYPES = [
   {
     id: 'fiche',
@@ -43,21 +47,40 @@ interface Props {
   onClose: () => void
   onSaved: () => void
   initialPrompt?: string
+  itemTitle?: string
   sujetId?: number | null
 }
 
-function todayLabel() {
-  return new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-}
-
-export default function DocumentGeneratorModal({ itemIds, onClose, onSaved, initialPrompt, sujetId }: Props) {
+export default function DocumentGeneratorModal({ itemIds, onClose, onSaved, initialPrompt, itemTitle, sujetId }: Props) {
   const [docType, setDocType]       = useState('synthese')
-  const [title, setTitle]           = useState(
-    initialPrompt
-      ? `Synthèse — ${todayLabel()} — ${initialPrompt.slice(0, 50)}`
-      : `Synthèse — ${todayLabel()}`
-  )
-  const [prompt, setPrompt]         = useState(initialPrompt ?? '')
+  // subject = titre court de l'article, sinon extrait du prompt
+  const subject = itemTitle ?? ''
+
+  function makeTitle(typeId: string) {
+    const shortSubject = subject.slice(0, 30).trim()
+    const labels: Record<string, string> = { fiche: 'Fiche', synthese: 'Synthèse', guide: 'Guide', rapport: 'Rapport' }
+    return shortSubject ? `${labels[typeId] ?? typeId} — ${shortSubject}` : `${labels[typeId] ?? typeId} — ${todayLabel()}`
+  }
+
+  function makePrompt(typeId: string) {
+    const base = subject || (initialPrompt ?? '')
+    const verbs: Record<string, string> = {
+      fiche: 'Génère une fiche de veille sur',
+      synthese: 'Génère une synthèse thématique sur',
+      guide: 'Génère un guide pratique sur',
+      rapport: 'Génère un rapport de veille sur',
+    }
+    return base ? `${verbs[typeId] ?? 'Génère un document sur'} : ${base}` : ''
+  }
+
+  const [title, setTitle]           = useState(makeTitle('synthese'))
+  const [prompt, setPrompt]         = useState(initialPrompt ?? makePrompt('synthese'))
+
+  function changeDocType(id: string) {
+    setDocType(id)
+    setTitle(makeTitle(id))
+    setPrompt(makePrompt(id))
+  }
   const [generating, setGenerating] = useState(false)
   const [markdown, setMarkdown]     = useState('')
   const [editedMarkdown, setEditedMarkdown] = useState('')
@@ -136,7 +159,7 @@ export default function DocumentGeneratorModal({ itemIds, onClose, onSaved, init
                 <div className="grid grid-cols-2 gap-3">
                   {DOC_TYPES.map(({ id, icon: Icon, label, desc, color }) => (
                     <motion.button
-                      key={id} type="button" onClick={() => setDocType(id)}
+                      key={id} type="button" onClick={() => changeDocType(id)}
                       whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}
                       className={`text-left p-4 rounded-lg border transition-all ${
                         docType === id

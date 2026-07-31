@@ -59,13 +59,12 @@ async def run_pipeline_for_source(source_id: int) -> dict:
     inserted = await _step_collect(src_id, src_name, src_url, src_type, src_wid, db)
 
     if inserted == 0:
-        logger.info(f"[PIPELINE] Source {source_id} — aucun nouvel item")
-        return {"source_id": source_id, "inserted": 0, "classified": 0, "ingested": 0}
+        logger.info(f"[PIPELINE] Source {source_id} — aucun nouvel item, traitement des items existants")
 
     # ── Étape 2 : Classification ─────────────────────────────────────
     classified_ids = await _step_classify(src_url, db)
 
-    # ── Étape 3 : Score + Ingest des high/critical ───────────────────
+    # ── Étape 3 : Score + Ingest des medium/high/critical ────────────
     ingested = await _step_ingest_priority(src_url, src_wid, db)
 
     result = {
@@ -194,12 +193,12 @@ async def _step_ingest_priority(src_url: str, workspace_id: Optional[int], db) -
     with db.get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                SELECT id, title, url, summary
+                SELECT id, title, url, summary, digest_markdown
                 FROM items
                 WHERE source_url = %s
                   AND classification_status = 'classified'
-                  AND importance IN ('high', 'critical')
-                  AND digest_markdown IS NULL
+                  AND importance IN ('medium', 'high', 'critical')
+                  AND (digest_markdown IS NULL OR rag_indexed = FALSE)
                 ORDER BY created_at DESC
                 LIMIT 10
             """, (src_url,))
@@ -214,8 +213,18 @@ async def _step_ingest_priority(src_url: str, workspace_id: Optional[int], db) -
     rag = RAGService(llm_provider=llm, vector_store=vs, db_manager=db)
     ingested = 0
 
-    for item_id, title, url, summary in items:
+    from argos.services.knowledge_graph import extract_and_index as kg_extract
+
+    for item_id, title, url, summary, existing_digest in items:
         try:
+            if existing_digest:
+                # Digest déjà généré, indexer directement
+                rag.index_item(item_id)
+                await kg_extract(item_id, title, existing_digest, source_url=url or "", db=db)
+                ingested += 1
+                logger.info(f"[PIPELINE] Item {item_id} ré-indexé dans RAG + KG (digest existant)")
+                continue
+
             # Score de pertinence (sans embedding pour l'instant — P2 HDBSCAN)
             score_data = compute_item_score(
                 url=url or "",
@@ -248,8 +257,9 @@ async def _step_ingest_priority(src_url: str, workspace_id: Optional[int], db) -
                     ))
                     conn.commit()
 
-            # Indexer dans RAG
+            # Indexer dans RAG + KG
             rag.index_item(item_id)
+            await kg_extract(item_id, title, digest.get("markdown", ""), source_url=url or "", db=db)
             ingested += 1
             logger.info(
                 f"[PIPELINE] Item {item_id} ingéré — score={score_data['score']} "
@@ -304,8 +314,8 @@ async def run_pipeline_batch(limit: int = 20) -> dict:
             cur.execute("""
                 SELECT id, title, url, summary FROM items
                 WHERE classification_status = 'classified'
-                  AND importance IN ('high', 'critical')
-                  AND digest_markdown IS NULL
+                  AND importance IN ('medium', 'high', 'critical')
+                  AND (digest_markdown IS NULL OR rag_indexed = FALSE)
                 ORDER BY created_at DESC
                 LIMIT 10
             """)

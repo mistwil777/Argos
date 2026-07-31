@@ -7,6 +7,7 @@ import {
   Pencil, Trash2, Loader2,
   Search, Sparkles, SlidersHorizontal, Wand2, RotateCcw,
   CheckSquare, Square, Folder, Tag, ChevronRight, Library as LibraryIcon,
+  Radio, ExternalLink,
 } from 'lucide-react'
 import { api } from '@/services/api'
 import { timeAgo } from '@/lib/utils'
@@ -49,6 +50,13 @@ export default function Library() {
   const [sujets, setSujets]             = useState<any[]>([])
   const [wsLoading, setWsLoading]       = useState(true)
 
+  // ── Onglet actif ──
+  const [tab, setTab] = useState<'articles' | 'documents'>('articles')
+
+  // ── Articles (items) ──
+  const [items, setItems]         = useState<any[]>([])
+  const [itemsLoading, setItemsLoading] = useState(false)
+
   // ── Documents ──
   const [docs, setDocs]           = useState<any[]>([])
   const [loading, setLoading]     = useState(false)
@@ -62,7 +70,14 @@ export default function Library() {
   const [searchMode, setSearchMode] = useState(false)
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const [genModal, setGenModal]   = useState<{ prefill?: string } | null>(null)
+  const [genModal, setGenModal]   = useState<{ prefill?: string; itemIds?: number[]; itemTitle?: string } | null>(null)
+
+  // ── Modale article collecté ──
+  const [itemModal, setItemModal] = useState<any | null>(null)
+  const [itemPreview, setItemPreview] = useState<{ markdown: string; title: string; summary: string; json?: any } | null>(null)
+  const [itemPreviewLoading, setItemPreviewLoading] = useState(false)
+  const [itemSaving, setItemSaving] = useState(false)
+  const itemScrollRef = useRef<HTMLDivElement>(null)
 
   // ── Sélection / édition ──
   const [selected, setSelected]   = useState<any | null>(null)
@@ -88,8 +103,24 @@ export default function Library() {
     setWsLoading(true)
     Promise.all([api.getWorkspaces(), api.getSujets()])
       .then(([wsData, sData]) => {
-        setWorkspaces(wsData.workspaces || [])
-        setSujets(sData.sujets || [])
+        const wsList = wsData.workspaces || []
+        const sList = sData.sujets || []
+        setWorkspaces(wsList)
+        setSujets(sList)
+        // Naviguer vers un sujet direct si ?sujet= dans l'URL
+        const params = new URLSearchParams(location.search)
+        const sujetParam = params.get('sujet')
+        if (sujetParam) {
+          const sujetId = parseInt(sujetParam, 10)
+          const sujet = sList.find((s: any) => s.id === sujetId)
+          if (sujet) {
+            const ws = wsList.find((w: any) => w.id === sujet.workspace_id)
+            if (ws) setActiveWs(ws)
+            setActiveSujet(sujet)
+            setLevel('docs')
+            setTab('articles')
+          }
+        }
       })
       .finally(() => setWsLoading(false))
   }, [])
@@ -111,8 +142,21 @@ export default function Library() {
     } finally { setLoading(false) }
   }, [filterType, sortBy])
 
+  const loadItems = useCallback(async (sujetId?: number) => {
+    setItemsLoading(true)
+    try {
+      const params: any = { limit: 100 }
+      if (sujetId != null) params.sujet_id = sujetId
+      const d = await api.getItems(params)
+      setItems(d.items || d.results || [])
+    } finally { setItemsLoading(false) }
+  }, [])
+
   useEffect(() => {
-    if (level === 'docs' && activeSujet) loadDocs(activeSujet.id)
+    if (level === 'docs' && activeSujet) {
+      loadDocs(activeSujet.id)
+      loadItems(activeSujet.id ?? undefined)
+    }
   }, [filterType, sortBy, level, activeSujet])
 
   // Auto-open generator modal
@@ -140,6 +184,42 @@ export default function Library() {
     }, 400)
     return () => { if (searchTimeout.current) clearTimeout(searchTimeout.current) }
   }, [query, semantic, filterType, level, activeSujet])
+
+  async function openItemModal(item: any) {
+    setItemModal(item)
+    setItemPreview(null)
+    setItemPreviewLoading(true)
+    try {
+      const result = await api.ingestPreview(item.id)
+      setItemPreview({
+        markdown: result.markdown || '',
+        title: result.title || item.title || '',
+        summary: result.current_summary || item.summary || '',
+        json: result.json,
+      })
+    } catch { setItemPreview({ markdown: '', title: item.title || '', summary: item.summary || '' }) }
+    finally { setItemPreviewLoading(false) }
+  }
+
+  async function saveItemAsDoc() {
+    if (!itemModal || !itemPreview) return
+    setItemSaving(true)
+    try {
+      await api.saveDocument({
+        title: itemPreview.title || itemModal.title || 'Article sans titre',
+        doc_type: 'fiche',
+        content_markdown: itemPreview.markdown,
+        summary: itemPreview.summary,
+        sujet_id: activeSujet?.id ?? null,
+        source_item_ids: [itemModal.id],
+      })
+      setItemModal(null)
+      setItemPreview(null)
+      loadDocs(activeSujet?.id ?? undefined)
+      setTab('documents')
+    } catch (e: any) { alert(`Erreur : ${e.message}`) }
+    finally { setItemSaving(false) }
+  }
 
   // ── Navigation ──
   function enterWorkspace(ws: any) {
@@ -360,9 +440,14 @@ export default function Library() {
                   >
                     <Tag className={`w-7 h-7 mb-3 ${FOLDER_TEXT[(i + 1) % FOLDER_TEXT.length]}`} />
                     <p className={`text-[15px] font-bold ${FOLDER_TEXT[(i + 1) % FOLDER_TEXT.length]}`}>{s.name}</p>
-                    <p className="text-[11px] font-mono text-[hsl(var(--text-3))] mt-1">
-                      {s.item_count} doc{s.item_count !== 1 ? 's' : ''}
-                    </p>
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      <span className="text-[10.5px] font-mono text-[hsl(var(--text-3))]">
+                        <Radio className="w-2.5 h-2.5 inline mr-0.5" />{s.item_count} article{s.item_count !== 1 ? 's' : ''}
+                      </span>
+                      <span className="text-[10.5px] font-mono text-[hsl(var(--text-3))]">
+                        <FileText className="w-2.5 h-2.5 inline mr-0.5" />{s.doc_count ?? 0} doc{(s.doc_count ?? 0) !== 1 ? 's' : ''}
+                      </span>
+                    </div>
                     <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[hsl(var(--text-3))] opacity-0 group-hover:opacity-100 transition-opacity" />
                   </motion.button>
                 ))}
@@ -384,144 +469,239 @@ export default function Library() {
           </motion.div>
         )}
 
-        {/* ══ Niveau 3 : Documents ══ */}
+        {/* ══ Niveau 3 : Articles + Documents ══ */}
         {level === 'docs' && (
           <motion.div key="docs" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
             className="flex-1 flex flex-col overflow-hidden">
 
-            {/* Barre de contrôle */}
-            <div className="flex-shrink-0 px-8 py-3 space-y-2 border-b border-[hsl(var(--line))]">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                  <SlidersHorizontal className="w-3.5 h-3.5 text-[hsl(var(--text-3))]" />
-                  <div className="seg">
-                    {TYPES.map(t => (
-                      <button key={t} onClick={() => setFilterType(t)} className={`seg-item ${filterType === t ? 'active' : ''}`}>
-                        {filterType === t && <motion.div layoutId="lib-seg" className="absolute inset-0 bg-[hsl(var(--bg-2))] rounded-[calc(var(--radius)-2px)] border border-[hsl(var(--line-bright))]" transition={{ type: 'spring', stiffness: 400, damping: 30 }} />}
-                        <span className="relative z-10 capitalize">{t === 'all' ? 'Tous' : DOC_TYPE_META[t]?.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                  <select value={sortBy} onChange={e => setSortBy(e.target.value as any)}
-                    className="bg-[hsl(var(--bg-2))] border border-[hsl(var(--line))] rounded px-2 py-1 text-[11.5px] font-mono text-[hsl(var(--text-2))] outline-none focus:border-[hsl(var(--accent-line))] transition-all">
-                    <option value="date_desc">Plus récent</option>
-                    <option value="date_asc">Plus ancien</option>
-                    <option value="title">Titre A→Z</option>
-                  </select>
-                </div>
-                <div className="flex items-center gap-2">
-                  {/* Filtre lecture */}
-                  <div className="flex items-center rounded border border-[hsl(var(--line))] overflow-hidden text-[10.5px] font-mono">
-                    {([['all','Tous'],['unread','Non lus'],['reading','En cours'],['done','Terminés']] as const).map(([val, label]) => (
-                      <button key={val} onClick={() => setReadFilter(val)}
-                        className={`px-2 py-1 transition-colors ${readFilter === val ? 'bg-[hsl(var(--bg-2))] text-[hsl(var(--text))]' : 'text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))]'}`}>
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                  {docs.length > 0 && (
-                    <button onClick={selectedIds.size === docs.length ? clearSelection : selectAll}
-                      className="flex items-center gap-1.5 px-2 py-1 rounded border border-[hsl(var(--line))] text-[11px] font-mono text-[hsl(var(--text-3))] hover:border-[hsl(var(--accent-line))] hover:text-[hsl(var(--accent))] transition-colors">
-                      {selectedIds.size === docs.length ? <><CheckSquare className="w-3 h-3" /> Tout désélectionner</> : <><Square className="w-3 h-3" /> Tout sélectionner</>}
-                    </button>
-                  )}
-                  <p className="text-[11px] font-mono text-[hsl(var(--text-3))]">
-                    {searchMode && query
-                      ? <span className="text-[hsl(var(--accent))]">{docs.length} résultat{docs.length !== 1 ? 's' : ''}</span>
-                      : <><span className="text-[hsl(var(--text))] font-bold">{docs.length}</span> document{docs.length !== 1 ? 's' : ''}</>
-                    }
-                  </p>
-                </div>
-              </div>
+            {/* Onglets */}
+            <div className="flex-shrink-0 px-8 pt-4 pb-0 border-b border-[hsl(var(--line))] flex items-end gap-6">
+              <button onClick={() => setTab('articles')}
+                className={`flex items-center gap-2 pb-3 border-b-2 text-[13px] font-semibold transition-all ${tab === 'articles' ? 'border-[hsl(var(--accent))] text-[hsl(var(--accent))]' : 'border-transparent text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))]'}`}>
+                <Radio className="w-3.5 h-3.5" />
+                Articles collectés
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-[hsl(var(--bg-3))] border border-[hsl(var(--line))]">
+                  {items.length}
+                </span>
+              </button>
+              <button onClick={() => setTab('documents')}
+                className={`flex items-center gap-2 pb-3 border-b-2 text-[13px] font-semibold transition-all ${tab === 'documents' ? 'border-[hsl(var(--accent))] text-[hsl(var(--accent))]' : 'border-transparent text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))]'}`}>
+                <FileText className="w-3.5 h-3.5" />
+                Documents générés
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-[hsl(var(--bg-3))] border border-[hsl(var(--line))]">
+                  {docs.length}
+                </span>
+              </button>
             </div>
 
-            {/* Batch delete bar */}
-            <AnimatePresence>
-              {selectedIds.size > 0 && (
-                <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-                  className="flex-shrink-0 mx-8 mt-3 panel-accent p-3 flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3 text-[12px] font-mono">
-                    <span className="text-[hsl(var(--accent))]">{selectedIds.size} sélectionné{selectedIds.size > 1 ? 's' : ''}</span>
-                    <button onClick={clearSelection} className="text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))] transition-colors">désélectionner</button>
+            <AnimatePresence mode="wait">
+
+              {/* ── Onglet Articles ── */}
+              {tab === 'articles' && (
+                <motion.div key="tab-articles" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  className="flex-1 flex flex-col overflow-hidden">
+                  {/* Description */}
+                  <div className="flex-shrink-0 px-8 py-3 bg-[hsl(var(--bg-2))] border-b border-[hsl(var(--line))] flex items-center gap-2">
+                    <Radio className="w-3 h-3 text-[hsl(var(--accent))]" />
+                    <p className="text-[11.5px] text-[hsl(var(--text-3))]">
+                      Pages web récupérées automatiquement depuis vos sources surveillées — matière brute de votre veille.
+                    </p>
                   </div>
-                  <motion.button onClick={batchDelete} disabled={batchDeleting} whileTap={{ scale: 0.95 }}
-                    className="flex items-center gap-2 px-4 py-1.5 rounded bg-[hsl(var(--red))] text-white text-[12.5px] font-bold disabled:opacity-40">
-                    {batchDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                    {batchDeleting ? 'Suppression…' : `Supprimer (${selectedIds.size})`}
-                  </motion.button>
+                  <div className="flex-1 overflow-auto px-8 py-4">
+                    {itemsLoading && (
+                      <div className="space-y-2">
+                        {[...Array(8)].map((_, i) => <div key={i} className="h-14 skeleton rounded-lg" />)}
+                      </div>
+                    )}
+                    {!itemsLoading && items.length === 0 && (
+                      <div className="flex flex-col items-center justify-center h-full gap-3 text-[hsl(var(--text-3))]">
+                        <Radio className="w-12 h-12 opacity-20" />
+                        <p className="text-[13px] font-mono">Aucun article collecté</p>
+                        <p className="text-[11px] font-mono text-center leading-relaxed">
+                          Retournez dans Dossiers, activez la surveillance<br />puis lancez une collecte.
+                        </p>
+                      </div>
+                    )}
+                    {!itemsLoading && items.length > 0 && (
+                      <div className="space-y-2">
+                        {items.map((item, i) => (
+                          <motion.div key={item.id}
+                            initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: i * 0.02 }}
+                            onClick={() => openItemModal(item)}
+                            className="flex items-start gap-4 p-4 panel hover:border-[hsl(var(--accent-line))] cursor-pointer transition-all group">
+                            <div className="w-8 h-8 rounded-lg bg-[hsl(var(--bg-3))] border border-[hsl(var(--line))] flex items-center justify-center flex-shrink-0 mt-0.5">
+                              <Radio className="w-3.5 h-3.5 text-[hsl(var(--accent))]" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[13px] font-semibold text-[hsl(var(--text))] leading-snug line-clamp-2 group-hover:text-[hsl(var(--accent))] transition-colors">
+                                {item.title || item.source_url || 'Sans titre'}
+                              </p>
+                              {item.summary && (
+                                <p className="text-[11.5px] text-[hsl(var(--text-3))] mt-1 line-clamp-2 leading-relaxed">{item.summary}</p>
+                              )}
+                              <div className="flex items-center gap-3 mt-2">
+                                <span className="text-[10px] font-mono text-[hsl(var(--text-3))]">{timeAgo(item.created_at)}</span>
+                                {item.source_url && (
+                                  <a href={item.source_url} target="_blank" rel="noreferrer"
+                                    onClick={e => e.stopPropagation()}
+                                    className="text-[10px] font-mono text-[hsl(var(--accent))] hover:underline flex items-center gap-1 truncate">
+                                    <ExternalLink className="w-2.5 h-2.5 flex-shrink-0" />
+                                    <span className="truncate">{item.source_url.replace(/^https?:\/\//, '').split('/')[0]}</span>
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </motion.div>
               )}
-            </AnimatePresence>
 
-            {/* Grid documents */}
-            <div className="flex-1 overflow-auto px-8 py-4">
-              {loading && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {[...Array(6)].map((_, i) => <div key={i} className="h-36 skeleton rounded-lg" />)}
-                </div>
-              )}
-              {!loading && docs.length === 0 && (
-                <div className="flex flex-col items-center justify-center h-full gap-4 text-[hsl(var(--text-3))]">
-                  <LibraryIcon className="w-12 h-12 opacity-30" />
-                  <p className="text-[13px] font-mono">Aucun document dans ce sujet</p>
-                  <p className="text-[11px] font-mono text-[hsl(var(--text-3))]">Générez-en un depuis le Briefing ou l'Assistant</p>
-                </div>
-              )}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <AnimatePresence>
-                  {visibleDocs.map((doc, i) => {
-                    const meta = DOC_TYPE_META[doc.doc_type] ?? DOC_TYPE_META.fiche
-                    const Icon = meta.icon
-                    return (
-                      <motion.div key={doc.id}
-                        initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        transition={{ delay: i * 0.04, type: 'spring', stiffness: 280, damping: 28 }}
-                        onClick={() => openDoc(doc)}
-                        className={`panel p-5 cursor-pointer transition-all group relative ${selectedIds.has(doc.id) ? 'border-[hsl(var(--accent-line))] bg-[hsl(var(--accent-dim))]' : 'hover:border-[hsl(var(--line-bright))]'}`}
-                      >
-                        <div className={`absolute top-0 left-0 right-0 h-[1px] rounded-t-lg bg-gradient-to-r from-transparent to-transparent transition-all ${selectedIds.has(doc.id) ? 'via-[hsl(var(--accent))]' : 'via-[hsl(var(--line-bright))] group-hover:via-[hsl(var(--accent))]'}`} />
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex items-center gap-2">
-                            <button onClick={e => toggleSelect(doc.id, e)}
-                              className={`w-5 h-5 flex items-center justify-center rounded border flex-shrink-0 transition-all ${selectedIds.has(doc.id) ? 'bg-[hsl(var(--accent))] border-[hsl(var(--accent))] text-white' : 'border-[hsl(var(--line))] text-transparent hover:border-[hsl(var(--accent-line))] hover:text-[hsl(var(--accent))]'}`}>
-                              <Check className="w-3 h-3" />
+              {/* ── Onglet Documents ── */}
+              {tab === 'documents' && (
+                <motion.div key="tab-docs" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  className="flex-1 flex flex-col overflow-hidden">
+                  {/* Description */}
+                  <div className="flex-shrink-0 px-8 py-3 bg-[hsl(var(--bg-2))] border-b border-[hsl(var(--line))] flex items-center gap-2">
+                    <FileText className="w-3 h-3 text-[hsl(var(--accent))]" />
+                    <p className="text-[11.5px] text-[hsl(var(--text-3))]">
+                      Fiches, synthèses et guides que vous avez générés depuis les articles — knowledge base structurée.
+                    </p>
+                  </div>
+
+                  {/* Barre de contrôle docs */}
+                  <div className="flex-shrink-0 px-8 py-3 border-b border-[hsl(var(--line))]">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <SlidersHorizontal className="w-3.5 h-3.5 text-[hsl(var(--text-3))]" />
+                        <div className="seg">
+                          {TYPES.map(t => (
+                            <button key={t} onClick={() => setFilterType(t)} className={`seg-item ${filterType === t ? 'active' : ''}`}>
+                              {filterType === t && <motion.div layoutId="lib-seg" className="absolute inset-0 bg-[hsl(var(--bg-2))] rounded-[calc(var(--radius)-2px)] border border-[hsl(var(--line-bright))]" transition={{ type: 'spring', stiffness: 400, damping: 30 }} />}
+                              <span className="relative z-10 capitalize">{t === 'all' ? 'Tous' : DOC_TYPE_META[t]?.label}</span>
                             </button>
-                            <div className={`w-8 h-8 rounded-lg bg-[hsl(var(--bg-3))] flex items-center justify-center ${meta.color}`}>
-                              <Icon className="w-3.5 h-3.5" />
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className={`pill border text-[10px] ${meta.pill}`}>{meta.label}</span>
-                            {!doc.reading_progress || doc.reading_progress === 0
-                              ? <span className="pill text-[10px] bg-[hsl(var(--bg-3))] text-[hsl(var(--text-3))] border border-[hsl(var(--line))]">Non lu</span>
-                              : doc.reading_progress === 100
-                                ? <span className="pill text-[10px] bg-green-500/10 text-[hsl(var(--green))] border border-green-500/20">✓ Terminé</span>
-                                : <span className="pill text-[10px] bg-yellow-500/10 text-[hsl(var(--amber))] border border-yellow-500/20">{doc.reading_progress}%</span>
-                            }
-                          </div>
+                          ))}
                         </div>
-                        <p className="text-[13.5px] font-semibold text-[hsl(var(--text))] leading-snug mb-2 line-clamp-2">{doc.title}</p>
-                        <p className="text-[11.5px] text-[hsl(var(--text-3))] leading-snug line-clamp-3">{doc.excerpt?.replace(/#+\s/g, '')}</p>
-                        <div className="flex items-center justify-between mt-4 pt-3 border-t border-[hsl(var(--line))]">
-                          <span className="text-[10.5px] font-mono text-[hsl(var(--text-3))]">
-                            {doc.nb_sources > 0 ? `${doc.nb_sources} source${doc.nb_sources > 1 ? 's' : ''}` : 'thème libre'}
-                          </span>
-                          <div className="flex items-center gap-1">
-                            <span className="text-[10.5px] font-mono text-[hsl(var(--text-3))]">{timeAgo(doc.created_at)}</span>
-                            <motion.button whileTap={{ scale: 0.9 }}
-                              onClick={e => { e.stopPropagation(); deleteDoc(doc.id) }} disabled={deleting === doc.id}
-                              className="ml-1 p-1 rounded text-[hsl(var(--text-3))] hover:text-[hsl(var(--red))] hover:bg-[hsl(var(--red)/.08)] transition-colors opacity-0 group-hover:opacity-100">
-                              {deleting === doc.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-                            </motion.button>
-                          </div>
+                        <select value={sortBy} onChange={e => setSortBy(e.target.value as any)}
+                          className="bg-[hsl(var(--bg-2))] border border-[hsl(var(--line))] rounded px-2 py-1 text-[11.5px] font-mono text-[hsl(var(--text-2))] outline-none focus:border-[hsl(var(--accent-line))] transition-all">
+                          <option value="date_desc">Plus récent</option>
+                          <option value="date_asc">Plus ancien</option>
+                          <option value="title">Titre A→Z</option>
+                        </select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center rounded border border-[hsl(var(--line))] overflow-hidden text-[10.5px] font-mono">
+                          {([['all','Tous'],['unread','Non lus'],['reading','En cours'],['done','Terminés']] as const).map(([val, label]) => (
+                            <button key={val} onClick={() => setReadFilter(val)}
+                              className={`px-2 py-1 transition-colors ${readFilter === val ? 'bg-[hsl(var(--bg-2))] text-[hsl(var(--text))]' : 'text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))]'}`}>
+                              {label}
+                            </button>
+                          ))}
                         </div>
+                        {docs.length > 0 && (
+                          <button onClick={selectedIds.size === docs.length ? clearSelection : selectAll}
+                            className="flex items-center gap-1.5 px-2 py-1 rounded border border-[hsl(var(--line))] text-[11px] font-mono text-[hsl(var(--text-3))] hover:border-[hsl(var(--accent-line))] hover:text-[hsl(var(--accent))] transition-colors">
+                            {selectedIds.size === docs.length ? <><CheckSquare className="w-3 h-3" /> Tout désélectionner</> : <><Square className="w-3 h-3" /> Tout sélectionner</>}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Batch delete bar */}
+                  <AnimatePresence>
+                    {selectedIds.size > 0 && (
+                      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+                        className="flex-shrink-0 mx-8 mt-3 panel-accent p-3 flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3 text-[12px] font-mono">
+                          <span className="text-[hsl(var(--accent))]">{selectedIds.size} sélectionné{selectedIds.size > 1 ? 's' : ''}</span>
+                          <button onClick={clearSelection} className="text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))] transition-colors">désélectionner</button>
+                        </div>
+                        <motion.button onClick={batchDelete} disabled={batchDeleting} whileTap={{ scale: 0.95 }}
+                          className="flex items-center gap-2 px-4 py-1.5 rounded bg-[hsl(var(--red))] text-white text-[12.5px] font-bold disabled:opacity-40">
+                          {batchDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                          {batchDeleting ? 'Suppression…' : `Supprimer (${selectedIds.size})`}
+                        </motion.button>
                       </motion.div>
-                    )
-                  })}
-                </AnimatePresence>
-              </div>
-            </div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Grid documents */}
+                  <div className="flex-1 overflow-auto px-8 py-4">
+                    {loading && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {[...Array(6)].map((_, i) => <div key={i} className="h-36 skeleton rounded-lg" />)}
+                      </div>
+                    )}
+                    {!loading && docs.length === 0 && (
+                      <div className="flex flex-col items-center justify-center h-full gap-4 text-[hsl(var(--text-3))]">
+                        <LibraryIcon className="w-12 h-12 opacity-30" />
+                        <p className="text-[13px] font-mono">Aucun document dans ce sujet</p>
+                        <p className="text-[11px] font-mono text-[hsl(var(--text-3))]">Générez-en un depuis le Briefing ou l'Assistant</p>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <AnimatePresence>
+                        {visibleDocs.map((doc, i) => {
+                          const meta = DOC_TYPE_META[doc.doc_type] ?? DOC_TYPE_META.fiche
+                          const Icon = meta.icon
+                          return (
+                            <motion.div key={doc.id}
+                              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.95 }}
+                              transition={{ delay: i * 0.04, type: 'spring', stiffness: 280, damping: 28 }}
+                              onClick={() => openDoc(doc)}
+                              className={`panel p-5 cursor-pointer transition-all group relative ${selectedIds.has(doc.id) ? 'border-[hsl(var(--accent-line))] bg-[hsl(var(--accent-dim))]' : 'hover:border-[hsl(var(--line-bright))]'}`}
+                            >
+                              <div className={`absolute top-0 left-0 right-0 h-[1px] rounded-t-lg bg-gradient-to-r from-transparent to-transparent transition-all ${selectedIds.has(doc.id) ? 'via-[hsl(var(--accent))]' : 'via-[hsl(var(--line-bright))] group-hover:via-[hsl(var(--accent))]'}`} />
+                              <div className="flex items-start justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                  <button onClick={e => toggleSelect(doc.id, e)}
+                                    className={`w-5 h-5 flex items-center justify-center rounded border flex-shrink-0 transition-all ${selectedIds.has(doc.id) ? 'bg-[hsl(var(--accent))] border-[hsl(var(--accent))] text-white' : 'border-[hsl(var(--line))] text-transparent hover:border-[hsl(var(--accent-line))] hover:text-[hsl(var(--accent))]'}`}>
+                                    <Check className="w-3 h-3" />
+                                  </button>
+                                  <div className={`w-8 h-8 rounded-lg bg-[hsl(var(--bg-3))] flex items-center justify-center ${meta.color}`}>
+                                    <Icon className="w-3.5 h-3.5" />
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className={`pill border text-[10px] ${meta.pill}`}>{meta.label}</span>
+                                  {!doc.reading_progress || doc.reading_progress === 0
+                                    ? <span className="pill text-[10px] bg-[hsl(var(--bg-3))] text-[hsl(var(--text-3))] border border-[hsl(var(--line))]">Non lu</span>
+                                    : doc.reading_progress === 100
+                                      ? <span className="pill text-[10px] bg-green-500/10 text-[hsl(var(--green))] border border-green-500/20">✓ Terminé</span>
+                                      : <span className="pill text-[10px] bg-yellow-500/10 text-[hsl(var(--amber))] border border-yellow-500/20">{doc.reading_progress}%</span>
+                                  }
+                                </div>
+                              </div>
+                              <p className="text-[13.5px] font-semibold text-[hsl(var(--text))] leading-snug mb-2 line-clamp-2">{doc.title}</p>
+                              <p className="text-[11.5px] text-[hsl(var(--text-3))] leading-snug line-clamp-3">{doc.excerpt?.replace(/#+\s/g, '')}</p>
+                              <div className="flex items-center justify-between mt-4 pt-3 border-t border-[hsl(var(--line))]">
+                                <span className="text-[10.5px] font-mono text-[hsl(var(--text-3))]">
+                                  {doc.nb_sources > 0 ? `${doc.nb_sources} source${doc.nb_sources > 1 ? 's' : ''}` : 'thème libre'}
+                                </span>
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[10.5px] font-mono text-[hsl(var(--text-3))]">{timeAgo(doc.created_at)}</span>
+                                  <motion.button whileTap={{ scale: 0.9 }}
+                                    onClick={e => { e.stopPropagation(); deleteDoc(doc.id) }} disabled={deleting === doc.id}
+                                    className="ml-1 p-1 rounded text-[hsl(var(--text-3))] hover:text-[hsl(var(--red))] hover:bg-[hsl(var(--red)/.08)] transition-colors opacity-0 group-hover:opacity-100">
+                                    {deleting === doc.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                                  </motion.button>
+                                </div>
+                              </div>
+                            </motion.div>
+                          )
+                        })}
+                      </AnimatePresence>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+            </AnimatePresence>
           </motion.div>
         )}
 
@@ -630,9 +810,105 @@ export default function Library() {
 
       {/* Modal génération */}
       {genModal && (
-        <DocumentGeneratorModal itemIds={[]} initialPrompt={genModal.prefill}
-          onClose={() => setGenModal(null)} onSaved={() => { setGenModal(null); if (activeSujet) loadDocs(activeSujet.id) }} />
+        <DocumentGeneratorModal itemIds={genModal.itemIds || []} initialPrompt={genModal.prefill}
+          itemTitle={genModal.itemTitle}
+          sujetId={activeSujet?.id ?? null}
+          onClose={() => setGenModal(null)} onSaved={() => { setGenModal(null); loadDocs(activeSujet?.id ?? undefined) }} />
       )}
+
+      {/* ── Modale article collecté ── */}
+      <AnimatePresence>
+        {itemModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm"
+            onClick={e => { if (e.target === e.currentTarget) { setItemModal(null); setItemPreview(null) } }}>
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+              className="w-full max-w-3xl max-h-[90vh] flex flex-col panel overflow-hidden">
+
+              {/* Header */}
+              <div className="flex items-start justify-between px-6 py-4 border-b border-[hsl(var(--line))] bg-[hsl(var(--bg-2))] flex-shrink-0">
+                <div className="flex-1 min-w-0 pr-4">
+                  <p className="text-[14px] font-bold text-[hsl(var(--text))] leading-snug">
+                    {itemPreview?.title || itemModal.title || 'Article collecté'}
+                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="pill text-[10px] bg-[hsl(var(--accent-dim))] text-[hsl(var(--accent))] border border-[hsl(var(--accent-line))]">
+                      <Radio className="w-2.5 h-2.5 inline mr-1" />collecté automatiquement
+                    </span>
+                    <span className="text-[10.5px] font-mono text-[hsl(var(--text-3))]">{timeAgo(itemModal.created_at)}</span>
+                  </div>
+                </div>
+                <button onClick={() => { setItemModal(null); setItemPreview(null) }}
+                  className="text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))] transition-colors flex-shrink-0">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Contenu */}
+              <div ref={itemScrollRef} className="flex-1 overflow-auto p-6">
+                {itemPreviewLoading && (
+                  <div className="flex flex-col items-center justify-center h-40 gap-3 text-[hsl(var(--text-3))]">
+                    <Loader2 className="w-6 h-6 animate-spin text-[hsl(var(--accent))]" />
+                    <p className="text-[12px] font-mono">Chargement du contenu…</p>
+                  </div>
+                )}
+                {!itemPreviewLoading && itemPreview && (
+                  <div className="prose-app max-w-none">
+                    {itemPreview.markdown
+                      ? <ReactMarkdown>{itemPreview.markdown}</ReactMarkdown>
+                      : <p className="text-[12px] text-[hsl(var(--text-3))] italic">Contenu non disponible pour cet article.</p>
+                    }
+                  </div>
+                )}
+              </div>
+
+              {/* Footer : lien source + actions */}
+              <div className="flex-shrink-0 px-6 py-4 border-t border-[hsl(var(--line))] bg-[hsl(var(--bg-2))]">
+                {/* Lien source */}
+                {(itemModal.source_url || itemModal.url) && (
+                  <div className="mb-3 pb-3 border-b border-[hsl(var(--line))]">
+                    <a href={itemModal.source_url || itemModal.url} target="_blank" rel="noreferrer"
+                      className="flex items-center gap-2 text-[11px] font-mono text-[hsl(var(--accent))] hover:underline">
+                      <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                      <span className="truncate">{itemModal.source_url || itemModal.url}</span>
+                    </a>
+                  </div>
+                )}
+                {/* Actions */}
+                <div className="flex items-center gap-3">
+                  <motion.button
+                    onClick={saveItemAsDoc}
+                    disabled={itemSaving || itemPreviewLoading || !itemPreview?.markdown}
+                    whileTap={{ scale: 0.97 }}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[hsl(var(--accent))] text-white text-[12.5px] font-bold disabled:opacity-40 transition-all"
+                  >
+                    {itemSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                    {itemSaving ? 'Enregistrement…' : 'Conserver dans Documents générés'}
+                  </motion.button>
+                  <motion.button
+                    onClick={() => {
+                      const item = itemModal
+                      setItemModal(null); setItemPreview(null)
+                      setGenModal({ itemIds: [item.id], itemTitle: item.title })
+                    }}
+                    disabled={itemPreviewLoading}
+                    whileTap={{ scale: 0.97 }}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[hsl(var(--accent-line))] text-[hsl(var(--accent))] text-[12.5px] font-bold hover:bg-[hsl(var(--accent-dim))] disabled:opacity-40 transition-all"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Générer un document IA
+                  </motion.button>
+                  <button onClick={() => { setItemModal(null); setItemPreview(null) }}
+                    className="ml-auto text-[11.5px] font-mono text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))] transition-colors">
+                    Fermer
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

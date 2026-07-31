@@ -414,12 +414,13 @@ class CollectorService:
                         with self.db.get_connection() as conn:
                             with conn.cursor() as cur:
                                 cur.execute(
-                                    "SELECT workspace_id FROM sources WHERE url = %s LIMIT 1",
+                                    "SELECT workspace_id, sujet_id FROM sources WHERE url = %s LIMIT 1",
                                     (item["source_url"],)
                                 )
                                 src_row = cur.fetchone()
                                 if src_row:
                                     workspace_id = src_row[0]
+                                    item["sujet_id"] = src_row[1]
                     except Exception:
                         pass
 
@@ -427,9 +428,9 @@ class CollectorService:
                 query = """
                     INSERT INTO items (
                         source_type, source_url, url, title, summary,
-                        author, published_at, workspace_id
+                        author, published_at, workspace_id, sujet_id
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (url) DO NOTHING
                     RETURNING id
                 """
@@ -447,6 +448,7 @@ class CollectorService:
                                 item.get("author"),
                                 item.get("published_at"),
                                 workspace_id,
+                                item.get("sujet_id"),
                             )
                         )
                         row = cur.fetchone()

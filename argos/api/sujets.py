@@ -40,6 +40,7 @@ def _row_to_sujet(row) -> dict:
         "created_at": row[9].isoformat() if row[9] else None,
         "source_count": row[10] if len(row) > 10 else 0,
         "item_count": row[11] if len(row) > 11 else 0,
+        "doc_count": row[12] if len(row) > 12 else 0,
     }
 
 
@@ -150,10 +151,12 @@ async def list_sujets(workspace_id: Optional[int] = None):
                     SELECT s.id, s.workspace_id, s.name, s.slug, s.description,
                            s.icon, s.color, s.knowledge_profile, s.is_active, s.created_at,
                            COUNT(DISTINCT sr.id) AS source_count,
-                           COUNT(DISTINCT i.id)  AS item_count
+                           COUNT(DISTINCT i.id)  AS item_count,
+                           COUNT(DISTINCT d.id)  AS doc_count
                     FROM sujets s
                     LEFT JOIN sources sr ON sr.sujet_id = s.id AND sr.active = true
                     LEFT JOIN items i ON i.sujet_id = s.id
+                    LEFT JOIN documents d ON d.sujet_id = s.id
                     {where}
                     GROUP BY s.id
                     ORDER BY s.name
@@ -461,7 +464,7 @@ Génère un JSON avec exactement ces 4 clés :
 Réponds UNIQUEMENT avec le JSON, sans texte autour."""
 
         message = client.messages.create(
-            model="claude-opus-5",
+            model="claude-opus-4-5",
             max_tokens=2048,
             messages=[{"role": "user", "content": prompt}],
         )

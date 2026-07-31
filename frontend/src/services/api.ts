@@ -55,6 +55,7 @@ export const api = {
   // Sources
   getSources: () => request<any>('/api/v1/sources'),
   addSource: (body: any) => request<any>('/api/v1/sources', { method: 'POST', body: JSON.stringify(body) }),
+  runPipelineSource: (id: number) => request<any>(`/api/v1/sources/${id}/pipeline`, { method: 'POST' }),
   toggleSource: (id: number, active: boolean) => request<any>(`/api/v1/sources/${id}/toggle`, { method: 'PATCH', body: JSON.stringify({ active }) }),
   deleteSource: (id: number) => request<any>(`/api/v1/sources/${id}`, { method: 'DELETE' }),
 
