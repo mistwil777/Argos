@@ -128,7 +128,8 @@ function CadrageVeille({ onDone }: { onDone: () => void }) {
             onClick={handleSearch}
             whileTap={{ scale: 0.96 }}
             disabled={loading || !query.trim()}
-            className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg bg-[hsl(var(--accent))] text-white text-[12.5px] font-bold disabled:opacity-50 transition-opacity"
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-white text-[12.5px] font-bold disabled:opacity-60 transition-opacity"
+          style={{ background: 'linear-gradient(90deg, #0070AD 0%, #00B4E1 100%)' }}
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
             Analyser

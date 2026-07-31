@@ -9,8 +9,8 @@ export default function Login() {
   const { login } = useAuth()
   const navigate   = useNavigate()
 
-  const [email,    setEmail]    = useState('')
-  const [password, setPassword] = useState('')
+  const [email,    setEmail]    = useState(import.meta.env.VITE_DEV_EMAIL    ?? '')
+  const [password, setPassword] = useState(import.meta.env.VITE_DEV_PASSWORD ?? '')
   const [showPwd,  setShowPwd]  = useState(false)
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState<string | null>(null)
