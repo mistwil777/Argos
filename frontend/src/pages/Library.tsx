@@ -361,7 +361,7 @@ export default function Library() {
                     <Tag className={`w-7 h-7 mb-3 ${FOLDER_TEXT[(i + 1) % FOLDER_TEXT.length]}`} />
                     <p className={`text-[15px] font-bold ${FOLDER_TEXT[(i + 1) % FOLDER_TEXT.length]}`}>{s.name}</p>
                     <p className="text-[11px] font-mono text-[hsl(var(--text-3))] mt-1">
-                      {s.source_count} source{s.source_count !== 1 ? 's' : ''}
+                      {s.item_count} doc{s.item_count !== 1 ? 's' : ''}
                     </p>
                     <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[hsl(var(--text-3))] opacity-0 group-hover:opacity-100 transition-opacity" />
                   </motion.button>
