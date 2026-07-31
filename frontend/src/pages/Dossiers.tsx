@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Folder, Tag, Plus, ChevronRight, ExternalLink,
+  Folder, Tag, Plus, ChevronRight, ChevronDown, ExternalLink,
   Loader2, Trash2, Check, X, Radio, Shield,
   BookOpen, Settings2, ToggleLeft, ToggleRight, Sparkles, Pencil, AlertTriangle, Info,
 } from 'lucide-react'
@@ -44,6 +44,7 @@ export default function Dossiers() {
   const [newWsOpen, setNewWsOpen]     = useState(false)
   const [newSujetName, setNewSujetName] = useState('')
   const [newSujetOpen, setNewSujetOpen] = useState(false)
+  const [sujetsOpen, setSujetsOpen]     = useState(true)
   const [saving, setSaving]           = useState(false)
 
   // Édition profil de connaissance
@@ -287,7 +288,13 @@ export default function Dossiers() {
         {/* Sujets du dossier actif */}
         <div className="flex-1 overflow-y-auto px-3 py-3">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[10.5px] font-mono text-[hsl(var(--text-3))] uppercase tracking-wider">Sujets</span>
+            <button onClick={() => setSujetsOpen(v => !v)}
+              className="flex items-center gap-1.5 text-[10.5px] font-mono text-[hsl(var(--text-3))] uppercase tracking-wider hover:text-[hsl(var(--text-2))] transition-colors">
+              <motion.div animate={{ rotate: sujetsOpen ? 0 : -90 }} transition={{ duration: 0.15 }}>
+                <ChevronDown className="w-3 h-3" />
+              </motion.div>
+              Sujets {visibleSujets.length > 0 && <span className="normal-case tracking-normal">({visibleSujets.length})</span>}
+            </button>
             {activeWs && (
               <button onClick={() => setNewSujetOpen(v => !v)}
                 className="text-[hsl(var(--text-3))] hover:text-[hsl(var(--accent))] transition-colors">
@@ -316,6 +323,11 @@ export default function Dossiers() {
             )}
           </AnimatePresence>
 
+          <AnimatePresence initial={false}>
+          {sujetsOpen && <motion.div
+            initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.18 }}
+            className="overflow-hidden">
           <div className="space-y-0.5">
             <AnimatePresence>
               {visibleSujets.map(s => (
@@ -379,6 +391,8 @@ export default function Dossiers() {
               </p>
             )}
           </div>
+          </motion.div>}
+          </AnimatePresence>
         </div>
       </div>
 
