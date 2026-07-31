@@ -36,23 +36,23 @@ const DOMAIN_THEMES: Record<string, { label: string; desc: string; icon: string;
 // ─── Composant de cadrage ─────────────────────────────────────────────────────
 
 function CadrageVeille({ onDone }: { onDone: () => void }) {
-  const [query, setQuery]         = useState('')
-  const [loading, setLoading]     = useState(false)
-  const [themes, setThemes]       = useState<typeof DOMAIN_THEMES[string] | null>(null)
-  const [selected, setSelected]   = useState<Set<string>>(new Set())
-  const [creating, setCreating]   = useState(false)
-  const [done, setDone]           = useState(false)
+  const [query, setQuery]               = useState('')
+  const [loading, setLoading]           = useState(false)
+  const [themes, setThemes]             = useState<typeof DOMAIN_THEMES[string] | null>(null)
+  const [selected, setSelected]         = useState<Set<string>>(new Set())
+  const [creating, setCreating]         = useState(false)
+  const [done, setDone]                 = useState(false)
+  const [targetWorkspace, setTargetWorkspace] = useState<{ id: number; name: string } | null>(null)
 
   function detectDomain(q: string) {
     const lower = q.toLowerCase()
     for (const [domain, items] of Object.entries(DOMAIN_THEMES)) {
       const keywords = domain.toLowerCase().split(/[\s&]+/)
-      if (keywords.some(k => lower.includes(k))) return items
+      if (keywords.some(k => lower.includes(k))) return { domain, items }
     }
-    // Recherche par thème
-    for (const items of Object.values(DOMAIN_THEMES)) {
+    for (const [domain, items] of Object.entries(DOMAIN_THEMES)) {
       if (items.some(t => t.label.toLowerCase().split(/\s+/).some(w => w.length > 3 && lower.includes(w)))) {
-        return items
+        return { domain, items }
       }
     }
     return null
@@ -63,9 +63,24 @@ function CadrageVeille({ onDone }: { onDone: () => void }) {
     setLoading(true)
     setThemes(null)
     setSelected(new Set())
-    await new Promise(r => setTimeout(r, 600)) // simulation analyse
-    const found = detectDomain(query)
-    setThemes(found || DOMAIN_THEMES['Intelligence Artificielle'])
+    setTargetWorkspace(null)
+    await new Promise(r => setTimeout(r, 600))
+    const detected = detectDomain(query)
+    const { items } = detected || { domain: '', items: DOMAIN_THEMES['Intelligence Artificielle'] }
+    setThemes(items)
+
+    // Cherche si un workspace existant correspond au domaine détecté
+    try {
+      const data = await api.getWorkspaces()
+      const workspaces: { id: number; name: string }[] = data.workspaces || data
+      const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2)
+      const match = workspaces.find(ws =>
+        queryWords.some(w => ws.name.toLowerCase().includes(w)) ||
+        ws.name.toLowerCase().split(/\s+/).some(w => w.length > 2 && query.toLowerCase().includes(w))
+      )
+      if (match) setTargetWorkspace(match)
+    } catch { /* silencieux */ }
+
     setLoading(false)
   }
 
@@ -81,13 +96,25 @@ function CadrageVeille({ onDone }: { onDone: () => void }) {
     if (!selected.size) return
     setCreating(true)
     try {
-      for (const label of selected) {
-        await api.createWorkspace({
-          name: label,
-          description: themes?.find(t => t.label === label)?.desc || '',
-          icon: 'folder',
-          color: '#6366f1',
-        })
+      if (targetWorkspace) {
+        // Ajoute comme sujets dans le workspace existant
+        for (const label of selected) {
+          await api.createSujet({
+            name: label,
+            description: themes?.find(t => t.label === label)?.desc || '',
+            workspace_id: targetWorkspace.id,
+          })
+        }
+      } else {
+        // Crée un nouveau workspace par sélection
+        for (const label of selected) {
+          await api.createWorkspace({
+            name: label,
+            description: themes?.find(t => t.label === label)?.desc || '',
+            icon: 'folder',
+            color: '#6366f1',
+          })
+        }
       }
       setDone(true)
       setTimeout(() => { setDone(false); setThemes(null); setQuery(''); onDone() }, 1200)
@@ -140,9 +167,17 @@ function CadrageVeille({ onDone }: { onDone: () => void }) {
         <AnimatePresence>
           {themes && (
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-3">
-              <p className="text-[11px] font-mono text-[hsl(var(--text-3))] uppercase tracking-wider">
-                Sous-thèmes détectés — cochez ce qui vous intéresse
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-mono text-[hsl(var(--text-3))] uppercase tracking-wider">
+                  Sous-thèmes détectés — cochez ce qui vous intéresse
+                </p>
+                {targetWorkspace && (
+                  <span className="text-[10.5px] font-medium px-2 py-0.5 rounded-full border"
+                    style={{ color: '#0070AD', borderColor: '#0070AD40', background: '#0070AD08' }}>
+                    → sujets dans "{targetWorkspace.name}"
+                  </span>
+                )}
+              </div>
               <div className="grid grid-cols-1 gap-2">
                 {themes.map(t => {
                   const isOn = selected.has(t.label)
