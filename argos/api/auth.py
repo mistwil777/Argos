@@ -35,7 +35,7 @@ def get_current_user(
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT id, email, full_name, role, onboarding_done FROM users WHERE id = %s",
-                (payload["sub"],),
+                (int(payload["sub"]),),
             )
             row = cur.fetchone()
     if not row:
@@ -67,7 +67,7 @@ async def register(body: dict, db: DatabaseManager = Depends(_get_db)):
             user_id = cur.fetchone()[0]
             conn.commit()
 
-    token = create_jwt({"sub": user_id, "email": email}, settings.jwt_secret, settings.jwt_expire_minutes)
+    token = create_jwt({"sub": str(user_id), "email": email}, settings.jwt_secret, settings.jwt_expire_minutes)
     return {"access_token": token, "token_type": "bearer", "email": email, "user_id": user_id}
 
 
@@ -88,7 +88,7 @@ async def login(body: dict, db: DatabaseManager = Depends(_get_db)):
         raise HTTPException(status_code=401, detail="Email ou mot de passe incorrect")
 
     user_id, _, full_name, role, onboarding_done = row
-    token = create_jwt({"sub": user_id, "email": email}, settings.jwt_secret, settings.jwt_expire_minutes)
+    token = create_jwt({"sub": str(user_id), "email": email}, settings.jwt_secret, settings.jwt_expire_minutes)
     return {
         "access_token": token,
         "token_type": "bearer",
