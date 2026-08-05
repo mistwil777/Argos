@@ -8,6 +8,7 @@ import {
   ArrowRight,
 } from 'lucide-react'
 import { api } from '@/services/api'
+import QuestionnaireModal from '@/components/ui/QuestionnaireModal'
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -64,6 +65,12 @@ export default function Dossiers() {
   const [hasCollected, setHasCollected] = useState(false)
   const [sourcesOpen, setSourcesOpen] = useState(false)
 
+  // Questionnaire de configuration
+  const [questionnaireOpen, setQuestionnaireOpen] = useState(false)
+  const [questionnaireSujetId, setQuestionnaireSujetId] = useState<number | null>(null)
+  const [questionnaireSujetName, setQuestionnaireSujetName] = useState('')
+  const [questionnaireIntention, setQuestionnaireIntention] = useState('surveiller')
+
   // Renommage inline
   const [renameWsId, setRenameWsId]     = useState<number | null>(null)
   const [renameWsVal, setRenameWsVal]   = useState('')
@@ -113,10 +120,18 @@ export default function Dossiers() {
     if (!newSujetName.trim() || !activeWs) return
     setSaving(true)
     try {
-      await api.createSujet({ workspace_id: activeWs, name: newSujetName.trim() })
+      const name = newSujetName.trim()
+      const created = await api.createSujet({ workspace_id: activeWs, name })
       setNewSujetName(''); setNewSujetOpen(false)
       const data = await api.getSujets(activeWs)
       setSujets(data.sujets || [])
+      // Ouvrir le questionnaire de configuration après création
+      if (created?.id) {
+        setQuestionnaireSujetId(created.id)
+        setQuestionnaireSujetName(name)
+        setQuestionnaireIntention('surveiller')
+        setQuestionnaireOpen(true)
+      }
     } finally { setSaving(false) }
   }
 
@@ -228,6 +243,7 @@ export default function Dossiers() {
       }
       const updated = await api.getSujet(activeSujet.id)
       setActiveSujet(updated)
+      setHasCollected(false)
       await load()
     } catch (e) { console.error(e) }
     finally { setActivating(false) }
@@ -495,6 +511,17 @@ export default function Dossiers() {
                   <Tag className="w-4 h-4 text-[hsl(var(--accent))]" />
                   <h2 className="text-[15px] font-bold text-[hsl(var(--text))]">{activeSujet.name}</h2>
                   {sujetLoading && <Loader2 className="w-3.5 h-3.5 text-[hsl(var(--text-3))] animate-spin" />}
+                  <div className="flex-1" />
+                  <button
+                    onClick={() => {
+                      setQuestionnaireSujetId(activeSujet.id)
+                      setQuestionnaireSujetName(activeSujet.name)
+                      setQuestionnaireIntention((activeSujet as any).intention_type || 'surveiller')
+                      setQuestionnaireOpen(true)
+                    }}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-[hsl(var(--line))] text-[10.5px] font-mono text-[hsl(var(--text-3))] hover:border-[hsl(var(--accent-line))] hover:text-[hsl(var(--accent))] transition-colors">
+                    <Settings2 className="w-3 h-3" /> Configurer
+                  </button>
                 </div>
               </div>
 
@@ -718,15 +745,18 @@ export default function Dossiers() {
                           <div className="flex gap-2">
                             <motion.button
                               onClick={collectNow}
-                              disabled={collecting || !step2Done}
-                              whileTap={{ scale: 0.98 }}
-                              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-white text-[12.5px] font-bold disabled:opacity-50 transition-all"
-                              style={{ background: collectDone ? 'linear-gradient(90deg, #0d8f5e 0%, #1baf7a 100%)' : 'linear-gradient(90deg, #0070AD 0%, #00B4E1 100%)' }}
+                              disabled={collecting || !step2Done || hasCollected}
+                              whileTap={{ scale: hasCollected ? 1 : 0.98 }}
+                              title={hasCollected ? 'Collecte déjà effectuée — ajoutez une nouvelle source pour relancer' : undefined}
+                              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-white text-[12.5px] font-bold disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                              style={{ background: hasCollected ? 'hsl(var(--bg-3))' : collectDone ? 'linear-gradient(90deg, #0d8f5e 0%, #1baf7a 100%)' : 'linear-gradient(90deg, #0070AD 0%, #00B4E1 100%)' }}
                             >
                               {collecting
                                 ? <><Loader2 className="w-4 h-4 animate-spin" /> Collecte en cours…</>
                                 : collectDone
                                 ? <><Check className="w-4 h-4" /> Collecte terminée</>
+                                : hasCollected
+                                ? <><Check className="w-4 h-4" /> Collecte effectuée</>
                                 : <><Sparkles className="w-4 h-4" /> Collecter maintenant</>}
                             </motion.button>
                             {(activeSujet.item_count > 0 || hasCollected) && (
@@ -751,6 +781,27 @@ export default function Dossiers() {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Questionnaire modal */}
+      <AnimatePresence>
+        {questionnaireOpen && questionnaireSujetId && (
+          <QuestionnaireModal
+            sujetId={questionnaireSujetId}
+            sujetName={questionnaireSujetName}
+            intentionType={questionnaireIntention}
+            onClose={() => setQuestionnaireOpen(false)}
+            onDone={async (_filterConfig, _intentionType) => {
+              setQuestionnaireOpen(false)
+              // Rafraîchir le sujet pour refléter intention_type + filter_config
+              const data = await api.getSujets(activeWs ?? undefined)
+              setSujets(data.sujets || [])
+              // Ouvrir automatiquement le sujet configuré
+              const updated = data.sujets?.find((s: any) => s.id === questionnaireSujetId)
+              if (updated) openSujet(updated)
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

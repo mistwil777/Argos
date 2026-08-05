@@ -1117,11 +1117,25 @@ async def ingest_preview(item_id: int):
     try:
         with db.get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT url, title, summary FROM items WHERE id = %s", (item_id,))
+                cur.execute("SELECT url, title, summary, digest_markdown FROM items WHERE id = %s", (item_id,))
                 row = cur.fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Item not found")
-        url, title, current_summary = row
+        url, title, current_summary, existing_digest = row
+
+        # Digest déjà généré — retour immédiat sans appel LLM
+        if existing_digest:
+            return {
+                "item_id": item_id,
+                "url": url,
+                "title": title,
+                "current_summary": current_summary,
+                "markdown": existing_digest,
+                "json": {},
+                "content_length": 0,
+                "pages_crawled": 0,
+                "cached": True,
+            }
 
         from argos.services.web_browser import browse
         from argos.services.digest_generator import generate_digest
@@ -1181,13 +1195,28 @@ async def ingest_preview(item_id: int):
             pages_crawled = 1
 
         digest = await generate_digest(url, fetched_title, content[:50000], None, llm)
+        digest_md = digest.get("markdown", "")
+
+        # Stocker le digest pour éviter de le régénérer aux prochains accès
+        if digest_md:
+            import json as _json
+            try:
+                with db.get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "UPDATE items SET digest_markdown=%s, digest_json=%s::jsonb, digest_generated_at=NOW() WHERE id=%s",
+                            (digest_md, _json.dumps(digest.get("json", {})), item_id)
+                        )
+                        conn.commit()
+            except Exception as save_err:
+                logger.warning(f"Could not save digest for item {item_id}: {save_err}")
 
         return {
             "item_id": item_id,
             "url": url,
             "title": fetched_title,
             "current_summary": current_summary,
-            "markdown": digest.get("markdown", ""),
+            "markdown": digest_md,
             "json": digest.get("json", {}),
             "content_length": len(content),
             "pages_crawled": pages_crawled,
@@ -1298,6 +1327,365 @@ async def ingest_item(item_id: int):
     except Exception as e:
         logger.error(f"Error ingesting item {item_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+async def _get_full_content(url: str, title: str, workspace_id: Optional[int] = None) -> str:
+    """
+    Retourne le contenu complet scrapé d'une URL.
+    1. Cherche dans documents (contenu déjà stocké)
+    2. Scrape la page si absent, stocke dans documents
+    3. Lève HTTPException(422) si scraping impossible — jamais de fallback sur le résumé
+    """
+    import json as _json
+    import hashlib as _hashlib
+    import asyncio as _asyncio
+
+    # 1. Documents déjà stockés
+    with db.get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT content_markdown FROM documents WHERE content_json->>'source_url' = %s ORDER BY created_at DESC LIMIT 1",
+                (url,)
+            )
+            row = cur.fetchone()
+    if row and row[0]:
+        return row[0]
+
+    # 2. Scraping
+    def _scrape() -> str:
+        import requests as _req
+        from html.parser import HTMLParser
+
+        class _Extractor(HTMLParser):
+            SKIP = {'script', 'style', 'noscript', 'head', 'nav', 'footer', 'aside'}
+            def __init__(self):
+                super().__init__()
+                self._skip = 0
+                self.chunks: list = []
+            def handle_starttag(self, tag, attrs):
+                if tag in self.SKIP:
+                    self._skip += 1
+            def handle_endtag(self, tag):
+                if tag in self.SKIP and self._skip:
+                    self._skip -= 1
+            def handle_data(self, data):
+                if not self._skip:
+                    t = data.strip()
+                    if t:
+                        self.chunks.append(t)
+
+        resp = _req.get(url, headers={'User-Agent': 'Mozilla/5.0 (compatible; ArgosBot/1.0)'}, timeout=20, verify=False)
+        resp.raise_for_status()
+        resp.encoding = resp.apparent_encoding or 'utf-8'
+        html = resp.text
+
+        # Playwright fallback si SPA shell
+        ext = _Extractor()
+        ext.feed(html)
+        text = ' '.join(ext.chunks)
+        if len(text) < 200:
+            try:
+                from playwright.sync_api import sync_playwright
+                with sync_playwright() as pw:
+                    browser = pw.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
+                    page = browser.new_page()
+                    page.goto(url, wait_until='domcontentloaded', timeout=45000)
+                    html = page.content()
+                    page.close()
+                    browser.close()
+                ext2 = _Extractor()
+                ext2.feed(html)
+                text = ' '.join(ext2.chunks)
+            except Exception as pw_err:
+                logger.warning(f"Playwright fallback failed for {url}: {pw_err}")
+
+        if len(text) < 50:
+            raise ValueError(f"Contenu insuffisant récupéré ({len(text)} chars)")
+        return text
+
+    try:
+        full_content = await _asyncio.to_thread(_scrape)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Impossible de récupérer le contenu de la page : {e}")
+
+    # 3. Stocker dans documents pour les prochains accès
+    content_hash = _hashlib.sha256(full_content.encode('utf-8')).hexdigest()
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO documents (title, doc_type, content_markdown, content_json, workspace_id) VALUES (%s, 'page', %s, %s::jsonb, %s)",
+                    (title[:500], full_content, _json.dumps({"source_url": url, "content_hash": content_hash}), workspace_id)
+                )
+                conn.commit()
+    except Exception as store_err:
+        logger.warning(f"Could not store scraped document for {url}: {store_err}")
+
+    return full_content
+
+
+@api_router.post("/items/{item_id}/save")
+async def save_item(item_id: int):
+    """
+    Sauvegarde un item en bibliothèque.
+    Scrape le contenu complet si pas encore en base (jamais de fallback sur le résumé).
+    """
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT url, title FROM items WHERE id=%s", (item_id,))
+                row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Item not found")
+        url, title = row
+
+        # Garantit que le contenu complet est en base (scrape si absent)
+        await _get_full_content(url, title)
+
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE items SET user_action='saved', updated_at=NOW() WHERE id=%s",
+                    (item_id,)
+                )
+                conn.commit()
+        return {"success": True, "item_id": item_id, "user_action": "saved"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error saving item {item_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/items/{item_id}/ignore")
+async def ignore_item(item_id: int):
+    """Mark an item as ignored (user_action='ignored'). Hides it from main feed."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE items SET user_action='ignored', updated_at=NOW() WHERE id=%s RETURNING id",
+                    (item_id,)
+                )
+                if not cur.fetchone():
+                    raise HTTPException(status_code=404, detail="Item not found")
+                conn.commit()
+        return {"success": True, "item_id": item_id, "user_action": "ignored"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error ignoring item {item_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/items/{item_id}/ingest-rag")
+async def ingest_item_rag(item_id: int, background_tasks: BackgroundTasks):
+    """
+    HITL: Ingestion RAG complète — contenu scrapé obligatoire (jamais le résumé).
+    Bloque avec 422 si le contenu de la page est inaccessible.
+    """
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT url, title, digest_markdown FROM items WHERE id=%s", (item_id,))
+                row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Item not found")
+        url, title, existing_digest = row
+
+        # Contenu complet obligatoire — lève 422 si inaccessible
+        full_content = await _get_full_content(url, title)
+
+        from argos.services.digest_generator import generate_digest
+        from argos.services.vector_store_singleton import get_vector_store
+        from argos.services.knowledge_graph import extract_and_index as kg_extract
+        import asyncio as _asyncio
+        import json as _json
+
+        llm = create_llm_provider(
+            provider_type=settings.llm_provider,
+            openai_api_key=settings.openai_api_key,
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            aws_region=settings.aws_region,
+            model=settings.aws_bedrock_model,
+        )
+
+        digest_md = existing_digest
+        if not digest_md:
+            digest = await generate_digest(url or "", title or "", full_content[:3000], None, llm)
+            digest_md = digest.get("markdown", "") or full_content[:2000]
+            with db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE items SET digest_markdown=%s, digest_json=%s::jsonb, digest_generated_at=NOW() WHERE id=%s",
+                        (digest_md, _json.dumps(digest.get("json", {})), item_id)
+                    )
+                    conn.commit()
+
+        vs = get_vector_store()
+        item_data = {"id": item_id, "title": title, "summary": digest_md[:2000], "content": full_content, "workspace_id": None}
+        await _asyncio.to_thread(vs.index_item, item_data)
+
+        try:
+            await kg_extract(item_id, title, full_content, db=db)
+        except Exception as kg_err:
+            logger.warning(f"KG extraction failed for item {item_id}: {kg_err}")
+
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE items SET user_action='ingested', rag_indexed=TRUE, rag_indexed_at=NOW(), updated_at=NOW() WHERE id=%s",
+                    (item_id,)
+                )
+                conn.commit()
+
+        return {"success": True, "item_id": item_id, "user_action": "ingested", "rag_indexed": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error ingesting item {item_id} into RAG: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/items/batch/save")
+async def batch_save_items(data: Dict[str, Any]):
+    """
+    Sauvegarde plusieurs items en bibliothèque.
+    Scrape le contenu complet de chaque page si absent en base.
+    """
+    item_ids = data.get("item_ids", [])
+    if not item_ids:
+        raise HTTPException(status_code=400, detail="item_ids required")
+
+    results = []
+    for item_id in item_ids:
+        try:
+            with db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT url, title FROM items WHERE id=%s", (item_id,))
+                    row = cur.fetchone()
+            if not row:
+                results.append({"item_id": item_id, "success": False, "error": "not found"})
+                continue
+            url, title = row
+            await _get_full_content(url, title)
+            with db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("UPDATE items SET user_action='saved', updated_at=NOW() WHERE id=%s", (item_id,))
+                    conn.commit()
+            results.append({"item_id": item_id, "success": True})
+        except HTTPException as he:
+            results.append({"item_id": item_id, "success": False, "error": he.detail})
+        except Exception as e:
+            results.append({"item_id": item_id, "success": False, "error": str(e)})
+
+    success_count = sum(1 for r in results if r["success"])
+    return {"success": True, "total": len(item_ids), "saved": success_count, "results": results}
+
+
+@api_router.post("/items/batch/ignore")
+async def batch_ignore_items(data: Dict[str, Any]):
+    """Marque plusieurs items comme ignorés (user_action='ignored')."""
+    item_ids = data.get("item_ids", [])
+    if not item_ids:
+        raise HTTPException(status_code=400, detail="item_ids required")
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE items SET user_action='ignored', updated_at=NOW() WHERE id = ANY(%s)",
+                    (item_ids,)
+                )
+                conn.commit()
+        return {"success": True, "updated": len(item_ids)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/items/batch/ingest-rag")
+async def batch_ingest_items_rag(data: Dict[str, Any]):
+    """
+    Ingestion RAG batch — contenu scrapé obligatoire pour chaque item.
+    Un item dont la page est inaccessible est marqué failed, les autres continuent.
+    """
+    item_ids = data.get("item_ids", [])
+    if not item_ids:
+        raise HTTPException(status_code=400, detail="item_ids required")
+
+    from argos.services.digest_generator import generate_digest
+    from argos.services.vector_store_singleton import get_vector_store
+    from argos.services.knowledge_graph import extract_and_index as kg_extract
+    import asyncio as _asyncio
+    import json as _json
+
+    llm = create_llm_provider(
+        provider_type=settings.llm_provider,
+        openai_api_key=settings.openai_api_key,
+        aws_access_key_id=settings.aws_access_key_id,
+        aws_secret_access_key=settings.aws_secret_access_key,
+        aws_region=settings.aws_region,
+        model=settings.aws_bedrock_model,
+    )
+    vs = get_vector_store()
+
+    results = []
+    for item_id in item_ids:
+        try:
+            with db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT url, title, digest_markdown FROM items WHERE id=%s", (item_id,))
+                    row = cur.fetchone()
+            if not row:
+                results.append({"item_id": item_id, "success": False, "error": "not found"})
+                continue
+
+            url, title, existing_digest = row
+
+            # Contenu complet obligatoire — échoue proprement si inaccessible
+            try:
+                full_content = await _get_full_content(url, title)
+            except HTTPException as he:
+                results.append({"item_id": item_id, "success": False, "error": he.detail})
+                continue
+
+            digest_md = existing_digest
+            if not digest_md:
+                digest = await generate_digest(url or "", title or "", full_content[:3000], None, llm)
+                digest_md = digest.get("markdown", "") or full_content[:2000]
+                with db.get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "UPDATE items SET digest_markdown=%s, digest_json=%s::jsonb, digest_generated_at=NOW() WHERE id=%s",
+                            (digest_md, _json.dumps(digest.get("json", {})), item_id)
+                        )
+                        conn.commit()
+
+            item_data = {"id": item_id, "title": title, "summary": digest_md[:2000], "content": full_content, "workspace_id": None}
+            await _asyncio.to_thread(vs.index_item, item_data)
+
+            try:
+                await kg_extract(item_id, title, full_content, db=db)
+            except Exception as kg_err:
+                logger.warning(f"KG batch extraction failed for item {item_id}: {kg_err}")
+
+            with db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE items SET user_action='ingested', rag_indexed=TRUE, rag_indexed_at=NOW(), updated_at=NOW() WHERE id=%s",
+                        (item_id,)
+                    )
+                    conn.commit()
+
+            results.append({"item_id": item_id, "success": True})
+            logger.info(f"[BATCH INGEST] item {item_id} OK")
+
+        except Exception as e:
+            logger.error(f"[BATCH INGEST] item {item_id} failed: {e}", exc_info=True)
+            results.append({"item_id": item_id, "success": False, "error": str(e)})
+
+    success_count = sum(1 for r in results if r["success"])
+    return {"success": True, "total": len(item_ids), "ingested": success_count, "results": results}
 
 
 @api_router.get("/items/{item_id}/content")
@@ -2274,7 +2662,8 @@ async def collect_from_source(source_id: int):
                 item['workspace_id'] = src_wid
                 item['source_url'] = src_url
         elif src_type == 'website':
-            items = collector.fetch_website_page(src_url, workspace_id=src_wid)
+            import asyncio
+            items = await asyncio.to_thread(collector.fetch_website_page, src_url, workspace_id=src_wid)
         elif src_type == 'github':
             config = {"type": "github", "url": src_url, "name": src_name or src_url, "enabled": True}
             items = collector.fetch_github_repos(config)
@@ -4041,7 +4430,7 @@ _BRIEFING_GROUP_TEMPLATE = """### {group_name}
 
 _BRIEFING_ITEM_TEMPLATE = """- **{title}** `[{tier}]`
   {summary_line}
-  → {url}"""
+  → {url} [READ:{id}]"""
 
 
 def _group_items_by_entity(items: list[dict]) -> dict[str, list[dict]]:
@@ -4174,6 +4563,7 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
                   AND classification_status = 'classified'
                   AND importance IN ('high', 'critical')
                   AND created_at > NOW() - INTERVAL '{hours} hours'
+                  AND (published_at IS NULL OR published_at > NOW() - INTERVAL '90 days')
                   {exclude_clause}
                   {ws_filter}
                 ORDER BY importance DESC, reliability_score DESC NULLS LAST, created_at DESC
@@ -4192,6 +4582,7 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
                     FROM items
                     WHERE reliability_passed = TRUE
                       AND classification_status = 'classified'
+                      AND (published_at IS NULL OR published_at > NOW() - INTERVAL '90 days')
                       {ws_filter}
                     ORDER BY created_at DESC
                     LIMIT 20
@@ -4299,6 +4690,7 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
                     tier=it["reliability_tier"],
                     summary_line=summary_line,
                     url=it["url"],
+                    id=it["id"],
                 )
             )
         groups_section_parts.append(

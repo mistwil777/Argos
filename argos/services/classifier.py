@@ -41,11 +41,12 @@ Extract structured information in JSON format with these fields:
    - "low": Minor update or niche topic (e.g., bug fix, specific use case)
 
 3. **item_type** (enum): Nature of the content.
-   - "innovation": New technology, breakthrough, major release
+   - "tool": New technology, breakthrough, major release, new framework or library
    - "tutorial": How-to guide, implementation example
    - "research": Academic paper, research findings
    - "news": Industry announcement, company news
-   - "opinion": Analysis, commentary, best practices
+   - "discussion": Analysis, commentary, best practices, opinion
+   - "other": Anything that doesn't fit the above
 
 4. **reasoning** (string): Brief explanation (1-2 sentences) justifying your classification.
 
@@ -57,7 +58,7 @@ Extract structured information in JSON format with these fields:
 {{
     "topics": ["LLM", "Agents", "RAG"],
     "importance": "high",
-    "item_type": "innovation",
+    "item_type": "tool",
     "reasoning": "New agent framework with built-in RAG capabilities, significant for production AI systems.",
     "summary_fr": "Nouveau framework d'agents IA avec capacités RAG intégrées, permettant de construire des systèmes d'IA plus performants en production. Combine la génération de langage avec la recherche de documents pertinents pour des réponses plus précises et contextuelles."
 }}
@@ -74,7 +75,7 @@ Extract structured information in JSON format with these fields:
 {{
     "topics": ["topic1", "topic2"],
     "importance": "high",
-    "item_type": "innovation",
+    "item_type": "tool",
     "reasoning": "Your explanation here.",
     "summary_fr": "Résumé en français ici."
 }}"""
@@ -363,12 +364,13 @@ class ClassifierService:
                 f"Must be one of: {valid_importance}"
             )
         
-        valid_types = ["innovation", "tutorial", "research", "news", "opinion"]
+        valid_types = ["news", "research", "tutorial", "tool", "discussion", "other"]
+        # Map legacy values silently
+        legacy_map = {"innovation": "tool", "opinion": "discussion"}
+        if classification["item_type"] in legacy_map:
+            classification["item_type"] = legacy_map[classification["item_type"]]
         if classification["item_type"] not in valid_types:
-            raise ValueError(
-                f"Invalid item_type '{classification['item_type']}'. "
-                f"Must be one of: {valid_types}"
-            )
+            classification["item_type"] = "other"
         
         # Validate topics is a list
         if not isinstance(classification["topics"], list) or len(classification["topics"]) == 0:

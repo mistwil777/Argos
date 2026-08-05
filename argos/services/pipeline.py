@@ -30,16 +30,15 @@ def _make_llm():
 
 async def run_pipeline_for_source(source_id: int) -> dict:
     """
-    Pipeline complet pour une source :
-      1. Collecte
-      2. Classification des items pending
-      3. Score + ingest (digest + RAG) des items high/critical
+    Pipeline collect → classify pour une source.
 
-    Remplace _auto_collect_and_classify dans router.py.
+    Architecture HITL :
+      1. Collecte  — sauvegarde immédiate, jamais bloquée
+      2. Classify  — enrichit les métadonnées, un échec ne perd pas l'item
+      3. RAG/KG    — NON automatique, déclenché uniquement par action explicite du user
     """
     from argos.api.router import db
 
-    # Charger la source
     with db.get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -55,23 +54,13 @@ async def run_pipeline_for_source(source_id: int) -> dict:
     src_id, src_name, src_url, src_type, src_wid = row
     logger.info(f"[PIPELINE] Démarrage source={source_id} ({src_type}) — {src_url}")
 
-    # ── Étape 1 : Collecte ──────────────────────────────────────────
     inserted = await _step_collect(src_id, src_name, src_url, src_type, src_wid, db)
-
-    if inserted == 0:
-        logger.info(f"[PIPELINE] Source {source_id} — aucun nouvel item, traitement des items existants")
-
-    # ── Étape 2 : Classification ─────────────────────────────────────
     classified_ids = await _step_classify(src_url, db)
-
-    # ── Étape 3 : Score + Ingest des medium/high/critical ────────────
-    ingested = await _step_ingest_priority(src_url, src_wid, db)
 
     result = {
         "source_id": source_id,
         "inserted": inserted,
         "classified": len(classified_ids),
-        "ingested": ingested,
     }
     logger.info(f"[PIPELINE] Source {source_id} terminée — {result}")
     return result
@@ -94,7 +83,8 @@ async def _step_collect(
             i.update({"workspace_id": src_wid, "source_url": src_url})
 
     elif src_type == "website":
-        items = collector.fetch_website_page(src_url, workspace_id=src_wid)
+        import asyncio
+        items = await asyncio.to_thread(collector.fetch_website_page, src_url, workspace_id=src_wid)
 
     elif src_type == "github":
         config = {"type": "github", "url": src_url, "name": src_name or src_url, "enabled": True}
@@ -173,7 +163,8 @@ async def _step_classify(src_url: str, db) -> list[int]:
             await classifier.classify_item(item_id)
             classified.append(item_id)
         except Exception as e:
-            logger.warning(f"[PIPELINE] Classify item {item_id} échoué : {e}")
+            # L'item reste en status 'pending' — visible en bibliothèque, jamais perdu
+            logger.warning(f"[PIPELINE] Classify item {item_id} échoué, item conservé en pending : {e}")
 
     logger.info(f"[PIPELINE] Classify — {len(classified)}/{len(pending_ids)} classifiés")
     return classified

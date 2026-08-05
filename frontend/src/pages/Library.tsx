@@ -7,7 +7,7 @@ import {
   Pencil, Trash2, Loader2,
   Search, Sparkles, SlidersHorizontal, Wand2, RotateCcw,
   CheckSquare, Square, Folder, Tag, ChevronRight, Library as LibraryIcon,
-  Radio, ExternalLink,
+  Radio, ExternalLink, Upload, FilePlus,
 } from 'lucide-react'
 import { api } from '@/services/api'
 import { timeAgo } from '@/lib/utils'
@@ -77,7 +77,14 @@ export default function Library() {
   const [itemPreview, setItemPreview] = useState<{ markdown: string; title: string; summary: string; json?: any } | null>(null)
   const [itemPreviewLoading, setItemPreviewLoading] = useState(false)
   const [itemSaving, setItemSaving] = useState(false)
+  const [itemModalTab, setItemModalTab] = useState<'analyse' | 'contenu'>('analyse')
+  const [itemFullContent, setItemFullContent] = useState<string | null>(null)
+  const [itemFullLoading, setItemFullLoading] = useState(false)
   const itemScrollRef = useRef<HTMLDivElement>(null)
+
+  // ── Sélection batch articles ──
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<number>>(new Set())
+  const [batchItemLoading, setBatchItemLoading] = useState<string | null>(null)
 
   // ── Sélection / édition ──
   const [selected, setSelected]   = useState<any | null>(null)
@@ -97,6 +104,28 @@ export default function Library() {
   const [aiInstruction, setAiInstruction] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const [beforeAi, setBeforeAi]   = useState('')
+
+  // ── Import OCR ──
+  const [importModal, setImportModal] = useState(false)
+  const [importFile, setImportFile]   = useState<File | null>(null)
+  const [importing, setImporting]     = useState(false)
+  const [importResult, setImportResult] = useState<any | null>(null)
+  const importFileRef = useRef<HTMLInputElement>(null)
+
+  async function handleImportFile(file: File) {
+    setImportFile(file)
+    setImporting(true)
+    setImportResult(null)
+    try {
+      const res = await api.uploadDocument(file)
+      setImportResult(res)
+      loadDocs()
+    } catch (e: any) {
+      setImportResult({ error: e.message })
+    } finally {
+      setImporting(false)
+    }
+  }
 
   // ── Chargement workspaces ──
   useEffect(() => {
@@ -188,6 +217,8 @@ export default function Library() {
   async function openItemModal(item: any) {
     setItemModal(item)
     setItemPreview(null)
+    setItemFullContent(null)
+    setItemModalTab('analyse')
     setItemPreviewLoading(true)
     try {
       const result = await api.ingestPreview(item.id)
@@ -201,24 +232,60 @@ export default function Library() {
     finally { setItemPreviewLoading(false) }
   }
 
+  async function loadItemFullContent(translate = false) {
+    if (!itemModal) return
+    if (!translate && itemFullContent !== null) return
+    setItemFullLoading(true)
+    try {
+      const result = await api.getItemRawContent(itemModal.id, translate)
+      const pages = result.pages || []
+      const text = pages.map((p: any) => p.content || '').filter(Boolean).join('\n\n---\n\n')
+      setItemFullContent(text || '')
+    } catch { setItemFullContent('') }
+    finally { setItemFullLoading(false) }
+  }
+
   async function saveItemAsDoc() {
-    if (!itemModal || !itemPreview) return
+    if (!itemModal) return
     setItemSaving(true)
     try {
+      // Utilise le contenu complet si disponible, sinon le digest
+      const content = itemFullContent || itemPreview?.markdown || ''
+      const title = itemPreview?.title || itemModal.title || 'Article sans titre'
       await api.saveDocument({
-        title: itemPreview.title || itemModal.title || 'Article sans titre',
+        title,
         doc_type: 'fiche',
-        content_markdown: itemPreview.markdown,
-        summary: itemPreview.summary,
+        content_markdown: content,
+        summary: itemPreview?.summary || '',
         sujet_id: activeSujet?.id ?? null,
         source_item_ids: [itemModal.id],
       })
       setItemModal(null)
       setItemPreview(null)
+      setItemFullContent(null)
       loadDocs(activeSujet?.id ?? undefined)
       setTab('documents')
     } catch (e: any) { alert(`Erreur : ${e.message}`) }
     finally { setItemSaving(false) }
+  }
+
+  function toggleSelectItem(id: number, e: React.MouseEvent) {
+    e.stopPropagation()
+    setSelectedItemIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+  }
+
+  async function batchItemAction(action: 'ingest' | 'ignore') {
+    const ids = Array.from(selectedItemIds)
+    if (!ids.length) return
+    setBatchItemLoading(action)
+    try {
+      if (action === 'ingest') await api.batchIngestRag(ids)
+      else await api.batchIgnoreItems(ids)
+      setSelectedItemIds(new Set())
+      // Recharger la liste pour refléter les changements
+      if (activeSujet) loadItems(activeSujet.id)
+    } catch (e: any) { alert(`Erreur : ${e.message}`) }
+    finally { setBatchItemLoading(null) }
   }
 
   // ── Navigation ──
@@ -338,6 +405,81 @@ export default function Library() {
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
+
+      {/* ── Modal Import OCR ── */}
+      <AnimatePresence>
+        {importModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            onClick={e => { if (e.target === e.currentTarget) setImportModal(false) }}>
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-md bg-[hsl(var(--bg-1))] border border-[hsl(var(--line))] rounded-2xl shadow-2xl overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-[hsl(var(--line))]">
+                <div className="flex items-center gap-2">
+                  <Upload className="w-4 h-4 text-[hsl(var(--accent))]" />
+                  <span className="text-[14px] font-semibold text-[hsl(var(--text))]">Importer un document</span>
+                </div>
+                <button onClick={() => setImportModal(false)} className="p-1 rounded text-[hsl(var(--text-3))] hover:text-[hsl(var(--text))] transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="p-5 space-y-4">
+                <p className="text-[12px] text-[hsl(var(--text-3))]">
+                  PDF, image (PNG, JPG, TIFF) ou document Word. Le texte est extrait par OCR puis indexé dans la bibliothèque.
+                </p>
+                <input ref={importFileRef} type="file"
+                  accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif,.docx,.doc"
+                  className="hidden"
+                  onChange={e => { if (e.target.files?.[0]) handleImportFile(e.target.files[0]) }} />
+                {!importResult && !importing && (
+                  <button onClick={() => importFileRef.current?.click()}
+                    className="w-full border-2 border-dashed border-[hsl(var(--line))] rounded-xl py-8 flex flex-col items-center gap-3 text-[hsl(var(--text-3))] hover:border-[hsl(var(--accent-line))] hover:text-[hsl(var(--accent))] transition-colors cursor-pointer">
+                    <FilePlus className="w-8 h-8" />
+                    <span className="text-[13px] font-medium">Cliquer pour sélectionner un fichier</span>
+                    <span className="text-[11px]">PDF · PNG · JPG · TIFF · DOCX</span>
+                  </button>
+                )}
+                {importing && (
+                  <div className="flex flex-col items-center gap-3 py-8">
+                    <Loader2 className="w-8 h-8 animate-spin text-[hsl(var(--accent))]" />
+                    <span className="text-[13px] text-[hsl(var(--text-3))]">Extraction en cours…</span>
+                    {importFile && <span className="text-[11px] font-mono text-[hsl(var(--text-3))]">{importFile.name}</span>}
+                  </div>
+                )}
+                {importResult && !importing && (
+                  <div className={`rounded-lg p-4 ${importResult.error ? 'bg-red-500/10 border border-red-500/25' : 'bg-green-500/10 border border-green-500/25'}`}>
+                    {importResult.error ? (
+                      <p className="text-[12px] text-red-400 font-mono">{importResult.error}</p>
+                    ) : (
+                      <div className="space-y-1">
+                        <p className="text-[12px] font-semibold text-[hsl(var(--green))] flex items-center gap-1.5">
+                          <Check className="w-3.5 h-3.5" /> Document importé avec succès
+                        </p>
+                        {importResult.title && <p className="text-[11.5px] text-[hsl(var(--text-2))]">{importResult.title}</p>}
+                        {importResult.word_count && <p className="text-[11px] font-mono text-[hsl(var(--text-3))]">{importResult.word_count} mots extraits</p>}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div className="flex justify-end gap-2 pt-1">
+                  {importResult && !importResult.error && (
+                    <button onClick={() => { setImportModal(false); setImportResult(null); setImportFile(null) }}
+                      className="px-4 py-2 rounded-lg bg-[hsl(var(--accent))] text-white text-[12px] font-semibold hover:opacity-90 transition-opacity">
+                      Fermer
+                    </button>
+                  )}
+                  {(importResult?.error || (!importing && !importResult)) && (
+                    <button onClick={() => { setImportResult(null); setImportFile(null); importFileRef.current?.click() }}
+                      className="px-4 py-2 rounded-lg border border-[hsl(var(--accent-line))] text-[hsl(var(--accent))] text-[12px] font-semibold hover:bg-[hsl(var(--accent-dim))] transition-colors">
+                      {importResult?.error ? 'Réessayer' : 'Sélectionner'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Breadcrumb + bouton retour ── */}
       <div className="flex-shrink-0 px-8 pt-6 pb-4 space-y-3">
@@ -507,6 +649,33 @@ export default function Library() {
                       Pages web récupérées automatiquement depuis vos sources surveillées — matière brute de votre veille.
                     </p>
                   </div>
+                  {/* Barre batch articles */}
+                  <AnimatePresence>
+                    {selectedItemIds.size > 0 && (
+                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                        className="flex-shrink-0 border-b border-[hsl(var(--accent-line))] bg-[hsl(var(--accent-dim))] px-8 py-2 flex items-center gap-3 overflow-hidden">
+                        <span className="text-[11px] font-mono text-[hsl(var(--accent))] font-semibold">
+                          {selectedItemIds.size} sélectionné{selectedItemIds.size > 1 ? 's' : ''}
+                        </span>
+                        <div className="ml-auto flex items-center gap-2">
+                          <button disabled={!!batchItemLoading} onClick={() => batchItemAction('ingest')}
+                            className="inline-flex items-center gap-1.5 text-[11px] font-mono px-3 py-1 rounded-lg border border-[hsl(var(--accent-line))] bg-[hsl(var(--accent))] text-white hover:opacity-90 transition-opacity disabled:opacity-40">
+                            {batchItemLoading === 'ingest' ? <Loader2 className="w-3 h-3 animate-spin" /> : <DatabaseZap className="w-3 h-3" />}
+                            Intégrer dans le RAG
+                          </button>
+                          <button disabled={!!batchItemLoading} onClick={() => batchItemAction('ignore')}
+                            className="inline-flex items-center gap-1.5 text-[11px] font-mono px-3 py-1 rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text-3))] hover:border-red-500/40 hover:text-red-400 transition-colors disabled:opacity-40">
+                            {batchItemLoading === 'ignore' ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+                            Ignorer
+                          </button>
+                          <button onClick={() => setSelectedItemIds(new Set())} className="p-1 rounded text-[hsl(var(--text-3))] hover:text-[hsl(var(--text))]">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
                   <div className="flex-1 overflow-auto px-8 py-4">
                     {itemsLoading && (
                       <div className="space-y-2">
@@ -524,15 +693,32 @@ export default function Library() {
                     )}
                     {!itemsLoading && items.length > 0 && (
                       <div className="space-y-2">
-                        {items.map((item, i) => (
+                        {/* Tout sélectionner */}
+                        <div className="flex items-center gap-2 pb-1">
+                          <button onClick={e => {
+                            e.stopPropagation()
+                            if (selectedItemIds.size === items.length) setSelectedItemIds(new Set())
+                            else setSelectedItemIds(new Set(items.map((it: any) => it.id)))
+                          }} className="flex items-center gap-1.5 text-[10.5px] font-mono text-[hsl(var(--text-3))] hover:text-[hsl(var(--accent))] transition-colors">
+                            {selectedItemIds.size === items.length && items.length > 0
+                              ? <CheckSquare className="w-3.5 h-3.5 text-[hsl(var(--accent))]" />
+                              : <Square className="w-3.5 h-3.5" />}
+                            Tout sélectionner
+                          </button>
+                        </div>
+                        {items.map((item: any, i: number) => (
                           <motion.div key={item.id}
                             initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: i * 0.02 }}
                             onClick={() => openItemModal(item)}
-                            className="flex items-start gap-4 p-4 panel hover:border-[hsl(var(--accent-line))] cursor-pointer transition-all group">
-                            <div className="w-8 h-8 rounded-lg bg-[hsl(var(--bg-3))] border border-[hsl(var(--line))] flex items-center justify-center flex-shrink-0 mt-0.5">
-                              <Radio className="w-3.5 h-3.5 text-[hsl(var(--accent))]" />
-                            </div>
+                            className={`flex items-start gap-4 p-4 panel hover:border-[hsl(var(--accent-line))] cursor-pointer transition-all group ${selectedItemIds.has(item.id) ? 'border-[hsl(var(--accent-line))] bg-[hsl(var(--accent-dim))]' : ''}`}>
+                            {/* Checkbox */}
+                            <button onClick={e => toggleSelectItem(item.id, e)}
+                              className="flex-shrink-0 mt-1 text-[hsl(var(--text-3))] hover:text-[hsl(var(--accent))] transition-colors">
+                              {selectedItemIds.has(item.id)
+                                ? <CheckSquare className="w-4 h-4 text-[hsl(var(--accent))]" />
+                                : <Square className="w-4 h-4" />}
+                            </button>
                             <div className="flex-1 min-w-0">
                               <p className="text-[13px] font-semibold text-[hsl(var(--text))] leading-snug line-clamp-2 group-hover:text-[hsl(var(--accent))] transition-colors">
                                 {item.title || item.source_url || 'Sans titre'}
@@ -549,6 +735,11 @@ export default function Library() {
                                     <ExternalLink className="w-2.5 h-2.5 flex-shrink-0" />
                                     <span className="truncate">{item.source_url.replace(/^https?:\/\//, '').split('/')[0]}</span>
                                   </a>
+                                )}
+                                {item.rag_indexed && (
+                                  <span className="text-[9.5px] font-mono text-[hsl(var(--accent))] border border-[hsl(var(--accent-line))] bg-[hsl(var(--accent-dim))] rounded px-1.5 py-0.5 flex items-center gap-1">
+                                    <DatabaseZap className="w-2.5 h-2.5" />RAG
+                                  </span>
                                 )}
                               </div>
                             </div>
@@ -607,6 +798,10 @@ export default function Library() {
                             {selectedIds.size === docs.length ? <><CheckSquare className="w-3 h-3" /> Tout désélectionner</> : <><Square className="w-3 h-3" /> Tout sélectionner</>}
                           </button>
                         )}
+                        <button onClick={() => { setImportModal(true); setImportResult(null); setImportFile(null) }}
+                          className="flex items-center gap-1.5 px-2 py-1 rounded border border-[hsl(var(--accent-line))] bg-[hsl(var(--accent-dim))] text-[11px] font-mono text-[hsl(var(--accent))] hover:bg-[hsl(var(--accent))] hover:text-white transition-colors">
+                          <FilePlus className="w-3 h-3" /> Importer
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -821,7 +1016,7 @@ export default function Library() {
         {itemModal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm"
-            onClick={e => { if (e.target === e.currentTarget) { setItemModal(null); setItemPreview(null) } }}>
+            onClick={e => { if (e.target === e.currentTarget) { setItemModal(null); setItemPreview(null); setItemFullContent(null) } }}>
             <motion.div initial={{ opacity: 0, scale: 0.95, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
               transition={{ type: 'spring', stiffness: 300, damping: 28 }}
               className="w-full max-w-3xl max-h-[90vh] flex flex-col panel overflow-hidden">
@@ -839,27 +1034,77 @@ export default function Library() {
                     <span className="text-[10.5px] font-mono text-[hsl(var(--text-3))]">{timeAgo(itemModal.created_at)}</span>
                   </div>
                 </div>
-                <button onClick={() => { setItemModal(null); setItemPreview(null) }}
+                <button onClick={() => { setItemModal(null); setItemPreview(null); setItemFullContent(null) }}
                   className="text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))] transition-colors flex-shrink-0">
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
+              {/* Onglets */}
+              <div className="flex-shrink-0 flex border-b border-[hsl(var(--line))] px-6 bg-[hsl(var(--bg-2))]">
+                <button onClick={() => setItemModalTab('analyse')}
+                  className={`py-2.5 px-1 mr-5 text-[12px] font-semibold border-b-2 transition-all ${itemModalTab === 'analyse' ? 'border-[hsl(var(--accent))] text-[hsl(var(--accent))]' : 'border-transparent text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))]'}`}>
+                  Analyse IA
+                </button>
+                <button onClick={() => { setItemModalTab('contenu'); loadItemFullContent() }}
+                  className={`py-2.5 px-1 text-[12px] font-semibold border-b-2 transition-all ${itemModalTab === 'contenu' ? 'border-[hsl(var(--accent))] text-[hsl(var(--accent))]' : 'border-transparent text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))]'}`}>
+                  Contenu complet
+                </button>
+              </div>
+
               {/* Contenu */}
               <div ref={itemScrollRef} className="flex-1 overflow-auto p-6">
-                {itemPreviewLoading && (
-                  <div className="flex flex-col items-center justify-center h-40 gap-3 text-[hsl(var(--text-3))]">
-                    <Loader2 className="w-6 h-6 animate-spin text-[hsl(var(--accent))]" />
-                    <p className="text-[12px] font-mono">Chargement du contenu…</p>
-                  </div>
+                {itemModalTab === 'analyse' && (
+                  <>
+                    {itemPreviewLoading && (
+                      <div className="flex flex-col items-center justify-center h-40 gap-3 text-[hsl(var(--text-3))]">
+                        <Loader2 className="w-6 h-6 animate-spin text-[hsl(var(--accent))]" />
+                        <p className="text-[12px] font-mono">Chargement…</p>
+                      </div>
+                    )}
+                    {!itemPreviewLoading && itemPreview && (
+                      <div className="prose-app max-w-none">
+                        {itemPreview.markdown
+                          ? <ReactMarkdown>{itemPreview.markdown}</ReactMarkdown>
+                          : <p className="text-[12px] text-[hsl(var(--text-3))] italic">Contenu non disponible pour cet article.</p>
+                        }
+                      </div>
+                    )}
+                  </>
                 )}
-                {!itemPreviewLoading && itemPreview && (
-                  <div className="prose-app max-w-none">
-                    {itemPreview.markdown
-                      ? <ReactMarkdown>{itemPreview.markdown}</ReactMarkdown>
-                      : <p className="text-[12px] text-[hsl(var(--text-3))] italic">Contenu non disponible pour cet article.</p>
-                    }
-                  </div>
+                {itemModalTab === 'contenu' && (
+                  <>
+                    {itemFullLoading && (
+                      <div className="flex flex-col items-center justify-center h-40 gap-3 text-[hsl(var(--text-3))]">
+                        <Loader2 className="w-6 h-6 animate-spin text-[hsl(var(--accent))]" />
+                        <p className="text-[12px] font-mono">Récupération du contenu…</p>
+                      </div>
+                    )}
+                    {!itemFullLoading && itemFullContent !== null && (
+                      <>
+                        {itemFullContent ? (
+                          <>
+                            <div className="flex items-center justify-end mb-4">
+                              <button onClick={() => loadItemFullContent(true)}
+                                className="inline-flex items-center gap-1.5 text-[11px] font-mono px-3 py-1 rounded-lg border border-[hsl(var(--accent-line))] text-[hsl(var(--accent))] hover:bg-[hsl(var(--accent-dim))] transition-colors">
+                                <Wand2 className="w-3 h-3" />
+                                Traduire en français
+                              </button>
+                            </div>
+                            <div className="text-[13px] text-[hsl(var(--text-2))] leading-relaxed space-y-3">
+                              {itemFullContent.split(/\n{2,}/).map((para, i) => (
+                                para.trim() === '---'
+                                  ? <hr key={i} className="border-[hsl(var(--line))] my-4" />
+                                  : <p key={i}>{para.trim()}</p>
+                              ))}
+                            </div>
+                          </>
+                        ) : (
+                          <p className="text-[12px] text-[hsl(var(--text-3))] italic">Contenu complet non disponible — la page n'a pas pu être récupérée.</p>
+                        )}
+                      </>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -899,7 +1144,7 @@ export default function Library() {
                     <Sparkles className="w-3.5 h-3.5" />
                     Générer un document IA
                   </motion.button>
-                  <button onClick={() => { setItemModal(null); setItemPreview(null) }}
+                  <button onClick={() => { setItemModal(null); setItemPreview(null); setItemFullContent(null) }}
                     className="ml-auto text-[11.5px] font-mono text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))] transition-colors">
                     Fermer
                   </button>

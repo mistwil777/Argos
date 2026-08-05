@@ -28,6 +28,17 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir "crawl4ai==0.3.746" --no-deps && \
     pip install --no-cache-dir "aiosqlite>=0.20" "lxml>=5.3" "cssselect>=1.2" 2>/dev/null || true
 
+# Install Playwright Chromium browser binaries (shared path accessible by all users)
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+    libdrm2 libdbus-1-3 libxkbcommon0 libxcomposite1 libxdamage1 \
+    libxfixes3 libxrandr2 libgbm1 libasound2 libpango-1.0-0 \
+    libcairo2 libatspi2.0-0 libwayland-client0 \
+    && rm -rf /var/lib/apt/lists/* \
+    && playwright install chromium \
+    && chmod -R 755 /ms-playwright
+
 # Copy application code
 COPY argos/ ./argos/
 

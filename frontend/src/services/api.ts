@@ -124,6 +124,18 @@ export const api = {
     request<any>(`/api/v1/items/${item_id}/ingest-confirm`, { method: 'POST', body: JSON.stringify({ markdown, summary, json }) }),
   updateSummary: (item_id: number, summary: string) =>
     request<any>(`/api/v1/items/${item_id}/summary`, { method: 'PATCH', body: JSON.stringify({ summary }) }),
+  saveItem: (item_id: number) =>
+    request<any>(`/api/v1/items/${item_id}/save`, { method: 'POST' }),
+  ignoreItem: (item_id: number) =>
+    request<any>(`/api/v1/items/${item_id}/ignore`, { method: 'POST' }),
+  ingestItemRag: (item_id: number) =>
+    request<any>(`/api/v1/items/${item_id}/ingest-rag`, { method: 'POST' }),
+  batchSaveItems: (item_ids: number[]) =>
+    request<any>('/api/v1/items/batch/save', { method: 'POST', body: JSON.stringify({ item_ids }) }),
+  batchIgnoreItems: (item_ids: number[]) =>
+    request<any>('/api/v1/items/batch/ignore', { method: 'POST', body: JSON.stringify({ item_ids }) }),
+  batchIngestRag: (item_ids: number[]) =>
+    request<any>('/api/v1/items/batch/ingest-rag', { method: 'POST', body: JSON.stringify({ item_ids }) }),
 
   // Documents / Bibliothèque
   generateDocument: (doc_type: string, title: string, prompt: string, item_ids: number[], sujet_id?: number | null) =>
@@ -170,6 +182,12 @@ export const api = {
   updateWorkspace: (id: number, data: any) => request<any>(`/api/v1/workspaces-list/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   updateKnowledgeProfile: (id: number, data: any) => request<any>(`/api/v1/sujets/${id}/knowledge-profile`, { method: 'PATCH', body: JSON.stringify(data) }),
   suggestKnowledgeProfile: (id: number) => request<any>(`/api/v1/sujets/${id}/suggest-profile`, { method: 'POST' }),
+  generateQuestionnaire: (id: number, data: any) => request<any>(`/api/v1/sujets/${id}/generate-questionnaire`, { method: 'POST', body: JSON.stringify(data) }),
+  recommendAnswer: (id: number, data: any) => request<any>(`/api/v1/sujets/${id}/recommend-answer`, { method: 'POST', body: JSON.stringify(data) }),
+  generateFilterConfig: (id: number, data: any) => request<any>(`/api/v1/sujets/${id}/generate-filter`, { method: 'POST', body: JSON.stringify(data) }),
+  nextQuestion: (id: number, data: any) => request<any>(`/api/v1/sujets/${id}/next-question`, { method: 'POST', body: JSON.stringify(data) }),
+  generateSummary: (id: number, data: any) => request<any>(`/api/v1/sujets/${id}/generate-summary`, { method: 'POST', body: JSON.stringify(data) }),
+  decomposeNeeds: (description: string) => request<any>('/api/v1/decompose-needs', { method: 'POST', body: JSON.stringify({ description }) }),
   assignSourceSujet: (source_id: number, sujet_id: number | null) => request<any>(`/api/v1/sources/${source_id}/sujet`, { method: 'PATCH', body: JSON.stringify({ sujet_id }) }),
 
   // RAG Hygiene alerts
