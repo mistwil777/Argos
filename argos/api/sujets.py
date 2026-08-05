@@ -1,5 +1,5 @@
 """
-API Sujets — CRUD + profil de connaissance
+API Sujets — CRUD + configuration d'intention + questionnaire LLM
 """
 import json
 import logging
@@ -41,6 +41,11 @@ def _row_to_sujet(row) -> dict:
         "source_count": row[10] if len(row) > 10 else 0,
         "item_count": row[11] if len(row) > 11 else 0,
         "doc_count": row[12] if len(row) > 12 else 0,
+        "intention_type": row[13] if len(row) > 13 else "surveiller",
+        "learning_context": row[14] if len(row) > 14 else None,
+        "project_context": row[15] if len(row) > 15 else None,
+        "filter_config": row[16] if len(row) > 16 else {"must_match": [], "min_match_count": 1},
+        "questionnaire_answers": row[17] if len(row) > 17 else None,
     }
 
 
@@ -52,6 +57,7 @@ class SujetCreate(BaseModel):
     description: Optional[str] = None
     icon: Optional[str] = "tag"
     color: Optional[str] = "#9085e9"
+    intention_type: Optional[str] = "surveiller"
     knowledge_profile: Optional[dict] = None
 
 
@@ -62,6 +68,11 @@ class SujetUpdate(BaseModel):
     color: Optional[str] = None
     knowledge_profile: Optional[dict] = None
     is_active: Optional[bool] = None
+    intention_type: Optional[str] = None
+    learning_context: Optional[dict] = None
+    project_context: Optional[dict] = None
+    filter_config: Optional[dict] = None
+    questionnaire_answers: Optional[dict] = None
 
 
 class KnowledgeProfileUpdate(BaseModel):
@@ -75,7 +86,6 @@ class KnowledgeProfileUpdate(BaseModel):
 
 @router.get("/workspaces-list")
 async def list_workspaces():
-    """Liste tous les dossiers avec le nombre de sujets."""
     try:
         with db.get_connection() as conn:
             with conn.cursor() as cur:
@@ -108,7 +118,6 @@ async def list_workspaces():
 
 @router.post("/workspaces-list")
 async def create_workspace(data: dict):
-    """Crée un nouveau dossier."""
     name = (data.get("name") or "").strip()
     if not name:
         raise HTTPException(400, "name required")
@@ -138,7 +147,6 @@ async def create_workspace(data: dict):
 
 @router.get("/sujets")
 async def list_sujets(workspace_id: Optional[int] = None):
-    """Liste les sujets, optionnellement filtrés par dossier."""
     try:
         with db.get_connection() as conn:
             with conn.cursor() as cur:
@@ -152,7 +160,9 @@ async def list_sujets(workspace_id: Optional[int] = None):
                            s.icon, s.color, s.knowledge_profile, s.is_active, s.created_at,
                            COUNT(DISTINCT sr.id) AS source_count,
                            COUNT(DISTINCT i.id)  AS item_count,
-                           COUNT(DISTINCT d.id)  AS doc_count
+                           COUNT(DISTINCT d.id)  AS doc_count,
+                           s.intention_type, s.learning_context, s.project_context,
+                           s.filter_config, s.questionnaire_answers
                     FROM sujets s
                     LEFT JOIN sources sr ON sr.sujet_id = s.id AND sr.active = true
                     LEFT JOIN items i ON i.sujet_id = s.id
@@ -169,7 +179,6 @@ async def list_sujets(workspace_id: Optional[int] = None):
 
 @router.post("/sujets")
 async def create_sujet(data: SujetCreate):
-    """Crée un nouveau sujet dans un dossier."""
     slug = _slugify(data.name)
     profile = json.dumps(data.knowledge_profile or {
         "official_domains": [], "recognized_domains": [],
@@ -180,13 +189,17 @@ async def create_sujet(data: SujetCreate):
             with conn.cursor() as cur:
                 cur.execute("""
                     INSERT INTO sujets
-                        (workspace_id, name, slug, description, icon, color, knowledge_profile)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        (workspace_id, name, slug, description, icon, color, knowledge_profile, intention_type)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id, workspace_id, name, slug, description,
-                              icon, color, knowledge_profile, is_active, created_at
+                              icon, color, knowledge_profile, is_active, created_at,
+                              0, 0, 0,
+                              intention_type, learning_context, project_context,
+                              filter_config, questionnaire_answers
                 """, (
                     data.workspace_id, data.name, slug, data.description,
                     data.icon or "tag", data.color or "#9085e9", profile,
+                    data.intention_type or "surveiller",
                 ))
                 row = cur.fetchone()
                 conn.commit()
@@ -198,14 +211,15 @@ async def create_sujet(data: SujetCreate):
 
 @router.get("/sujets/{sujet_id}")
 async def get_sujet(sujet_id: int):
-    """Détail d'un sujet avec ses sources."""
     try:
         with db.get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
                     SELECT s.id, s.workspace_id, s.name, s.slug, s.description,
                            s.icon, s.color, s.knowledge_profile, s.is_active, s.created_at,
-                           COUNT(DISTINCT sr.id), COUNT(DISTINCT i.id)
+                           COUNT(DISTINCT sr.id), COUNT(DISTINCT i.id), 0,
+                           s.intention_type, s.learning_context, s.project_context,
+                           s.filter_config, s.questionnaire_answers
                     FROM sujets s
                     LEFT JOIN sources sr ON sr.sujet_id = s.id AND sr.active = true
                     LEFT JOIN items i ON i.sujet_id = s.id
@@ -240,7 +254,6 @@ async def get_sujet(sujet_id: int):
 
 @router.patch("/sujets/{sujet_id}")
 async def update_sujet(sujet_id: int, data: SujetUpdate):
-    """Met à jour un sujet."""
     fields, vals = [], []
     if data.name is not None:
         fields.append("name = %s"); vals.append(data.name)
@@ -255,6 +268,16 @@ async def update_sujet(sujet_id: int, data: SujetUpdate):
         fields.append("knowledge_profile = %s"); vals.append(json.dumps(data.knowledge_profile))
     if data.is_active is not None:
         fields.append("is_active = %s"); vals.append(data.is_active)
+    if data.intention_type is not None:
+        fields.append("intention_type = %s"); vals.append(data.intention_type)
+    if data.learning_context is not None:
+        fields.append("learning_context = %s"); vals.append(json.dumps(data.learning_context))
+    if data.project_context is not None:
+        fields.append("project_context = %s"); vals.append(json.dumps(data.project_context))
+    if data.filter_config is not None:
+        fields.append("filter_config = %s"); vals.append(json.dumps(data.filter_config))
+    if data.questionnaire_answers is not None:
+        fields.append("questionnaire_answers = %s"); vals.append(json.dumps(data.questionnaire_answers))
     if not fields:
         raise HTTPException(400, "Nothing to update")
     vals.append(sujet_id)
@@ -274,50 +297,32 @@ async def update_sujet(sujet_id: int, data: SujetUpdate):
 
 @router.delete("/sujets/{sujet_id}")
 async def delete_sujet(sujet_id: int):
-    """
-    Supprime un sujet.
-    - Sources exclusives à ce sujet → supprimées (+ items RAG associés)
-    - Sources partagées (même URL dans un autre sujet) → conservées, sujet_id = NULL
-    """
     try:
         with db.get_connection() as conn:
             with conn.cursor() as cur:
-                # Sources rattachées à ce sujet
                 cur.execute("SELECT id, url FROM sources WHERE sujet_id = %s", (sujet_id,))
                 sources = cur.fetchall()
-
-                exclusive_ids = []
-                orphan_ids = []
+                exclusive_ids, orphan_ids = [], []
                 for src_id, src_url in sources:
                     cur.execute(
                         "SELECT COUNT(*) FROM sources WHERE url = %s AND sujet_id != %s AND sujet_id IS NOT NULL",
                         (src_url, sujet_id),
                     )
-                    shared = cur.fetchone()[0]
-                    if shared > 0:
-                        orphan_ids.append(src_id)   # URL existe ailleurs → détacher seulement
+                    if cur.fetchone()[0] > 0:
+                        orphan_ids.append(src_id)
                     else:
-                        exclusive_ids.append(src_id)  # Exclusive → supprimer avec items
-
-                # Supprimer items RAG des sources exclusives (jointure par source_url)
+                        exclusive_ids.append(src_id)
                 if exclusive_ids:
                     cur.execute("SELECT url FROM sources WHERE id = ANY(%s)", (exclusive_ids,))
                     exclusive_urls = [r[0] for r in cur.fetchall()]
                     if exclusive_urls:
                         cur.execute("DELETE FROM items WHERE source_url = ANY(%s)", (exclusive_urls,))
                     cur.execute("DELETE FROM sources WHERE id = ANY(%s)", (exclusive_ids,))
-
-                # Détacher les sources partagées
                 if orphan_ids:
                     cur.execute("UPDATE sources SET sujet_id = NULL WHERE id = ANY(%s)", (orphan_ids,))
-
                 cur.execute("DELETE FROM sujets WHERE id = %s", (sujet_id,))
                 conn.commit()
-                return {
-                    "deleted": True,
-                    "sources_deleted": len(exclusive_ids),
-                    "sources_detached": len(orphan_ids),
-                }
+                return {"deleted": True, "sources_deleted": len(exclusive_ids), "sources_detached": len(orphan_ids)}
     except Exception as e:
         logger.error(f"delete_sujet: {e}")
         raise HTTPException(500, str(e))
@@ -325,16 +330,11 @@ async def delete_sujet(sujet_id: int):
 
 @router.delete("/workspaces-list/{workspace_id}")
 async def delete_workspace(workspace_id: int):
-    """
-    Supprime un dossier et tous ses sujets.
-    Même logique de croisement : sources exclusives supprimées, partagées détachées.
-    """
     try:
         with db.get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT id FROM sujets WHERE workspace_id = %s", (workspace_id,))
                 sujet_ids = [r[0] for r in cur.fetchall()]
-
                 all_exclusive, all_orphan = [], []
                 for sid in sujet_ids:
                     cur.execute("SELECT id, url FROM sources WHERE sujet_id = %s", (sid,))
@@ -347,7 +347,6 @@ async def delete_workspace(workspace_id: int):
                             all_orphan.append(src_id)
                         else:
                             all_exclusive.append(src_id)
-
                 if all_exclusive:
                     cur.execute("SELECT url FROM sources WHERE id = ANY(%s)", (all_exclusive,))
                     all_exclusive_urls = [r[0] for r in cur.fetchall()]
@@ -356,17 +355,11 @@ async def delete_workspace(workspace_id: int):
                     cur.execute("DELETE FROM sources WHERE id = ANY(%s)", (all_exclusive,))
                 if all_orphan:
                     cur.execute("UPDATE sources SET sujet_id = NULL WHERE id = ANY(%s)", (all_orphan,))
-
                 if sujet_ids:
                     cur.execute("DELETE FROM sujets WHERE workspace_id = %s", (workspace_id,))
                 cur.execute("DELETE FROM workspaces WHERE id = %s", (workspace_id,))
                 conn.commit()
-                return {
-                    "deleted": True,
-                    "sujets_deleted": len(sujet_ids),
-                    "sources_deleted": len(all_exclusive),
-                    "sources_detached": len(all_orphan),
-                }
+                return {"deleted": True, "sujets_deleted": len(sujet_ids), "sources_deleted": len(all_exclusive), "sources_detached": len(all_orphan)}
     except Exception as e:
         logger.error(f"delete_workspace: {e}")
         raise HTTPException(500, str(e))
@@ -374,7 +367,6 @@ async def delete_workspace(workspace_id: int):
 
 @router.patch("/workspaces-list/{workspace_id}")
 async def update_workspace(workspace_id: int, data: dict):
-    """Renomme un dossier."""
     name = (data.get("name") or "").strip()
     if not name:
         raise HTTPException(400, "name required")
@@ -393,9 +385,363 @@ async def update_workspace(workspace_id: int, data: dict):
         raise HTTPException(500, str(e))
 
 
+# ── décomposition du besoin en sujets ────────────────────────────────────────
+
+@router.post("/decompose-needs")
+async def decompose_needs(data: dict):
+    """
+    Analyse la description libre d'un besoin et propose un découpage en sujets distincts.
+    Input:  { description: str }
+    Output: { workspace_name: str, sujets: [{name, intention_type, rationale}] }
+    """
+    description = (data.get("description") or "").strip()
+    if not description:
+        raise HTTPException(400, "description required")
+
+    from argos.services.llm_provider import create_llm_provider
+    llm = create_llm_provider(
+        provider_type=settings.llm_provider,
+        openai_api_key=settings.openai_api_key,
+        aws_access_key_id=settings.aws_access_key_id,
+        aws_secret_access_key=settings.aws_secret_access_key,
+        aws_region=settings.aws_region,
+        model=settings.aws_bedrock_model,
+    )
+
+    prompt = f"""L'utilisateur a décrit ses besoins de veille :
+
+"{description}"
+
+Analyse ce besoin et décompose-le en sujets de veille distincts et cohérents.
+
+Règles :
+- Un sujet = un périmètre thématique homogène avec une intention claire
+- Intentions possibles : "apprendre" (monter en compétence), "surveiller" (rester informé), "projets" (veille pour un projet concret)
+- Sépare systématiquement les besoins d'apprentissage des besoins de surveillance même si le domaine est similaire
+- Nom du sujet : court (1-3 mots), sans article, sans verbe
+- Propose un nom de dossier principal qui regroupe tous ces sujets (1-2 mots)
+- Entre 1 et 5 sujets maximum
+
+Réponds UNIQUEMENT avec ce JSON :
+{{
+  "workspace_name": "nom du dossier principal",
+  "sujets": [
+    {{
+      "name": "nom court du sujet",
+      "intention_type": "apprendre" | "surveiller" | "projets",
+      "rationale": "une phrase expliquant pourquoi ce sujet mérite une veille séparée"
+    }}
+  ]
+}}"""
+
+    try:
+        response, _ = await llm.generate(
+            prompt=prompt,
+            system_prompt="Tu es expert en organisation de veille technologique. Tu décomposes les besoins avec précision. Réponds uniquement avec du JSON valide.",
+            temperature=0.3, max_tokens=1000, top_p=0.9,
+        )
+        raw = response.strip()
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        if start >= 0 and end > start:
+            raw = raw[start:end]
+        return json.loads(raw)
+    except json.JSONDecodeError as e:
+        logger.error(f"decompose_needs JSON error: {e}\nRaw: {response[:500]}")
+        raise HTTPException(500, "Réponse LLM invalide")
+    except Exception as e:
+        logger.error(f"decompose_needs: {e}", exc_info=True)
+        raise HTTPException(500, str(e))
+
+
+# ── questionnaire de configuration ───────────────────────────────────────────
+
+@router.post("/sujets/{sujet_id}/next-question")
+async def next_question(sujet_id: int, data: dict):
+    from argos.api.calibration_agent import get_agent
+    try:
+        return await get_agent().next_question(
+            sujet_name=data.get("sujet_name", ""),
+            intention=data.get("intention_type", "surveiller"),
+            initial_context=(data.get("initial_context") or "").strip(),
+            qa_history=data.get("previous_qa", []),
+            sujet_id=sujet_id,
+        )
+    except Exception as e:
+        logger.error(f"next_question: {e}", exc_info=True)
+        raise HTTPException(500, str(e))
+
+
+@router.post("/sujets/{sujet_id}/generate-summary")
+async def generate_summary(sujet_id: int, data: dict):
+    from argos.api.calibration_agent import get_agent
+    try:
+        return await get_agent().generate_summary(
+            sujet_name=data.get("sujet_name", ""),
+            intention=data.get("intention_type", "surveiller"),
+            initial_context=(data.get("initial_context") or "").strip(),
+            qa_history=data.get("previous_qa", []),
+            extra_info=(data.get("extra_info") or "").strip(),
+        )
+    except Exception as e:
+        logger.error(f"generate_summary: {e}", exc_info=True)
+        raise HTTPException(500, str(e))
+
+
+@router.post("/sujets/{sujet_id}/generate-questionnaire")
+async def generate_questionnaire(sujet_id: int, data: dict):
+    """
+    Génère un questionnaire adapté à l'intention du sujet.
+    data: { intention_type, user_description, partial_answers? }
+    Retourne: { questions: [{id, text, type, options?, allow_recommendation}] }
+    """
+    intention = data.get("intention_type", "surveiller")
+    description = (data.get("user_description") or "").strip()
+    partial = data.get("partial_answers", {})
+
+    if not description:
+        raise HTTPException(400, "user_description required")
+
+    from argos.services.llm_provider import create_llm_provider
+    llm = create_llm_provider(
+        provider_type=settings.llm_provider,
+        openai_api_key=settings.openai_api_key,
+        aws_access_key_id=settings.aws_access_key_id,
+        aws_secret_access_key=settings.aws_secret_access_key,
+        aws_region=settings.aws_region,
+        model=settings.aws_bedrock_model,
+    )
+
+    context_by_intention = {
+        "apprendre": f"""L'utilisateur veut monter en compétence. Il a décrit son besoin : "{description}"
+
+Génère 6 à 8 questions pour comprendre :
+- Ce qu'il cherche concrètement à savoir faire (pas juste "connaître")
+- Son niveau de départ GLOBAL sur le domaine (une seule question de niveau, pas une par concept)
+- Les sujets ou sous-domaines qui l'intéressent le plus
+- Le type de contenu qui l'aide le mieux (tutoriels, articles de fond, exemples de code, cas réels)
+- La profondeur souhaitée (notions générales vs maîtrise opérationnelle)
+
+INTERDIT : ne pas poser une question par terme technique. Une seule question de niveau global suffit.""",
+
+        "projets": f"""L'utilisateur fait de la veille pour un projet. Il a décrit : "{description}"
+
+Génère 6 à 8 questions pour comprendre :
+- L'objectif final du projet et le problème qu'il résout
+- La stack technique actuelle ou envisagée
+- La phase du projet (exploration / construction / mise en prod)
+- Les types de contenus utiles (benchmarks, retours d'expérience, guides d'intégration, alternatives)
+- Les contraintes à respecter (temps, budget, équipe, régulation)""",
+
+        "surveiller": f"""L'utilisateur veut surveiller un domaine. Il a décrit : "{description}"
+
+Génère 6 à 8 questions pour comprendre :
+- Les sous-domaines ou angles qui l'intéressent
+- Les types d'acteurs à suivre (entreprises, chercheurs, open source, régulateurs)
+- Les types d'événements pertinents (releases, annonces, articles de fond, régulation)
+- La fréquence et la profondeur souhaitées (tout suivre vs signaux forts uniquement)
+- Ce qu'il veut exclure (trop basique, hors périmètre, bruit)""",
+    }
+
+    partial_ctx = ""
+    if partial:
+        partial_ctx = "\n\nRéponses déjà fournies :\n" + "\n".join(
+            f"- Q{k}: {v}" for k, v in partial.items()
+        )
+
+    prompt = f"""{context_by_intention.get(intention, context_by_intention['surveiller'])}{partial_ctx}
+
+Règles absolues :
+- Questions courtes, directes, sans jargon non expliqué
+- Chaque question porte sur UN seul aspect
+- Varier les types : open pour les réponses libres, multiselect quand les options sont connues à l'avance, scale5 UNIQUEMENT pour le niveau global (une seule fois max)
+- Aucune question redondante
+
+Réponds UNIQUEMENT avec du JSON valide, sans commentaire :
+{{
+  "questions": [
+    {{
+      "id": "q1",
+      "text": "texte de la question",
+      "type": "open",
+      "allow_recommendation": false
+    }},
+    {{
+      "id": "q2",
+      "text": "texte de la question",
+      "type": "multiselect",
+      "options": ["option1", "option2", "option3"],
+      "allow_recommendation": true
+    }}
+  ]
+}}"""
+
+    try:
+        response, _ = await llm.generate(
+            prompt=prompt,
+            system_prompt="Tu es un expert en conception pédagogique et en veille technologique. Tu génères des questionnaires précis et actionnables. Réponds uniquement avec du JSON valide.",
+            temperature=0.3, max_tokens=3000, top_p=0.9,
+        )
+        raw = response.strip()
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        if start >= 0 and end > start:
+            raw = raw[start:end]
+        result = json.loads(raw)
+        return result
+    except json.JSONDecodeError as e:
+        logger.error(f"generate_questionnaire JSON error: {e}\nRaw: {response[:500]}")
+        raise HTTPException(500, "Réponse LLM invalide")
+    except Exception as e:
+        logger.error(f"generate_questionnaire: {e}", exc_info=True)
+        raise HTTPException(500, str(e))
+
+
+@router.post("/sujets/{sujet_id}/recommend-answer")
+async def recommend_answer(sujet_id: int, data: dict):
+    """
+    Génère une recommandation justifiée pour une question du questionnaire.
+    data: { question_text, intention_type, user_description, previous_answers }
+    Retourne: { recommendation: str, justification: str, suggested_value: any }
+    """
+    question = data.get("question_text", "")
+    intention = data.get("intention_type", "surveiller")
+    description = data.get("user_description", "")
+    previous = data.get("previous_answers", {})
+
+    from argos.services.llm_provider import create_llm_provider
+    llm = create_llm_provider(
+        provider_type=settings.llm_provider,
+        openai_api_key=settings.openai_api_key,
+        aws_access_key_id=settings.aws_access_key_id,
+        aws_secret_access_key=settings.aws_secret_access_key,
+        aws_region=settings.aws_region,
+        model=settings.aws_bedrock_model,
+    )
+
+    prev_ctx = "\n".join(f"- {k}: {v}" for k, v in previous.items()) if previous else "Aucune"
+
+    prompt = f"""L'utilisateur configure une veille de type "{intention}".
+Il a décrit son besoin : "{description}"
+
+Réponses déjà données :
+{prev_ctx}
+
+Question en cours : "{question}"
+
+Donne une recommandation justifiée et concrète pour cette question.
+Réponds UNIQUEMENT avec ce JSON :
+{{
+  "recommendation": "valeur ou réponse recommandée (concise)",
+  "justification": "explication en 2-3 phrases pourquoi cette recommandation, basée sur le contexte et les réponses précédentes",
+  "suggested_value": "valeur suggérée (texte, niveau, ou liste selon le type de question)"
+}}"""
+
+    try:
+        response, _ = await llm.generate(
+            prompt=prompt,
+            system_prompt="Tu es un expert en veille technologique et en apprentissage. Tes recommandations sont toujours justifiées et contextualisées. Réponds uniquement avec du JSON valide.",
+            temperature=0.4, max_tokens=800, top_p=0.9,
+        )
+        raw = response.strip()
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        if start >= 0 and end > start:
+            raw = raw[start:end]
+        return json.loads(raw)
+    except Exception as e:
+        logger.error(f"recommend_answer: {e}", exc_info=True)
+        raise HTTPException(500, str(e))
+
+
+@router.post("/sujets/{sujet_id}/generate-filter")
+async def generate_filter_config(sujet_id: int, data: dict):
+    from argos.api.calibration_agent import get_agent, clear_search_cache
+    intention = data.get("intention_type", "surveiller")
+    previous_qa = data.get("previous_qa", [])
+    extra_info = (data.get("extra_info") or "").strip()
+
+    try:
+        result = await get_agent().generate_output(
+            sujet_name=data.get("sujet_name", ""),
+            intention=intention,
+            initial_context=(data.get("initial_context") or "").strip(),
+            qa_history=previous_qa,
+            extra_info=extra_info,
+        )
+
+        filter_cfg = result.get("filter_config", {"must_match": [], "min_match_count": 1})
+        official_domains = result.get("official_domains", [])
+        learning_ctx = result.get("learning_context")
+        project_ctx = result.get("project_context")
+
+        confirmed = filter_cfg.get("must_match_confirmed") or filter_cfg.get("must_match") or []
+        suggested = filter_cfg.get("must_match_suggested") or []
+
+        # ── Embedding de profil (silencieux, best-effort) ─────────────────────
+        profile_embedding: list = []
+        try:
+            from argos.services.vector_store_singleton import get_vector_store
+            vs = get_vector_store()
+            if vs and vs.model:
+                profile_text = f"{data.get('sujet_name', '')} {' '.join(confirmed)}".strip()
+                emb = vs.model.embed_text(profile_text)
+                profile_embedding = emb.tolist() if hasattr(emb, "tolist") else list(emb)
+        except Exception as _emb_err:
+            logger.warning(f"generate_filter: could not compute profile embedding: {_emb_err}")
+
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT knowledge_profile FROM sujets WHERE id = %s", (sujet_id,))
+                row = cur.fetchone()
+                existing_profile = row[0] if row else {}
+                updated_profile = {
+                    **(existing_profile or {}),
+                    "official_domains": official_domains,
+                    "keywords": confirmed,
+                    "keywords_suggested": suggested,
+                }
+                if profile_embedding:
+                    updated_profile["profile_embedding"] = profile_embedding
+
+                cur.execute("""
+                    UPDATE sujets SET
+                        intention_type = %s,
+                        filter_config = %s,
+                        knowledge_profile = %s,
+                        learning_context = %s,
+                        project_context = %s,
+                        questionnaire_answers = %s,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                """, (
+                    intention,
+                    json.dumps(filter_cfg),
+                    json.dumps(updated_profile),
+                    json.dumps(learning_ctx) if learning_ctx else None,
+                    json.dumps(project_ctx) if project_ctx else None,
+                    json.dumps({"qa": previous_qa, "extra_info": extra_info}),
+                    sujet_id,
+                ))
+                conn.commit()
+
+        clear_search_cache(sujet_id)
+
+        return {
+            "filter_config": filter_cfg,
+            "learning_context": learning_ctx,
+            "project_context": project_ctx,
+            "summary": result.get("summary", ""),
+        }
+    except Exception as e:
+        logger.error(f"generate_filter: {e}", exc_info=True)
+        raise HTTPException(500, str(e))
+
+
+# ── profil de connaissance (legacy — conservé pour compatibilité) ─────────────
+
 @router.patch("/sujets/{sujet_id}/knowledge-profile")
 async def update_knowledge_profile(sujet_id: int, data: KnowledgeProfileUpdate):
-    """Met à jour le profil de connaissance d'un sujet (merge partiel)."""
     try:
         with db.get_connection() as conn:
             with conn.cursor() as cur:
@@ -427,7 +773,6 @@ async def update_knowledge_profile(sujet_id: int, data: KnowledgeProfileUpdate):
 
 @router.post("/sujets/{sujet_id}/suggest-profile")
 async def suggest_knowledge_profile(sujet_id: int):
-    """Demande à Claude de suggérer un profil de connaissance pour ce sujet."""
     try:
         with db.get_connection() as conn:
             with conn.cursor() as cur:
@@ -446,33 +791,38 @@ async def suggest_knowledge_profile(sujet_id: int):
                 sujet_name, sujet_desc, ws_name, source_urls = row
                 source_urls = source_urls or []
 
-        import anthropic
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        from argos.services.llm_provider import create_llm_provider
+        llm = create_llm_provider(
+            provider_type=settings.llm_provider,
+            openai_api_key=settings.openai_api_key,
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            aws_region=settings.aws_region,
+            model=settings.aws_bedrock_model,
+        )
 
         urls_ctx = "\n".join(f"- {u}" for u in source_urls[:20]) if source_urls else "Aucune source encore assignée."
-        prompt = f"""Tu es un assistant de veille technologique. Pour le sujet "{sujet_name}" (dossier: {ws_name}), génère un profil de connaissance structuré.
-
+        prompt = f"""Pour le sujet "{sujet_name}" (dossier: {ws_name}), génère un profil de connaissance structuré.
 Sources actuellement surveillées :
 {urls_ctx}
 
-Génère un JSON avec exactement ces 4 clés :
-- official_domains : liste des domaines officiels/autoritatifs à toujours indexer (ex: anthropic.com, claude.ai)
-- recognized_domains : communautés et médias secondaires pertinents (ex: reddit.com/r/claudeai, news.ycombinator.com)
-- trusted_queries : 5-8 requêtes de recherche précises pour découvrir de nouveaux contenus sur ce sujet
-- keywords : 8-15 mots-clés pour filtrer la pertinence des articles collectés
+Argos est un système de veille tech qui collecte des articles d'actualité récents (<3 mois) depuis des sites officiels.
 
-Réponds UNIQUEMENT avec le JSON, sans texte autour."""
+Règles strictes :
+- official_domains : UNIQUEMENT les sites officiels des acteurs tech du domaine (ex: anthropic.com, pytorch.org, huggingface.co). JAMAIS arxiv.org, medium.com, towardsdatascience.com, blogs agrégateurs ou sites de cours.
+- recognized_domains : flux RSS ou blogs techniques officiels de ces mêmes acteurs uniquement
+- trusted_queries : 5-8 requêtes précises pour SearXNG (actualité récente, pas de cours ni tutoriels)
+- keywords : 10-20 termes techniques spécifiques au domaine
 
-        message = client.messages.create(
-            model="claude-opus-4-5",
-            max_tokens=2048,
-            messages=[{"role": "user", "content": prompt}],
+Génère un JSON avec exactement ces 4 clés.
+Réponds UNIQUEMENT avec le JSON."""
+
+        response, _ = await llm.generate(
+            prompt=prompt,
+            system_prompt="Tu es un assistant de veille technologique. Réponds uniquement avec du JSON valide.",
+            temperature=0.3, max_tokens=2048, top_p=0.9,
         )
-        text_block = next((b for b in message.content if hasattr(b, "text")), None)
-        if not text_block:
-            raise ValueError("No text block in response")
-        raw = text_block.text.strip()
-        # Extraire le JSON (code block ou brut)
+        raw = response.strip()
         if "```" in raw:
             parts = raw.split("```")
             for part in parts:
@@ -482,13 +832,11 @@ Réponds UNIQUEMENT avec le JSON, sans texte autour."""
                 if part.startswith("{"):
                     raw = part
                     break
-        # Extraire uniquement la portion JSON si précédée de texte
         start = raw.find("{")
         end = raw.rfind("}") + 1
         if start >= 0 and end > start:
             raw = raw[start:end]
         profile = json.loads(raw)
-        # S'assurer que les 4 clés existent
         for key in ("official_domains", "recognized_domains", "trusted_queries", "keywords"):
             if key not in profile:
                 profile[key] = []
@@ -506,7 +854,6 @@ Réponds UNIQUEMENT avec le JSON, sans texte autour."""
 
 @router.patch("/sources/{source_id}/sujet")
 async def assign_source_sujet(source_id: int, data: dict):
-    """Rattache une source à un sujet."""
     sujet_id = data.get("sujet_id")
     try:
         with db.get_connection() as conn:

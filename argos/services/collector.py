@@ -61,6 +61,75 @@ class CollectorService:
                 "settings": {}
             }
     
+    def _passes_relevance_filter(self, item: Dict) -> bool:
+        """
+        Vérifie que l'item correspond au profil du sujet associé.
+        Deux critères complémentaires (un seul suffit) :
+        1. Exact match : au moins min_match_count termes de must_match présents dans title+summary+description[:500]
+        2. Sémantique : cosine similarity entre l'embedding du profil et celui de l'article >= 0.35
+
+        Si le sujet n'a pas de filter_config et pas d'embedding → laisse passer.
+        """
+        sujet_id = item.get("sujet_id")
+        if not sujet_id:
+            return True
+        try:
+            with self.db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT filter_config, knowledge_profile FROM sujets WHERE id = %s",
+                        (sujet_id,)
+                    )
+                    row = cur.fetchone()
+            if not row:
+                return True
+
+            filter_cfg = row[0] or {}
+            knowledge_profile = row[1] or {}
+            profile_embedding = knowledge_profile.get("profile_embedding")
+
+            must_match = [w.lower() for w in (filter_cfg.get("must_match") or []) if w]
+            min_count = int(filter_cfg.get("min_match_count") or 1)
+
+            desc = (item.get('description') or item.get('content') or '')[:500]
+            text = f"{item.get('title', '')} {item.get('summary', '')} {desc}".lower()
+
+            # Critère 1 : exact match
+            if must_match:
+                matched = sum(1 for w in must_match if w in text)
+                if matched >= min_count:
+                    return True
+
+            # Critère 2 : similarité sémantique (si embedding de profil disponible)
+            if profile_embedding:
+                try:
+                    import numpy as np
+                    from sklearn.metrics.pairwise import cosine_similarity
+                    from argos.services.vector_store_singleton import get_vector_store
+                    vs = get_vector_store()
+                    if vs and vs.model:
+                        article_text = f"{item.get('title', '')} {item.get('summary', '')}".strip()
+                        article_emb = vs.model.embed_text(article_text)
+                        profile_emb = np.array(profile_embedding)
+                        sim = cosine_similarity(
+                            article_emb.reshape(1, -1),
+                            profile_emb.reshape(1, -1)
+                        )[0][0]
+                        if sim >= 0.35:
+                            return True
+                except Exception as _sem_err:
+                    logger.debug(f"_passes_relevance_filter semantic error: {_sem_err}")
+
+            # Si must_match défini mais aucun critère satisfait → rejeter
+            if must_match or profile_embedding:
+                return False
+
+            return True  # aucun filtre configuré
+
+        except Exception as e:
+            logger.warning(f"_passes_relevance_filter error: {e}")
+            return True
+
     def _is_duplicate(self, url: str, title: str) -> bool:
         """
         Check if URL or similar title already exists in database.
@@ -185,6 +254,9 @@ class CollectorService:
             if feed.bozo:  # Feed parsing error
                 logger.warning(f"Feed parsing warning for {feed_name}: {feed.bozo_exception}")
             
+            MAX_TRAFILATURA_FETCHES = 10
+            trafilatura_fetches = 0
+
             for entry in feed.entries:
                 try:
                     # Extract data
@@ -200,6 +272,23 @@ class CollectorService:
                     
                     # Clean HTML
                     content_text = self._clean_html(content) if content else ""
+
+                    # Fallback: fetch full article with trafilatura when RSS gives no content
+                    if not content_text and url and trafilatura_fetches < MAX_TRAFILATURA_FETCHES:
+                        try:
+                            import trafilatura
+                            import requests as _req
+                            resp = _req.get(
+                                url,
+                                headers={"User-Agent": "Mozilla/5.0 (compatible; ArgosBot/1.0)"},
+                                timeout=15,
+                                verify=False,
+                            )
+                            content_text = trafilatura.extract(resp.text) or ""
+                            trafilatura_fetches += 1
+                        except Exception:
+                            pass
+
                     summary = self._extract_summary(content_text)
                     
                     # Parse date
@@ -406,7 +495,13 @@ class CollectorService:
                     logger.debug(f"Duplicate found: {item['title']}")
                     duplicates += 1
                     continue
-                
+
+                # Filtre de pertinence : vérifier must_match contre titre + résumé
+                if not self._passes_relevance_filter(item):
+                    logger.debug(f"Filtered out (no must_match): {item['title']}")
+                    duplicates += 1  # comptabilisé comme ignoré
+                    continue
+
                 # Look up workspace_id from source matching source_url
                 workspace_id = item.get("workspace_id")
                 if workspace_id is None:
@@ -573,6 +668,39 @@ class CollectorService:
         import urllib3
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+        _pw_browser = None
+
+        def _get_pw_browser():
+            nonlocal _pw_browser
+            if _pw_browser is None:
+                from playwright.sync_api import sync_playwright
+                _pw = sync_playwright().start()
+                _pw_browser = _pw.chromium.launch(
+                    headless=True,
+                    args=["--no-sandbox", "--disable-dev-shm-usage"],
+                )
+            return _pw_browser
+
+        def _is_js_shell(html: str) -> bool:
+            """Return True when the HTML delivers almost no readable text (SPA shell)."""
+            ext = _HTMLExtractor()
+            ext.feed(html)
+            return len(' '.join(ext.content_chunks)) < 200
+
+        def _fetch_with_playwright(url: str) -> _HTMLExtractor:
+            browser = _get_pw_browser()
+            page = browser.new_page()
+            try:
+                page.goto(url, wait_until='domcontentloaded', timeout=45000)
+                html = page.content()
+                hrefs = page.eval_on_selector_all('a[href]', 'els => els.map(e => e.getAttribute("href"))')
+            finally:
+                page.close()
+            ext = _HTMLExtractor()
+            ext.feed(html)
+            ext.links = hrefs
+            return ext
+
         def _fetch_single(url: str) -> _HTMLExtractor:
             resp = requests.get(
                 url,
@@ -582,6 +710,12 @@ class CollectorService:
             )
             resp.raise_for_status()
             resp.encoding = resp.apparent_encoding or 'utf-8'
+            if _is_js_shell(resp.text):
+                logger.debug(f"JS shell detected, switching to Playwright: {url}")
+                try:
+                    return _fetch_with_playwright(url)
+                except Exception as e:
+                    logger.warning(f"Playwright fallback failed for {url}: {e}")
             ext = _HTMLExtractor()
             ext.feed(resp.text)
             return ext
@@ -598,6 +732,69 @@ class CollectorService:
                 "workspace_id": workspace_id,
             }
 
+        def _compute_hash(text: str) -> str:
+            return hashlib.sha256(text.encode('utf-8')).hexdigest()
+
+        def _get_stored_hash(url: str) -> Optional[str]:
+            """Récupère le hash stocké pour une URL dans documents."""
+            try:
+                with self.db_manager.get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "SELECT content_json->>'content_hash' FROM documents WHERE content_json->>'source_url' = %s ORDER BY created_at DESC LIMIT 1",
+                            (url,)
+                        )
+                        row = cur.fetchone()
+                        return row[0] if row else None
+            except Exception:
+                return None
+
+        def _store_document(url: str, title: str, full_content: str, content_hash: str, ws_id: Optional[int], sujet_id: Optional[int]) -> int:
+            """Stocke le contenu complet d'une page dans documents. Retourne l'id."""
+            import json as _json
+            try:
+                with self.db_manager.get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("""
+                            INSERT INTO documents (title, doc_type, content_markdown, content_json, workspace_id, sujet_id)
+                            VALUES (%s, 'page', %s, %s::jsonb, %s, %s)
+                            RETURNING id
+                        """, (
+                            title[:500],
+                            full_content,
+                            _json.dumps({"source_url": url, "content_hash": content_hash}),
+                            ws_id,
+                            sujet_id,
+                        ))
+                        doc_id = cur.fetchone()[0]
+                        conn.commit()
+                        return doc_id
+            except Exception as e:
+                logger.warning(f"Failed to store document for {url}: {e}")
+                return -1
+
+        def _compute_diff_summary(old_content: str, new_content: str) -> str:
+            """Retourne les lignes ajoutées entre deux versions."""
+            import difflib
+            old_lines = old_content.splitlines()
+            new_lines = new_content.splitlines()
+            added = [
+                line[2:] for line in difflib.unified_diff(old_lines, new_lines, lineterm='', n=0)
+                if line.startswith('+ ') and not line.startswith('+++')
+            ]
+            return '\n'.join(added[:100])  # cap à 100 lignes
+
+        def _get_sujet_id_for_source(url: str) -> Optional[int]:
+            try:
+                with self.db_manager.get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("SELECT sujet_id FROM sources WHERE url = %s", (url,))
+                        row = cur.fetchone()
+                        return row[0] if row else None
+            except Exception:
+                return None
+
+        sujet_id = _get_sujet_id_for_source(source_url)
         crawl_mode = source_url.endswith('/')
         items: List[Dict] = []
 
@@ -606,16 +803,50 @@ class CollectorService:
             try:
                 ext = _fetch_single(source_url)
                 title = ext.title or source_url
-                summary = self._extract_summary(' '.join(ext.content_chunks), 1500)
-                logger.info(f"Fetched website page: {title[:60]}…")
-                self.stats["fetched"] += 1
-                items.append(_make_item(source_url, title, summary))
+                full_content = ' '.join(ext.content_chunks)
+                new_hash = _compute_hash(full_content)
+                old_hash = _get_stored_hash(source_url)
+
+                if old_hash is None:
+                    # Premier crawl — stocker le contenu complet
+                    _store_document(source_url, title, full_content, new_hash, workspace_id, sujet_id)
+                    summary = self._extract_summary(full_content, 1500)
+                    logger.info(f"Fetched website page (first): {title[:60]}…")
+                    self.stats["fetched"] += 1
+                    items.append(_make_item(source_url, title, summary))
+                elif old_hash != new_hash:
+                    # Contenu modifié — récupérer l'ancien contenu et calculer le diff
+                    try:
+                        with self.db_manager.get_connection() as conn:
+                            with conn.cursor() as cur:
+                                cur.execute(
+                                    "SELECT content_markdown FROM documents WHERE content_json->>'source_url' = %s ORDER BY created_at DESC LIMIT 1",
+                                    (source_url,)
+                                )
+                                row = cur.fetchone()
+                                old_content = row[0] if row else ""
+                    except Exception:
+                        old_content = ""
+
+                    diff_summary = _compute_diff_summary(old_content, full_content)
+                    if diff_summary.strip():
+                        # Mettre à jour le document archivé
+                        _store_document(source_url, title, full_content, new_hash, workspace_id, sujet_id)
+                        summary = f"[MISE À JOUR DÉTECTÉE]\n{diff_summary}"
+                        logger.info(f"Change detected on: {title[:60]}…")
+                        self.stats["fetched"] += 1
+                        items.append(_make_item(source_url, f"[MàJ] {title}", summary))
+                else:
+                    logger.debug(f"No change detected: {source_url}")
             except Exception as e:
                 logger.error(f"Failed to fetch website {source_url}: {e}")
                 self.stats["errors"] += 1
             return items
 
         # ── Crawl mode: spider all sub-pages under base URL ──────────────────────
+        from urllib.parse import urlparse
+        _base_netloc = urlparse(source_url).netloc
+
         MAX_PAGES = 100
         visited: set = set()
         queue: List[str] = [source_url]
@@ -628,18 +859,50 @@ class CollectorService:
             try:
                 ext = _fetch_single(url)
                 title = ext.title or url
-                summary = self._extract_summary(' '.join(ext.content_chunks), 1500)
-                logger.info(f"Crawled [{len(visited)}/{MAX_PAGES}]: {title[:60]}…")
-                self.stats["fetched"] += 1
-                items.append(_make_item(url, title, summary))
+                full_content = ' '.join(ext.content_chunks)
+                new_hash = _compute_hash(full_content)
+                old_hash = _get_stored_hash(url)
+
+                if old_hash is None:
+                    # Nouvelle page — stocker et créer un item
+                    _store_document(url, title, full_content, new_hash, workspace_id, sujet_id)
+                    summary = self._extract_summary(full_content, 1500)
+                    logger.info(f"Crawled new [{len(visited)}/{MAX_PAGES}]: {title[:60]}…")
+                    self.stats["fetched"] += 1
+                    items.append(_make_item(url, title, summary))
+                elif old_hash != new_hash:
+                    # Page modifiée — diff uniquement
+                    try:
+                        with self.db_manager.get_connection() as conn:
+                            with conn.cursor() as cur:
+                                cur.execute(
+                                    "SELECT content_markdown FROM documents WHERE content_json->>'source_url' = %s ORDER BY created_at DESC LIMIT 1",
+                                    (url,)
+                                )
+                                row = cur.fetchone()
+                                old_content = row[0] if row else ""
+                    except Exception:
+                        old_content = ""
+
+                    diff_summary = _compute_diff_summary(old_content, full_content)
+                    if diff_summary.strip():
+                        _store_document(url, title, full_content, new_hash, workspace_id, sujet_id)
+                        summary = f"[MISE À JOUR DÉTECTÉE]\n{diff_summary}"
+                        logger.info(f"Change detected [{len(visited)}/{MAX_PAGES}]: {title[:60]}…")
+                        self.stats["fetched"] += 1
+                        items.append(_make_item(url, f"[MàJ] {title}", summary))
+                else:
+                    logger.debug(f"No change: {url}")
 
                 # Enqueue new internal links
                 for href in ext.links:
-                    abs_url = urljoin(url, href).split('#')[0]  # strip fragment
+                    abs_url = urljoin(url, href).split('#')[0]
+                    parsed = urlparse(abs_url)
                     if (
                         abs_url not in visited
                         and abs_url not in queue
-                        and abs_url.startswith(source_url)
+                        and parsed.netloc == _base_netloc
+                        and parsed.scheme in ('http', 'https')
                         and len(visited) + len(queue) < MAX_PAGES
                     ):
                         queue.append(abs_url)
@@ -647,7 +910,7 @@ class CollectorService:
                 logger.error(f"Failed to crawl {url}: {e}")
                 self.stats["errors"] += 1
 
-        logger.info(f"Crawl complete for {source_url}: {len(items)} pages collected")
+        logger.info(f"Crawl complete for {source_url}: {len(items)} new/changed pages")
         return items
 
     def fetch_from_db_sources(self, workspace_id: Optional[int] = None) -> Dict:
