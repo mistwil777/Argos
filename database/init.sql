@@ -89,11 +89,12 @@ CREATE TABLE IF NOT EXISTS items (
     rag_indexed_at TIMESTAMP WITH TIME ZONE,
     -- Multi-tenant
     workspace_id INTEGER REFERENCES workspaces(id) ON DELETE SET NULL,
+    sujet_id INTEGER,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT items_url_unique UNIQUE (url)
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE UNIQUE INDEX items_url_sujet_key ON items (url, COALESCE(sujet_id, -1));
 CREATE INDEX idx_items_classification_status ON items(classification_status);
 CREATE INDEX idx_items_source_type ON items(source_type);
 CREATE INDEX idx_items_importance ON items(importance);

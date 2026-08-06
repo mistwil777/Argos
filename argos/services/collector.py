@@ -502,56 +502,67 @@ class CollectorService:
                     duplicates += 1  # comptabilisé comme ignoré
                     continue
 
-                # Look up workspace_id from source matching source_url
-                workspace_id = item.get("workspace_id")
-                if workspace_id is None:
-                    try:
-                        with self.db.get_connection() as conn:
-                            with conn.cursor() as cur:
-                                cur.execute(
-                                    "SELECT workspace_id, sujet_id FROM sources WHERE url = %s LIMIT 1",
-                                    (item["source_url"],)
-                                )
-                                src_row = cur.fetchone()
-                                if src_row:
-                                    workspace_id = src_row[0]
-                                    item["sujet_id"] = src_row[1]
-                    except Exception:
-                        pass
-
-                # Insert into database with ON CONFLICT (url) DO NOTHING for dedup
-                query = """
-                    INSERT INTO items (
-                        source_type, source_url, url, title, summary,
-                        author, published_at, workspace_id, sujet_id
-                    )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (url) DO NOTHING
-                    RETURNING id
-                """
-
-                with self.db.get_connection() as conn:
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            query,
-                            (
-                                item["source_type"],
-                                item["source_url"],
-                                item["url"],
-                                item["title"],
-                                item.get("summary", ""),
-                                item.get("author"),
-                                item.get("published_at"),
-                                workspace_id,
-                                item.get("sujet_id"),
+                # Récupérer TOUS les sujets qui trackent cette source_url
+                # Un article peut être pertinent pour plusieurs sujets en parallèle
+                source_assignments: list[tuple] = []  # [(workspace_id, sujet_id)]
+                try:
+                    with self.db.get_connection() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                "SELECT workspace_id, sujet_id FROM sources WHERE url = %s",
+                                (item["source_url"],)
                             )
+                            source_assignments = cur.fetchall() or []
+                except Exception:
+                    pass
+
+                if not source_assignments:
+                    # Source inconnue : on tente quand même avec ce qu'on a
+                    source_assignments = [(item.get("workspace_id"), item.get("sujet_id"))]
+
+                item_id = None
+                for ws_id, s_id in source_assignments:
+                    item_copy = dict(item, workspace_id=ws_id, sujet_id=s_id)
+                    # Filtre de pertinence par sujet
+                    if not self._passes_relevance_filter(item_copy):
+                        logger.debug(f"Filtered out for sujet {s_id}: {item['title']}")
+                        duplicates += 1
+                        continue
+
+                    insert_query = """
+                        INSERT INTO items (
+                            source_type, source_url, url, title, summary,
+                            author, published_at, workspace_id, sujet_id
                         )
-                        row = cur.fetchone()
-                        item_id = row[0] if row else None
-                        if item_id is None:
-                            # Duplicate silently skipped by ON CONFLICT
-                            duplicates += 1
-                            continue
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (url, COALESCE(sujet_id, -1)) DO NOTHING
+                        RETURNING id
+                    """
+                    with self.db.get_connection() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                insert_query,
+                                (
+                                    item_copy["source_type"],
+                                    item_copy["source_url"],
+                                    item_copy["url"],
+                                    item_copy["title"],
+                                    item_copy.get("summary", ""),
+                                    item_copy.get("author"),
+                                    item_copy.get("published_at"),
+                                    ws_id,
+                                    s_id,
+                                )
+                            )
+                            row = cur.fetchone()
+                            if row:
+                                item_id = row[0]
+                                saved += 1
+                            else:
+                                duplicates += 1
+
+                if item_id is None:
+                    continue
                 
                 # Persister le score de fiabilité si présent
                 if item_id and item.get("_reliability_score") is not None:
