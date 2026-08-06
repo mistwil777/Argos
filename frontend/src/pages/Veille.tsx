@@ -1,4 +1,4 @@
-import { useState, lazy, Suspense } from 'react'
+import { useState, useRef, lazy, Suspense } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Sparkles, Loader2, Folder, Check, ChevronRight, Pencil } from 'lucide-react'
 import { api } from '@/services/api'
@@ -96,18 +96,26 @@ function CadrageVeille({ onDone }: { onDone: () => void }) {
     finally { setCreating(false) }
   }
 
+  const transitioningRef = useRef(false)
+
   function nextQuestionnaire() {
-    if (queue.length) {
-      setCurrentQ(queue[0])
-      setQueue(prev => prev.slice(1))
-    } else {
-      setCurrentQ(null)
-      setQueue([])
-      setDescription('')
-      setProposals([])
-      setWsName('')
-      onDone()
-    }
+    if (transitioningRef.current) return
+    transitioningRef.current = true
+    setQueue(prev => {
+      if (prev.length) {
+        setCurrentQ(prev[0])
+        transitioningRef.current = false
+        return prev.slice(1)
+      } else {
+        setCurrentQ(null)
+        setDescription('')
+        setProposals([])
+        setWsName('')
+        transitioningRef.current = false
+        onDone()
+        return []
+      }
+    })
   }
 
   const activeCount = proposals.filter(p => p.enabled).length
