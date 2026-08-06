@@ -740,7 +740,7 @@ def _auto_create_sources(sujet_id: int, workspace_id: int, official_domains: lis
                     cur.execute("""
                         INSERT INTO sources (name, url, type, workspace_id, sujet_id, active, priority)
                         VALUES (%s, %s, %s, %s, %s, true, 'normal')
-                        ON CONFLICT (url) DO UPDATE SET sujet_id = EXCLUDED.sujet_id
+                        ON CONFLICT (url, COALESCE(sujet_id, -1)) DO NOTHING
                         RETURNING id
                     """, (name, source_url, source_type, workspace_id, sujet_id))
                     row = cur.fetchone()
