@@ -46,6 +46,7 @@ export default function QuestionnaireModal({ sujetId, sujetName, intentionType, 
   const [suggestedItems, setSuggestedItems] = useState<{ term: string; accepted: boolean }[]>([])
   const [filterSummary, setFilterSummary] = useState('')
   const [loadingFilter, setLoadingFilter] = useState(false)
+  const [confirming, setConfirming] = useState(false)
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -139,7 +140,16 @@ export default function QuestionnaireModal({ sujetId, sujetName, intentionType, 
     finally { setLoadingFilter(false) }
   }
 
+  function goBack() {
+    if (history.length === 0) return
+    const newHistory = history.slice(0, -1)
+    setHistory(newHistory)
+    setInterviewDone(false)
+    loadNextQuestion(newHistory)
+  }
+
   function confirm() {
+    setConfirming(true)
     const accepted = [
       ...confirmedItems.filter(f => f.accepted).map(f => f.term),
       ...suggestedItems.filter(f => f.accepted).map(f => f.term),
@@ -213,9 +223,16 @@ export default function QuestionnaireModal({ sujetId, sujetName, intentionType, 
               <AnimatePresence mode="wait">
                 {loadingNext ? (
                   <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                    className="flex items-center gap-2 text-[hsl(var(--text-3))]">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span className="text-[12px] font-mono">Analyse en cours…</span>
+                    className="space-y-2">
+                    <div className="flex items-center gap-2 text-[hsl(var(--text-3))]">
+                      <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
+                      <span className="text-[12px] font-mono">Analyse en cours…</span>
+                    </div>
+                    {history.length === 0 && (
+                      <p className="text-[11px] text-[hsl(var(--text-3))] leading-relaxed pl-6">
+                        L'agent explore l'écosystème de ton sujet via des recherches web — cette première analyse prend 15 à 30 secondes.
+                      </p>
+                    )}
                   </motion.div>
                 ) : interviewDone ? (
                   <motion.div key="done" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
@@ -405,9 +422,18 @@ export default function QuestionnaireModal({ sujetId, sujetName, intentionType, 
 
         {/* Footer */}
         <div className="flex-shrink-0 px-6 py-4 border-t border-[hsl(var(--line))] bg-[hsl(var(--bg-2))] flex items-center justify-between">
-          <button onClick={onClose} className="text-[11.5px] font-mono text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))] transition-colors">
-            Annuler
-          </button>
+          <div className="flex items-center gap-3">
+            <button onClick={onClose} className="text-[11.5px] font-mono text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))] transition-colors">
+              Annuler
+            </button>
+            {/* Retour arrière — disponible pendant l'interview si au moins 1 réponse */}
+            {phase === 'interview' && !loadingNext && history.length > 0 && !interviewDone && (
+              <button onClick={goBack}
+                className="text-[11.5px] font-mono text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))] transition-colors">
+                ← Retour
+              </button>
+            )}
+          </div>
 
           <div className="flex items-center gap-3">
             {/* Interview — soumettre la réponse ou finir */}
@@ -436,9 +462,12 @@ export default function QuestionnaireModal({ sujetId, sujetName, intentionType, 
             {/* Whitelist — valider */}
             {phase === 'filter' && !loadingFilter && (
               <button onClick={confirm}
-                disabled={confirmedItems.filter(f => f.accepted).length === 0 && suggestedItems.filter(f => f.accepted).length === 0}
+                disabled={confirming || (confirmedItems.filter(f => f.accepted).length === 0 && suggestedItems.filter(f => f.accepted).length === 0)}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[hsl(var(--accent))] text-white text-[12.5px] font-bold disabled:opacity-40 transition-all">
-                <Check className="w-3.5 h-3.5" /> Valider la configuration
+                {confirming
+                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Enregistrement…</>
+                  : <><Check className="w-3.5 h-3.5" /> Valider la configuration</>
+                }
               </button>
             )}
           </div>
