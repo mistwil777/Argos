@@ -654,6 +654,106 @@ Réponds UNIQUEMENT avec ce JSON :
         raise HTTPException(500, str(e))
 
 
+# ── RSS connus pour les domaines officiels courants ──────────────────────────
+# Format : domaine → (url_source, type)
+# Si un domaine n'est pas dans cette table, on crée une source website avec l'URL de base.
+_KNOWN_RSS: dict[str, tuple[str, str]] = {
+    # IA générative
+    "anthropic.com":          ("https://www.anthropic.com/news/rss.xml", "rss"),
+    "openai.com":             ("https://openai.com/blog/rss.xml", "rss"),
+    "mistral.ai":             ("https://mistral.ai/news/rss", "rss"),
+    "deepmind.google":        ("https://deepmind.google/blog/rss.xml", "rss"),
+    "research.google":        ("https://research.google/blog/rss/", "rss"),
+    "ai.meta.com":            ("https://ai.meta.com/blog/feed/", "rss"),
+    "blogs.microsoft.com":    ("https://blogs.microsoft.com/feed/", "rss"),
+    "huggingface.co":         ("https://huggingface.co/blog/feed.xml", "rss"),
+    # ML / frameworks
+    "pytorch.org":            ("https://pytorch.org/blog/feed.xml", "rss"),
+    "tensorflow.org":         ("https://blog.tensorflow.org/feeds/posts/default", "rss"),
+    "jax.readthedocs.io":     ("https://jax.readthedocs.io/en/latest/", "website"),
+    "scikit-learn.org":       ("https://scikit-learn.org/stable/whats_new.html", "website"),
+    "xgboost.readthedocs.io": ("https://xgboost.readthedocs.io/en/stable/", "website"),
+    "lightgbm.readthedocs.io":("https://lightgbm.readthedocs.io/en/latest/", "website"),
+    "statsmodels.org":        ("https://www.statsmodels.org/stable/index.html", "website"),
+    "pymc.io":                ("https://www.pymc.io/blog.html", "website"),
+    # MLOps / infra
+    "mlflow.org":             ("https://mlflow.org/blog/feed.xml", "rss"),
+    "wandb.ai":               ("https://wandb.ai/fully-connected/feed.xml", "rss"),
+    "langchain.com":          ("https://blog.langchain.dev/rss/", "rss"),
+    "llamaindex.ai":          ("https://www.llamaindex.ai/blog/feed", "rss"),
+    "github.blog":            ("https://github.blog/feed/", "rss"),
+    # Cloud / infra
+    "aws.amazon.com":         ("https://aws.amazon.com/blogs/machine-learning/feed/", "rss"),
+    "cloud.google.com":       ("https://cloud.google.com/blog/products/ai-machine-learning/rss/feed.xml", "rss"),
+    "azure.microsoft.com":    ("https://azure.microsoft.com/en-us/blog/topics/ai/feed/", "rss"),
+}
+
+
+def _auto_create_sources(sujet_id: int, workspace_id: int, official_domains: list[str], conn_db) -> int:
+    """
+    Crée silencieusement des sources pour chaque domaine officiel fourni.
+    - RSS connu → type rss avec l'URL du flux
+    - Domaine inconnu → type website avec https://<domaine>/
+    Utilise ON CONFLICT DO NOTHING sur l'URL pour éviter les doublons.
+    Retourne le nombre de sources effectivement insérées.
+    """
+    if not official_domains:
+        return 0
+
+    # Récupérer workspace_id depuis le sujet si non fourni
+    try:
+        with conn_db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT workspace_id FROM sujets WHERE id = %s", (sujet_id,))
+                row = cur.fetchone()
+                if row and row[0]:
+                    workspace_id = row[0]
+    except Exception:
+        pass
+
+    inserted = 0
+    for domain in official_domains:
+        domain = domain.strip().lower().rstrip("/")
+        if not domain:
+            continue
+
+        # Chercher dans la table RSS connus (match exact ou suffixe)
+        source_url, source_type = None, "website"
+        if domain in _KNOWN_RSS:
+            source_url, source_type = _KNOWN_RSS[domain]
+        else:
+            # Chercher par suffixe (ex: "docs.anthropic.com" → "anthropic.com")
+            for known_domain, (known_url, known_type) in _KNOWN_RSS.items():
+                if domain.endswith(known_domain):
+                    source_url, source_type = known_url, known_type
+                    break
+
+        if source_url is None:
+            source_url = f"https://{domain}/"
+            source_type = "website"
+
+        name = domain.split(".")[0].capitalize()
+
+        try:
+            with conn_db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        INSERT INTO sources (name, url, type, workspace_id, sujet_id, active, priority)
+                        VALUES (%s, %s, %s, %s, %s, true, 'normal')
+                        ON CONFLICT (url) DO UPDATE SET sujet_id = EXCLUDED.sujet_id
+                        RETURNING id
+                    """, (name, source_url, source_type, workspace_id, sujet_id))
+                    row = cur.fetchone()
+                    conn.commit()
+                    if row:
+                        inserted += 1
+                        logger.info(f"auto_create_sources: {source_type} {source_url} → sujet {sujet_id}")
+        except Exception as e:
+            logger.warning(f"auto_create_sources: failed for {domain}: {e}")
+
+    return inserted
+
+
 @router.post("/sujets/{sujet_id}/generate-filter")
 async def generate_filter_config(sujet_id: int, data: dict):
     from argos.api.calibration_agent import get_agent, clear_search_cache
@@ -725,6 +825,9 @@ async def generate_filter_config(sujet_id: int, data: dict):
                 ))
                 conn.commit()
 
+        # ── Sources officielles auto-créées (silencieux) ─────────────────────
+        sources_created = _auto_create_sources(sujet_id, 0, official_domains, conn_db=db)
+
         clear_search_cache(sujet_id)
 
         return {
@@ -732,6 +835,7 @@ async def generate_filter_config(sujet_id: int, data: dict):
             "learning_context": learning_ctx,
             "project_context": project_ctx,
             "summary": result.get("summary", ""),
+            "sources_created": sources_created,
         }
     except Exception as e:
         logger.error(f"generate_filter: {e}", exc_info=True)
