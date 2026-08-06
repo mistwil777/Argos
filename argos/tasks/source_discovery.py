@@ -229,8 +229,8 @@ def _save_source(sujet_id: int, url: str, name: str, source_type: str, task_id: 
         cur = conn.cursor()
         cur.execute(
             """
-            INSERT INTO sources (sujet_id, url, name, type, is_active, created_at)
-            VALUES (%s, %s, %s, %s, true, NOW())
+            INSERT INTO sources (sujet_id, url, name, type, active, priority)
+            VALUES (%s, %s, %s, %s, true, 'normal')
             ON CONFLICT (url, COALESCE(sujet_id, -1)) DO NOTHING
             """,
             (sujet_id, url, name, source_type),
