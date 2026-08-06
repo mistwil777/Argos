@@ -154,6 +154,17 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
         replace_existing=True,
     )
 
+    # ----------------------------------------------------------------
+    # 8. Audit KG→RAG — hebdomadaire (dimanche 3h30)
+    # ----------------------------------------------------------------
+    scheduler.add_job(
+        _job_kg_rag_nightly,
+        trigger=CronTrigger(day_of_week="sun", hour=3, minute=30),
+        id="kg_rag_nightly_audit",
+        name="Audit KG→RAG hebdomadaire",
+        replace_existing=True,
+    )
+
 
 def _log_jobs(scheduler: AsyncIOScheduler) -> None:
     for job in scheduler.get_jobs():
@@ -275,3 +286,34 @@ async def _job_rag_hygiene() -> None:
         logger.info(f"[SCHEDULER] Hygiène RAG terminée — {stats}")
     except Exception as e:
         logger.error(f"[SCHEDULER] Erreur hygiène RAG : {e}", exc_info=True)
+
+
+async def _job_kg_rag_nightly() -> None:
+    """Audit hebdomadaire KG→RAG : dédup nœuds, réaffectation items, enrichissement whitelists."""
+    logger.info("[SCHEDULER] Audit KG→RAG démarré")
+    try:
+        from argos.services.kg_rag_audit import run_kg_rag_audit
+        from argos.services.vector_store_singleton import get_vector_store
+        from argos.services.rag import RAGService
+        from argos.api.router import db
+        from argos.services.llm_provider import create_llm_provider
+        from argos.config import settings
+
+        llm = create_llm_provider(
+            provider_type=settings.llm_provider,
+            openai_api_key=settings.openai_api_key,
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            aws_region=settings.aws_region,
+            model="us.anthropic.claude-haiku-4-5-20251001",
+        )
+        vs = get_vector_store()
+        rag_service = RAGService(
+            llm_provider=llm,
+            vector_store=vs,
+            db_manager=db,
+        )
+        stats = await run_kg_rag_audit(db=db, llm=llm, vs=vs, rag_service=rag_service)
+        logger.info(f"[SCHEDULER] Audit KG→RAG terminé — {stats}")
+    except Exception as e:
+        logger.error(f"[SCHEDULER] Erreur audit KG→RAG : {e}", exc_info=True)
