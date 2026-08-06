@@ -7,6 +7,7 @@ import re
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from argos.database import DatabaseManager
@@ -654,104 +655,23 @@ Réponds UNIQUEMENT avec ce JSON :
         raise HTTPException(500, str(e))
 
 
-# ── RSS connus pour les domaines officiels courants ──────────────────────────
-# Format : domaine → (url_source, type)
-# Si un domaine n'est pas dans cette table, on crée une source website avec l'URL de base.
-_KNOWN_RSS: dict[str, tuple[str, str]] = {
-    # IA générative
-    "anthropic.com":          ("https://www.anthropic.com/news/rss.xml", "rss"),
-    "openai.com":             ("https://openai.com/blog/rss.xml", "rss"),
-    "mistral.ai":             ("https://mistral.ai/news/rss", "rss"),
-    "deepmind.google":        ("https://deepmind.google/blog/rss.xml", "rss"),
-    "research.google":        ("https://research.google/blog/rss/", "rss"),
-    "ai.meta.com":            ("https://ai.meta.com/blog/feed/", "rss"),
-    "blogs.microsoft.com":    ("https://blogs.microsoft.com/feed/", "rss"),
-    "huggingface.co":         ("https://huggingface.co/blog/feed.xml", "rss"),
-    # ML / frameworks
-    "pytorch.org":            ("https://pytorch.org/blog/feed.xml", "rss"),
-    "tensorflow.org":         ("https://blog.tensorflow.org/feeds/posts/default", "rss"),
-    "jax.readthedocs.io":     ("https://jax.readthedocs.io/en/latest/", "website"),
-    "scikit-learn.org":       ("https://scikit-learn.org/stable/whats_new.html", "website"),
-    "xgboost.readthedocs.io": ("https://xgboost.readthedocs.io/en/stable/", "website"),
-    "lightgbm.readthedocs.io":("https://lightgbm.readthedocs.io/en/latest/", "website"),
-    "statsmodels.org":        ("https://www.statsmodels.org/stable/index.html", "website"),
-    "pymc.io":                ("https://www.pymc.io/blog.html", "website"),
-    # MLOps / infra
-    "mlflow.org":             ("https://mlflow.org/blog/feed.xml", "rss"),
-    "wandb.ai":               ("https://wandb.ai/fully-connected/feed.xml", "rss"),
-    "langchain.com":          ("https://blog.langchain.dev/rss/", "rss"),
-    "llamaindex.ai":          ("https://www.llamaindex.ai/blog/feed", "rss"),
-    "github.blog":            ("https://github.blog/feed/", "rss"),
-    # Cloud / infra
-    "aws.amazon.com":         ("https://aws.amazon.com/blogs/machine-learning/feed/", "rss"),
-    "cloud.google.com":       ("https://cloud.google.com/blog/products/ai-machine-learning/rss/feed.xml", "rss"),
-    "azure.microsoft.com":    ("https://azure.microsoft.com/en-us/blog/topics/ai/feed/", "rss"),
-}
-
-
-def _auto_create_sources(sujet_id: int, workspace_id: int, official_domains: list[str], conn_db) -> int:
+def _launch_source_discovery(sujet_id: int, source_candidates: list[dict], sujet_name: str) -> list[str]:
     """
-    Crée silencieusement des sources pour chaque domaine officiel fourni.
-    - RSS connu → type rss avec l'URL du flux
-    - Domaine inconnu → type website avec https://<domaine>/
-    Utilise ON CONFLICT DO NOTHING sur l'URL pour éviter les doublons.
-    Retourne le nombre de sources effectivement insérées.
+    Lance les tâches Celery de découverte pour chaque source candidate.
+    Retourne la liste des task_ids Celery.
     """
-    if not official_domains:
-        return 0
-
-    # Récupérer workspace_id depuis le sujet si non fourni
-    try:
-        with conn_db.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT workspace_id FROM sujets WHERE id = %s", (sujet_id,))
-                row = cur.fetchone()
-                if row and row[0]:
-                    workspace_id = row[0]
-    except Exception:
-        pass
-
-    inserted = 0
-    for domain in official_domains:
-        domain = domain.strip().lower().rstrip("/")
-        if not domain:
+    from argos.tasks.source_discovery import discover_source
+    task_ids = []
+    for candidate in source_candidates:
+        if not candidate.get("url"):
             continue
-
-        # Chercher dans la table RSS connus (match exact ou suffixe)
-        source_url, source_type = None, "website"
-        if domain in _KNOWN_RSS:
-            source_url, source_type = _KNOWN_RSS[domain]
-        else:
-            # Chercher par suffixe (ex: "docs.anthropic.com" → "anthropic.com")
-            for known_domain, (known_url, known_type) in _KNOWN_RSS.items():
-                if domain.endswith(known_domain):
-                    source_url, source_type = known_url, known_type
-                    break
-
-        if source_url is None:
-            source_url = f"https://{domain}/"
-            source_type = "website"
-
-        name = domain.split(".")[0].capitalize()
-
         try:
-            with conn_db.get_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute("""
-                        INSERT INTO sources (name, url, type, workspace_id, sujet_id, active, priority)
-                        VALUES (%s, %s, %s, %s, %s, true, 'normal')
-                        ON CONFLICT (url, COALESCE(sujet_id, -1)) DO NOTHING
-                        RETURNING id
-                    """, (name, source_url, source_type, workspace_id, sujet_id))
-                    row = cur.fetchone()
-                    conn.commit()
-                    if row:
-                        inserted += 1
-                        logger.info(f"auto_create_sources: {source_type} {source_url} → sujet {sujet_id}")
+            task = discover_source.delay(sujet_id, candidate, sujet_name)
+            task_ids.append(task.id)
+            logger.info(f"Launched discovery task {task.id} for {candidate['url']}")
         except Exception as e:
-            logger.warning(f"auto_create_sources: failed for {domain}: {e}")
-
-    return inserted
+            logger.warning(f"Could not launch discovery task for {candidate.get('url')}: {e}")
+    return task_ids
 
 
 @router.post("/sujets/{sujet_id}/generate-filter")
@@ -771,9 +691,10 @@ async def generate_filter_config(sujet_id: int, data: dict):
         )
 
         filter_cfg = result.get("filter_config", {"must_match": [], "min_match_count": 1})
-        official_domains = result.get("official_domains", [])
+        source_candidates = result.get("source_candidates", [])
         learning_ctx = result.get("learning_context")
         project_ctx = result.get("project_context")
+        sujet_name_str = data.get("sujet_name", "")
 
         confirmed = filter_cfg.get("must_match_confirmed") or filter_cfg.get("must_match") or []
         suggested = filter_cfg.get("must_match_suggested") or []
@@ -784,7 +705,7 @@ async def generate_filter_config(sujet_id: int, data: dict):
             from argos.services.vector_store_singleton import get_vector_store
             vs = get_vector_store()
             if vs and vs.model:
-                profile_text = f"{data.get('sujet_name', '')} {' '.join(confirmed)}".strip()
+                profile_text = f"{sujet_name_str} {' '.join(confirmed)}".strip()
                 emb = vs.model.embed_text(profile_text)
                 profile_embedding = emb.tolist() if hasattr(emb, "tolist") else list(emb)
         except Exception as _emb_err:
@@ -797,7 +718,7 @@ async def generate_filter_config(sujet_id: int, data: dict):
                 existing_profile = row[0] if row else {}
                 updated_profile = {
                     **(existing_profile or {}),
-                    "official_domains": official_domains,
+                    "source_candidates": source_candidates,
                     "keywords": confirmed,
                     "keywords_suggested": suggested,
                 }
@@ -825,8 +746,8 @@ async def generate_filter_config(sujet_id: int, data: dict):
                 ))
                 conn.commit()
 
-        # ── Sources officielles auto-créées (silencieux) ─────────────────────
-        sources_created = _auto_create_sources(sujet_id, 0, official_domains, conn_db=db)
+        # ── Lancer la découverte asynchrone (Celery) ─────────────────────────
+        task_ids = _launch_source_discovery(sujet_id, source_candidates, sujet_name_str)
 
         clear_search_cache(sujet_id)
 
@@ -835,7 +756,8 @@ async def generate_filter_config(sujet_id: int, data: dict):
             "learning_context": learning_ctx,
             "project_context": project_ctx,
             "summary": result.get("summary", ""),
-            "sources_created": sources_created,
+            "discovery_task_ids": task_ids,
+            "source_candidates_count": len(source_candidates),
         }
     except Exception as e:
         logger.error(f"generate_filter: {e}", exc_info=True)
@@ -971,3 +893,75 @@ async def assign_source_sujet(source_id: int, data: dict):
     except Exception as e:
         logger.error(f"assign_source_sujet: {e}")
         raise HTTPException(500, str(e))
+
+
+# ── SSE : flux de découverte de sources en temps réel ────────────────────────
+
+@router.get("/sujets/{sujet_id}/sources-discovery-stream")
+async def sources_discovery_stream(sujet_id: int):
+    """
+    SSE endpoint : publie les statuts de découverte de sources en temps réel.
+    Le client se connecte après avoir lancé generate-filter.
+    Les tâches Celery publient dans Redis ; ce handler lit le channel pub/sub.
+    """
+    import asyncio
+    import os
+
+    async def event_generator():
+        import redis.asyncio as aioredis
+
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        channel = f"argos:discovery:{sujet_id}"
+
+        r = aioredis.from_url(redis_url, decode_responses=True)
+        pubsub = r.pubsub()
+        await pubsub.subscribe(channel)
+
+        # Envoyer d'abord les tâches déjà terminées (état snapshot dans Redis)
+        snapshot_pattern = f"argos:discovery:{sujet_id}:*"
+        try:
+            async for key in r.scan_iter(snapshot_pattern):
+                value = await r.get(key)
+                if value:
+                    yield f"data: {value}\n\n"
+        except Exception:
+            pass
+
+        # Puis écouter les nouvelles notifications
+        try:
+            timeout = 300  # 5 minutes max
+            start = asyncio.get_event_loop().time()
+            async for message in pubsub.listen():
+                if asyncio.get_event_loop().time() - start > timeout:
+                    break
+                if message["type"] == "message":
+                    yield f"data: {message['data']}\n\n"
+                    # Vérifier si toutes les tâches sont terminées
+                    try:
+                        data = json.loads(message["data"])
+                        if data.get("status") in ("rss_found", "website_found", "not_found", "error"):
+                            # Compter les tâches actives restantes
+                            remaining = 0
+                            async for _ in r.scan_iter(snapshot_pattern):
+                                val = await r.get(_)
+                                if val:
+                                    s = json.loads(val).get("status", "")
+                                    if s in ("pending", "probing"):
+                                        remaining += 1
+                            if remaining == 0:
+                                yield f"data: {json.dumps({'status': 'complete', 'sujet_id': sujet_id})}\n\n"
+                                break
+                    except Exception:
+                        pass
+        finally:
+            await pubsub.unsubscribe(channel)
+            await r.aclose()
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Sparkles, Loader2, Folder, Check, ChevronRight, Pencil } from 'lucide-react'
 import { api } from '@/services/api'
 import QuestionnaireModal from '@/components/ui/QuestionnaireModal'
+import SourceDiscoveryStream from '@/components/ui/SourceDiscoveryStream'
 
 const DossiersContent = lazy(() => import('@/pages/Dossiers'))
 
@@ -40,6 +41,8 @@ function CadrageVeille({ onDone }: { onDone: () => void }) {
   const [queue, setQueue]   = useState<{ id: number; name: string; intention: string; context: string }[]>([])
   const [currentQ, setCurrentQ] = useState<{ id: number; name: string; intention: string; context: string } | null>(null)
   const [showLaunchWarning, setShowLaunchWarning] = useState(false)
+  // Sujets en cours de découverte de sources (SSE)
+  const [discoveringSujets, setDiscoveringSujets] = useState<{ id: number; name: string }[]>([])
 
   async function analyze() {
     if (description.trim().length < 10) return
@@ -98,7 +101,14 @@ function CadrageVeille({ onDone }: { onDone: () => void }) {
 
   const transitioningRef = useRef(false)
 
-  function nextQuestionnaire() {
+  function nextQuestionnaire(completedSujetId?: number, completedSujetName?: string) {
+    // Si un sujet vient d'être validé, on lance l'affichage SSE pour lui
+    if (completedSujetId) {
+      setDiscoveringSujets(prev => [
+        ...prev.filter(s => s.id !== completedSujetId),
+        { id: completedSujetId, name: completedSujetName || '' },
+      ])
+    }
     if (transitioningRef.current) return
     transitioningRef.current = true
     setQueue(prev => {
@@ -285,6 +295,17 @@ function CadrageVeille({ onDone }: { onDone: () => void }) {
         </div>
       </div>
 
+      {/* Streams de découverte de sources */}
+      <AnimatePresence>
+        {discoveringSujets.map(s => (
+          <SourceDiscoveryStream
+            key={s.id}
+            sujetId={s.id}
+            onComplete={() => setDiscoveringSujets(prev => prev.filter(x => x.id !== s.id))}
+          />
+        ))}
+      </AnimatePresence>
+
       {/* Questionnaires en séquence */}
       <AnimatePresence>
         {currentQ && (
@@ -293,8 +314,8 @@ function CadrageVeille({ onDone }: { onDone: () => void }) {
             sujetName={currentQ.name}
             intentionType={currentQ.intention}
             initialContext={currentQ.context}
-            onClose={nextQuestionnaire}
-            onDone={nextQuestionnaire}
+            onClose={() => nextQuestionnaire(currentQ.id, currentQ.name)}
+            onDone={(_fc: any, _it: string) => nextQuestionnaire(currentQ.id, currentQ.name)}
           />
         )}
       </AnimatePresence>

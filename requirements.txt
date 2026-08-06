@@ -39,6 +39,10 @@ markdown==3.5.2
 pdfplumber==0.11.4
 Pillow==10.2.0
 
+# Async task queue
+celery[redis]==5.3.6
+redis==5.0.1
+
 # Scheduling
 apscheduler==3.11.0
 SQLAlchemy>=2.0.25

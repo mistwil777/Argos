@@ -89,6 +89,58 @@ services:
       - argos-network
 
   # ============================================
+  # Redis - Broker Celery
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: argos-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - argos-network
+
+  # ============================================
+  # Celery Worker - Tâches asynchrones
+  # ============================================
+  celery-worker:
+    build:
+      context: .
+      dockerfile: argos/Dockerfile
+    container_name: argos-celery-worker
+    restart: unless-stopped
+    command: celery -A argos.celery_app worker --loglevel=info --concurrency=4
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-argos}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-argos}
+      - REDIS_URL=redis://redis:6379/0
+      - LANCEDB_PATH=/data/lancedb
+      - LLM_PROVIDER=${LLM_PROVIDER:-aws}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_BEDROCK_MODEL=${AWS_BEDROCK_MODEL:-us.amazon.nova-pro-v1:0}
+      - SEARXNG_URL=http://searxng:8080
+      - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+    volumes:
+      - ./argos:/app/argos:ro
+      - ./config:/app/config:ro
+      - lancedb_data:/data/lancedb
+      - playwright_browsers:/ms-playwright
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - argos-network
+
+  # ============================================
   # SearXNG - Moteur de recherche agrégateur
   # ============================================
   searxng:

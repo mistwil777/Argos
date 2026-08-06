@@ -184,17 +184,31 @@ Réponds UNIQUEMENT avec ce JSON :
 
     # ── Recherche SearXNG ─────────────────────────────────────────────────────
 
-    async def _search_topic(self, topic_name: str) -> list[str]:
+    async def _search_topic(
+        self,
+        topic_name: str,
+        is_fast_evolving: bool = True,
+        context_terms: list[str] | None = None,
+    ) -> list[str]:
         """
-        Recherche SearXNG sur un topic et retourne les termes d'écosystème découverts.
-        Résultat interprété par le LLM — l'utilisateur ne voit pas cette étape.
+        Recherche SearXNG contextualisée sur un topic.
+        - is_fast_evolving=True  → filtre 6-12 derniers mois (veille active)
+        - is_fast_evolving=False → pas de filtre date (sujets académiques classiques)
+        - context_terms → mots du contexte de l'entretien pour préciser la requête
         """
         from argos.services.web_search import search_with_searxng
         from argos.config import settings as _s
+        import datetime
 
         searxng_url = getattr(_s, "searxng_url", "http://searxng:8080")
 
-        query = f"{topic_name} ecosystem tools frameworks 2025"
+        context_hint = " ".join(context_terms[:3]) if context_terms else ""
+        if is_fast_evolving:
+            year = datetime.datetime.now().year
+            query = f"{topic_name} {context_hint} ecosystem tools frameworks {year}".strip()
+        else:
+            query = f"{topic_name} {context_hint} ecosystem tools frameworks classic".strip()
+
         results = await search_with_searxng(query, max_results=8, searxng_url=searxng_url)
 
         if not results:
@@ -375,8 +389,13 @@ Règles absolues :
             unsearched = state.unsearched()  # déjà filtrés par le cache ci-dessus
             if unsearched:
                 logger.info(f"CalibrationAgent: searching {len(unsearched)} new topics: {[t.name for t in unsearched]}")
+                # Contexte de l'entretien pour préciser les requêtes
+                context_terms = state.tools + state.actors + [t.name for t in state.topics_explicit]
+                # Sujets académiques classiques : pas de filtre date
+                ACADEMIC_KEYWORDS = {"statistique", "algèbre", "probabilité", "mathématique", "théorie", "algorithme"}
                 for topic in unsearched:
-                    terms = await self._search_topic(topic.name)
+                    is_evolving = not any(kw in topic.name.lower() for kw in ACADEMIC_KEYWORDS)
+                    terms = await self._search_topic(topic.name, is_fast_evolving=is_evolving, context_terms=context_terms)
                     topic.searched = True
                     topic.ecosystem_terms = terms
                     cache[topic.name] = terms  # mémoriser pour les prochains appels
@@ -504,10 +523,11 @@ TERMES SUGGÉRÉS (must_match_suggested) :
 - Couvre les sous-domaines mentionnés (ex: ML classique → scikit-learn, XGBoost, LightGBM, k-means)
 - 10 à 20 termes
 
-DOMAINES OFFICIELS :
-- Uniquement les sites officiels des acteurs tech identifiés
-- Format : domaine seul sans https:// ni slash (ex: pytorch.org, anthropic.com)
-- JAMAIS : arxiv.org, medium.com, towardsdatascience.com, blogs, agrégateurs, sites de cours
+SOURCES CANDIDATES :
+- Pour chaque acteur tech identifié, fournis 1 à 3 URLs candidates (blog officiel, flux RSS connu, page releases)
+- Format URL complet avec https:// (ex: https://pytorch.org/blog/, https://anthropic.com/news)
+- type : "rss" si c'est probablement un flux RSS, "website" sinon
+- JAMAIS : arxiv.org, medium.com, towardsdatascience.com, blogs perso, agrégateurs, sites de cours
 
 DEPTH_BY_TOPIC (calibrage de profondeur) :
 - Pour chaque sujet : niveau parmi novice/débutant/intermédiaire/avancé/expert
@@ -526,7 +546,10 @@ Réponds UNIQUEMENT avec ce JSON :
     "min_match_count": 1,
     "depth_by_topic": {{"sujet": "niveau", ...}}
   }},
-  "official_domains": ["domaine1.com", ...],
+  "source_candidates": [
+    {{"url": "https://...", "type": "rss|website", "name": "Nom lisible"}},
+    ...
+  ],
   "learning_context": {{...}} or null,
   "project_context": {{...}} or null,
   "summary": "résumé en 2 phrases de ce qui sera surveillé"
@@ -543,22 +566,28 @@ Réponds UNIQUEMENT avec ce JSON :
             end = raw.rfind("}") + 1
             result = json.loads(raw[start:end])
 
-            # ── Enforcement en dur sur les domaines ───────────────────────────
-            raw_domains = result.get("official_domains", [])
-            clean_domains = [
-                d.strip().lower().rstrip("/")
-                for d in raw_domains
-                if d and not any(
-                    d.strip().lower().rstrip("/").endswith(forbidden) or
-                    d.strip().lower().rstrip("/") == forbidden
-                    for forbidden in FORBIDDEN_DOMAINS
+            # ── Enforcement en dur : retirer les sources sur domaines interdits ──
+            raw_candidates = result.get("source_candidates", [])
+            clean_candidates = []
+            removed_urls = []
+            for sc in raw_candidates:
+                url = sc.get("url", "")
+                from urllib.parse import urlparse
+                try:
+                    hostname = urlparse(url).hostname or ""
+                except Exception:
+                    hostname = ""
+                is_forbidden = any(
+                    hostname == f or hostname.endswith(f".{f}")
+                    for f in FORBIDDEN_DOMAINS
                 )
-            ]
-            result["official_domains"] = clean_domains
-
-            if raw_domains != clean_domains:
-                removed = set(raw_domains) - set(clean_domains)
-                logger.info(f"CalibrationAgent: removed forbidden domains: {removed}")
+                if is_forbidden:
+                    removed_urls.append(url)
+                else:
+                    clean_candidates.append(sc)
+            result["source_candidates"] = clean_candidates
+            if removed_urls:
+                logger.info(f"CalibrationAgent: removed forbidden source candidates: {removed_urls}")
 
             # ── Compatibilité : exposer must_match = confirmed + suggested ────
             fc = result.get("filter_config", {})
