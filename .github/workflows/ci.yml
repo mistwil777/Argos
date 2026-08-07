@@ -43,4 +43,4 @@ jobs:
         run: pip install -r requirements-test.txt
 
       - name: Run tests
-        run: pytest tests/ -v --tb=short
+        run: PYTHONPATH=. pytest tests/ -v --tb=short
