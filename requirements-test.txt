@@ -1,0 +1,14 @@
+# Dépendances minimales pour la CI (tests unitaires sans DB ni LLM)
+pytest==7.4.4
+pytest-asyncio==0.23.4
+
+# Dépendances directes des modules testés
+psycopg2-binary==2.9.9
+feedparser==6.0.11
+requests==2.31.0
+PyYAML==6.0.1
+python-dateutil>=2.8.2
+fastapi>=0.109.2
+pydantic>=2.8.0,<3.0.0
+pydantic-settings>=2.5.2
+python-dotenv==1.0.1
