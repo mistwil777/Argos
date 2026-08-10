@@ -61,6 +61,41 @@ class CollectorService:
                 "settings": {}
             }
     
+    # Marqueurs d'articles introductifs — rejetés quand le niveau cible est avancé/expert
+    _INTRO_MARKERS = [
+        "introduction à", "introduction to", "intro to", "intro à",
+        "pour les débutants", "for beginners", "beginner's guide", "guide du débutant",
+        "qu'est-ce que", "what is ", "c'est quoi", "kesako",
+        "getting started", "pour commencer", "démarrer avec", "premiers pas",
+        "tutorial for beginners", "tutoriel débutant",
+    ]
+    _LEVEL_ORDER = ["novice", "débutant", "intermédiaire", "avancé", "expert"]
+
+    @classmethod
+    def _max_depth_level(cls, depth_by_topic: dict) -> str | None:
+        """Retourne le niveau le plus élevé parmi les topics configurés."""
+        if not depth_by_topic:
+            return None
+        levels = [v.lower().strip() for v in depth_by_topic.values() if v]
+        valid = [l for l in levels if l in cls._LEVEL_ORDER]
+        if not valid:
+            return None
+        return max(valid, key=lambda l: cls._LEVEL_ORDER.index(l))
+
+    @classmethod
+    def _passes_depth_filter(cls, text: str, depth_by_topic: dict) -> bool:
+        """
+        Filtre de profondeur : pour avancé/expert, rejette les articles introductifs.
+        Pour novice/débutant/intermédiaire (ou absent), laisse tout passer.
+        """
+        max_level = cls._max_depth_level(depth_by_topic)
+        if max_level not in ("avancé", "expert"):
+            return True
+        text_lower = text.lower()
+        if any(marker in text_lower for marker in cls._INTRO_MARKERS):
+            return False
+        return True
+
     def _passes_relevance_filter(self, item: Dict) -> bool:
         """
         Vérifie que l'item correspond au profil du sujet associé.
@@ -88,11 +123,40 @@ class CollectorService:
             knowledge_profile = row[1] or {}
             profile_embedding = knowledge_profile.get("profile_embedding")
 
+            # ── Exclusions dures : rejet immédiat si un terme banned est présent ──
+            must_not_match = [w.lower().strip() for w in (filter_cfg.get("must_not_match") or []) if w]
+
             must_match = [w.lower() for w in (filter_cfg.get("must_match") or []) if w]
             min_count = int(filter_cfg.get("min_match_count") or 1)
 
             desc = (item.get('description') or item.get('content') or '')[:500]
             text = f"{item.get('title', '')} {item.get('summary', '')} {desc}".lower()
+
+            if must_not_match and any(w in text for w in must_not_match):
+                return False
+
+            # ── Filtre de profondeur : depth_by_topic ─────────────────────────
+            depth_by_topic = filter_cfg.get("depth_by_topic") or {}
+            if not self._passes_depth_filter(text, depth_by_topic):
+                return False
+
+            # ── Filtre de fraîcheur : is_fast_evolving ────────────────────────
+            # Veille active → items > 12 mois rejetés
+            # Base stable (is_fast_evolving=False) → pas de filtre date
+            if filter_cfg.get("is_fast_evolving", True):
+                published_at = item.get("published_at")
+                if published_at is not None:
+                    try:
+                        import datetime
+                        if hasattr(published_at, "tzinfo"):
+                            now = datetime.datetime.now(tz=published_at.tzinfo or datetime.timezone.utc)
+                        else:
+                            now = datetime.datetime.now()
+                        age_days = (now - published_at).days
+                        if age_days > 365:
+                            return False
+                    except Exception as _date_err:
+                        logger.debug(f"_passes_relevance_filter date error: {_date_err}")
 
             # Critère 1 : exact match
             if must_match:
@@ -130,39 +194,41 @@ class CollectorService:
             logger.warning(f"_passes_relevance_filter error: {e}")
             return True
 
-    def _is_duplicate(self, url: str, title: str) -> bool:
+    def _is_duplicate(self, url: str, title: str, sujet_id: int | None = None) -> bool:
         """
         Check if URL or similar title already exists in database.
-        Uses URL exact match and title similarity (GIGO principle).
-        
-        Args:
-            url: URL to check
-            title: Title to check for similarity
-            
-        Returns:
-            True if duplicate, False otherwise
+        When sujet_id is provided, the URL check is scoped to that sujet only —
+        so the same article can be stored independently for different sujets.
+        Without sujet_id, falls back to global URL check.
         """
-        # Check exact URL match
-        url_query = "SELECT COUNT(*) FROM items WHERE url = %s"
-        
         with self.db.get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(url_query, (url,))
+                # URL check scoped to (url, sujet_id) pair — mirrors the UNIQUE constraint
+                if sujet_id is not None:
+                    cur.execute(
+                        "SELECT COUNT(*) FROM items WHERE url = %s AND sujet_id = %s",
+                        (url, sujet_id),
+                    )
+                else:
+                    cur.execute("SELECT COUNT(*) FROM items WHERE url = %s", (url,))
                 if cur.fetchone()[0] > 0:
                     return True
-                
-                # Check for highly similar titles using PostgreSQL trigram similarity
-                # similarity > 0.6 means titles are very similar (likely duplicates)
-                # This catches cases where same content is published with different URLs
-                similar_query = """
-                    SELECT COUNT(*) FROM items 
-                    WHERE similarity(title, %s) > 0.6
-                """
-                cur.execute(similar_query, (title,))
+
+                # Title similarity — scoped to same sujet when known
+                if sujet_id is not None:
+                    cur.execute(
+                        "SELECT COUNT(*) FROM items WHERE similarity(title, %s) > 0.6 AND sujet_id = %s",
+                        (title, sujet_id),
+                    )
+                else:
+                    cur.execute(
+                        "SELECT COUNT(*) FROM items WHERE similarity(title, %s) > 0.6",
+                        (title,),
+                    )
                 if cur.fetchone()[0] > 0:
                     logger.info(f"Found similar title to: {title[:50]}...")
                     return True
-        
+
         return False
     
     def _clean_html(self, html_content: str) -> str:
@@ -490,18 +556,6 @@ class CollectorService:
         
         for item in items:
             try:
-                # Check for duplicates (URL + title similarity)
-                if self._is_duplicate(item["url"], item["title"]):
-                    logger.debug(f"Duplicate found: {item['title']}")
-                    duplicates += 1
-                    continue
-
-                # Filtre de pertinence : vérifier must_match contre titre + résumé
-                if not self._passes_relevance_filter(item):
-                    logger.debug(f"Filtered out (no must_match): {item['title']}")
-                    duplicates += 1  # comptabilisé comme ignoré
-                    continue
-
                 # Récupérer TOUS les sujets qui trackent cette source_url
                 # Un article peut être pertinent pour plusieurs sujets en parallèle
                 source_assignments: list[tuple] = []  # [(workspace_id, sujet_id)]
@@ -523,6 +577,13 @@ class CollectorService:
                 item_id = None
                 for ws_id, s_id in source_assignments:
                     item_copy = dict(item, workspace_id=ws_id, sujet_id=s_id)
+
+                    # Duplicat scoped au sujet — même URL peut exister dans un autre sujet
+                    if self._is_duplicate(item_copy["url"], item_copy["title"], sujet_id=s_id):
+                        logger.debug(f"Duplicate for sujet {s_id}: {item['title']}")
+                        duplicates += 1
+                        continue
+
                     # Filtre de pertinence par sujet
                     if not self._passes_relevance_filter(item_copy):
                         logger.debug(f"Filtered out for sujet {s_id}: {item['title']}")
