@@ -35,6 +35,8 @@ export default function QuestionnaireModal({ sujetId, sujetName, intentionType, 
   const [levelTarget, setLevelTarget] = useState('')
   const [currentOptions, setCurrentOptions] = useState<string[]>([])
   const [answer, setAnswer] = useState('')
+  const [otherText, setOtherText] = useState('')
+  const [showOther, setShowOther] = useState(false)
   const [loadingNext, setLoadingNext] = useState(false)
   const [interviewDone, setInterviewDone] = useState(false)
 
@@ -66,6 +68,8 @@ export default function QuestionnaireModal({ sujetId, sujetName, intentionType, 
   async function loadNextQuestion(qa: QA[]) {
     setLoadingNext(true)
     setAnswer('')
+    setOtherText('')
+    setShowOther(false)
     setLevelCurrent('')
     setLevelTarget('')
     try {
@@ -89,9 +93,15 @@ export default function QuestionnaireModal({ sujetId, sujetName, intentionType, 
 
   async function submitAnswer() {
     // Pour level_pair, on compose la réponse depuis les deux sélecteurs
-    const effectiveAnswer = currentType === 'level_pair'
+    // Pour multiselect, on ajoute le texte libre "Autre" si renseigné
+    let effectiveAnswer = currentType === 'level_pair'
       ? `Actuel : ${levelCurrent} → Cible : ${levelTarget}`
       : answer.trim()
+    if (currentType === 'multiselect' && otherText.trim()) {
+      effectiveAnswer = effectiveAnswer
+        ? `${effectiveAnswer}, ${otherText.trim()}`
+        : otherText.trim()
+    }
     if (!effectiveAnswer.trim()) return
     const newHistory = [...history, { q: currentQuestion, a: effectiveAnswer }]
     setHistory(newHistory)
@@ -179,7 +189,7 @@ export default function QuestionnaireModal({ sujetId, sujetName, intentionType, 
 
   const canSubmit = currentType === 'level_pair'
     ? levelCurrent.length > 0 && levelTarget.length > 0
-    : answer.trim().length > 0
+    : answer.trim().length > 0 || otherText.trim().length > 0
   const progressPct = history.length > 0 ? Math.min(100, history.length * 12) : 0
 
   return (
@@ -292,19 +302,44 @@ export default function QuestionnaireModal({ sujetId, sujetName, intentionType, 
                           const isOn = sel.includes(opt)
                           return (
                             <button key={opt} onClick={() => {
-                              const cur = answer.split(',').map(s => s.trim()).filter(Boolean)
-                              const next = isOn ? cur.filter(s => s !== opt) : [...cur, opt]
-                              setAnswer(next.join(', '))
+                              setAnswer(prev => {
+                                const cur = prev.split(',').map(s => s.trim()).filter(Boolean)
+                                const already = cur.includes(opt)
+                                const next = already ? cur.filter(s => s !== opt) : [...cur, opt]
+                                return next.join(', ')
+                              })
                             }}
-                              className={`px-3 py-1.5 rounded-lg border text-[12px] transition-all ${
+                              className={`px-3 py-1.5 rounded-lg border-2 text-[12px] font-medium transition-all ${
                                 isOn
-                                  ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent-dim))] text-[hsl(var(--accent))]'
+                                  ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent))] text-white'
                                   : 'border-[hsl(var(--line))] text-[hsl(var(--text-2))] hover:border-[hsl(var(--accent-line))]'
                               }`}>{opt}</button>
                           )
                         })}
-                        {answer && (
-                          <p className="w-full text-[11px] font-mono text-[hsl(var(--text-3))]">Sélectionné : {answer}</p>
+                        {/* Chip "Autre" */}
+                        <button
+                          onClick={() => setShowOther(v => !v)}
+                          className={`px-3 py-1.5 rounded-lg border text-[12px] transition-all ${
+                            showOther
+                              ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent-dim))] text-[hsl(var(--accent))]'
+                              : 'border-dashed border-[hsl(var(--line))] text-[hsl(var(--text-3))] hover:border-[hsl(var(--accent-line))]'
+                          }`}
+                        >
+                          Autre…
+                        </button>
+                        {showOther && (
+                          <input
+                            autoFocus
+                            value={otherText}
+                            onChange={e => setOtherText(e.target.value)}
+                            placeholder="Précise en texte libre…"
+                            className="w-full mt-1 px-3 py-2 rounded-lg border border-[hsl(var(--accent-line))] bg-[hsl(var(--bg))] text-[12.5px] text-[hsl(var(--text))] placeholder:text-[hsl(var(--text-3))] focus:outline-none"
+                          />
+                        )}
+                        {(answer || otherText) && (
+                          <p className="w-full text-[11px] font-mono text-[hsl(var(--text-3))]">
+                            Sélectionné : {[answer, otherText.trim()].filter(Boolean).join(', ')}
+                          </p>
                         )}
                       </div>
                     ) : currentType === 'level_pair' ? (

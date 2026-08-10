@@ -196,14 +196,15 @@ def discover_source(
         _push_status(sujet_id, task_id, "rss_found", rss_url, name, "Flux RSS détecté via HTTP")
         return _save_source(sujet_id, rss_url, name, "rss", task_id)
 
-    # 2. Si HTTP a rendu du HTML mais pas de RSS, on tente quand même Playwright
-    if not html:
-        # HTTP a échoué complètement — tenter Playwright
-        _push_status(sujet_id, task_id, "probing", url, name, "Rendu JavaScript (Playwright)…")
-        rss_url, html = _probe_playwright(url)
-        if rss_url:
-            _push_status(sujet_id, task_id, "rss_found", rss_url, name, "Flux RSS détecté via Playwright")
-            return _save_source(sujet_id, rss_url, name, "rss", task_id)
+    # 2. Pas de RSS via HTTP — Playwright pour rendre le JavaScript (SPA ou non)
+    _push_status(sujet_id, task_id, "probing", url, name, "Rendu JavaScript (Playwright)…")
+    rss_url_pw, html_pw = _probe_playwright(url)
+    if rss_url_pw:
+        _push_status(sujet_id, task_id, "rss_found", rss_url_pw, name, "Flux RSS détecté via Playwright")
+        return _save_source(sujet_id, rss_url_pw, name, "rss", task_id)
+    # Préférer le HTML Playwright (plus complet) si disponible
+    if html_pw:
+        html = html_pw
 
     # 3. Pas de RSS trouvé — LLM valide si la page elle-même est utile
     if html:

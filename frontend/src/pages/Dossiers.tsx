@@ -171,10 +171,10 @@ export default function Dossiers() {
     setEditProfile(true)
     setProfileDraft(initial)
     setProfileDraftRaw({
-      official_domains:   initial.official_domains.join('\n'),
-      recognized_domains: initial.recognized_domains.join('\n'),
-      trusted_queries:    initial.trusted_queries.join('\n'),
-      keywords:           initial.keywords.join('\n'),
+      official_domains:   (initial.official_domains   ?? []).join('\n'),
+      recognized_domains: (initial.recognized_domains ?? []).join('\n'),
+      trusted_queries:    (initial.trusted_queries    ?? []).join('\n'),
+      keywords:           (initial.keywords           ?? []).join('\n'),
     })
   }
 
@@ -207,8 +207,8 @@ export default function Dossiers() {
     if (!activeSujet) return
     const profile = activeSujet.knowledge_profile
     const domains = [
-      ...profile.official_domains.map(d => ({ domain: d, category: 'official' })),
-      ...profile.recognized_domains.map(d => ({ domain: d, category: 'community' })),
+      ...(profile.official_domains   ?? []).map(d => ({ domain: d, category: 'official' })),
+      ...(profile.recognized_domains ?? []).map(d => ({ domain: d, category: 'community' })),
     ]
     if (!domains.length) return
     setActivating(true)
@@ -530,7 +530,7 @@ export default function Dossiers() {
 
                 {/* ── Étape 1 : Profil de connaissance ── */}
                 {(() => {
-                  const totalDomains = activeSujet.knowledge_profile.official_domains.length + activeSujet.knowledge_profile.recognized_domains.length
+                  const totalDomains = (activeSujet.knowledge_profile.official_domains?.length ?? 0) + (activeSujet.knowledge_profile.recognized_domains?.length ?? 0)
                   const step1Done = totalDomains > 0
                   const step2Done = activeSujet.source_count > 0
                   const step3Done = hasCollected

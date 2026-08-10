@@ -127,11 +127,13 @@ class CollectorService:
             must_not_match = [w.lower().strip() for w in (filter_cfg.get("must_not_match") or []) if w]
 
             must_match = [w.lower() for w in (filter_cfg.get("must_match") or []) if w]
+            actors = [w.lower() for w in (filter_cfg.get("actors") or []) if w]
             min_count = int(filter_cfg.get("min_match_count") or 1)
 
             desc = (item.get('description') or item.get('content') or '')[:500]
             text = f"{item.get('title', '')} {item.get('summary', '')} {desc}".lower()
 
+            # ── Exclusions dures : rejet immédiat ────────────────────────────────
             if must_not_match and any(w in text for w in must_not_match):
                 return False
 
@@ -140,31 +142,42 @@ class CollectorService:
             if not self._passes_depth_filter(text, depth_by_topic):
                 return False
 
-            # ── Filtre de fraîcheur : is_fast_evolving ────────────────────────
-            # Veille active → items > 12 mois rejetés
-            # Base stable (is_fast_evolving=False) → pas de filtre date
-            if filter_cfg.get("is_fast_evolving", True):
+            # ── Filtre de fraîcheur : date_horizon ───────────────────────────
+            date_horizon = filter_cfg.get("date_horizon")
+            if not date_horizon and filter_cfg.get("is_fast_evolving", True):
+                date_horizon = "1y"
+            if date_horizon and date_horizon != "all":
                 published_at = item.get("published_at")
                 if published_at is not None:
                     try:
                         import datetime
+                        horizon_days = {
+                            "7d": 7, "30d": 30, "90d": 90,
+                            "6m": 180, "1y": 365,
+                        }.get(date_horizon, 365)
                         if hasattr(published_at, "tzinfo"):
                             now = datetime.datetime.now(tz=published_at.tzinfo or datetime.timezone.utc)
                         else:
                             now = datetime.datetime.now()
-                        age_days = (now - published_at).days
-                        if age_days > 365:
+                        if (now - published_at).days > horizon_days:
                             return False
                     except Exception as _date_err:
                         logger.debug(f"_passes_relevance_filter date error: {_date_err}")
 
-            # Critère 1 : exact match
+            # ── Critère 1 : must_match — signal fort, passe immédiatement ────────
             if must_match:
                 matched = sum(1 for w in must_match if w in text)
                 if matched >= min_count:
                     return True
 
-            # Critère 2 : similarité sémantique (si embedding de profil disponible)
+            # ── Critère 2 : actors seuls — signal faible, accepté uniquement
+            #    si aucune exclusion ne s'applique (déjà vérifiée ci-dessus) ──────
+            if actors and any(a in text for a in actors):
+                # Passe seulement si must_match n'est pas défini (pas de termes précis attendus)
+                if not must_match:
+                    return True
+
+            # ── Critère 3 : similarité sémantique (si embedding de profil disponible)
             if profile_embedding:
                 try:
                     import numpy as np
@@ -184,8 +197,8 @@ class CollectorService:
                 except Exception as _sem_err:
                     logger.debug(f"_passes_relevance_filter semantic error: {_sem_err}")
 
-            # Si must_match défini mais aucun critère satisfait → rejeter
-            if must_match or profile_embedding:
+            # Aucun critère satisfait → rejeter si des filtres sont configurés
+            if must_match or actors or profile_embedding:
                 return False
 
             return True  # aucun filtre configuré
@@ -618,7 +631,6 @@ class CollectorService:
                             row = cur.fetchone()
                             if row:
                                 item_id = row[0]
-                                saved += 1
                             else:
                                 duplicates += 1
 

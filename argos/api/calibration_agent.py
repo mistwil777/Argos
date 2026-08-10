@@ -400,6 +400,24 @@ Réponds UNIQUEMENT avec ce JSON :
 - Questions posées : {n}
 - Angles encore à couvrir : {missing if missing else "tous couverts — prêt à finaliser"}"""
 
+        # Détection d'une demande directe de recommandation dans la dernière réponse
+        last_answer = qa_history[-1]["a"].lower() if qa_history else ""
+        recommendation_requested = any(trigger in last_answer for trigger in [
+            "recommande-moi", "recommande moi", "donne-moi tes recommandations",
+            "quels sont tes recommandations", "fais-moi une recommandation",
+            "conseille-moi directement", "donne-moi directement", "recommande directement",
+        ])
+
+        recommendation_instruction = ""
+        if recommendation_requested:
+            recommendation_instruction = """
+DEMANDE DIRECTE DÉTECTÉE : l'utilisateur veut une recommandation, pas une nouvelle question.
+Tu DOIS formuler ta réponse comme une recommandation concrète avec 1-2 outils nommés explicitement,
+suivie d'une question de confirmation courte. Exemple :
+"Je te recommande DeepEval pour sa simplicité : peu de configuration, métriques essentielles couvertes.
+Veux-tu l'inclure ?"
+NE PAS poser une nouvelle question ouverte sur la méthode de choix."""
+
         prompt = f"""Tu conduis un entretien de configuration de veille ({intention}) sur "{sujet_name}".
 Contexte initial : {initial_context or "(aucun)"}
 
@@ -413,7 +431,7 @@ CONTEXTE D'ARGOS :
 - Pour intention "apprendre" : inclure aussi littérature académique et fondamentaux
 - Pour intention "surveiller" ou "projets" : articles récents (<3 mois), pas de cours ni MOOC
 - NE PAS poser de questions sur : médias préférés, fréquence de lecture, livres ou cours
-
+{recommendation_instruction}
 Génère la prochaine question la plus utile pour compléter le profil.
 Priorité d'ordre : 1) couvrir les angles manquants listés ci-dessus, 2) approfondir les sujets sans niveau, 3) proposer des outils/acteurs de l'écosystème pour confirmation.
 
@@ -433,27 +451,53 @@ Si des termes d'écosystème ont été découverts par recherche, intègre-les d
 
 Niveaux possibles : novice → débutant → intermédiaire → avancé → expert
 
+RÈGLES DE STYLE ABSOLUES :
+- Ne JAMAIS commencer par un rappel ou une reformulation de ce que l'utilisateur a dit. Interdit : "Tu as dit...", "Tu as mentionné...", "Tu as choisi...", "Tu veux... mais tu dis aussi...", "Tu as exprimé... mais tu questionnes maintenant...", et toute formulation du type "Tu X mais tu Y" qui invente une contradiction.
+- Aller droit au but : la question, pas l'historique
+- Une question = un seul angle précis
+- Si l'utilisateur dit qu'il ne sait pas, est perdu, ou demande un plan : NE PAS reposer une question sur comment l'aider. Prendre une décision à sa place, la proposer clairement, et demander confirmation. Exemple : "Je te propose de commencer par les concepts fondamentaux (ce qu'est un benchmark, pourquoi évaluer), puis les outils pratiques. On part sur cette progression ?"
+
 Réponds UNIQUEMENT avec ce JSON :
 {{"question": {{"text": "...", "type": "open" | "multiselect" | "level_pair", "options": []}}}}
 
 Règles absolues :
 - Ne jamais demander ce qui est déjà connu
-- Une question = un seul angle précis
 - "multiselect" uniquement si les options sont listables à l'avance (max 6)
 - Pour les niveaux actuel/cible : utilise TOUJOURS type "level_pair" — le frontend affichera deux rangées de boutons (Niveau actuel / Niveau cible) avec les 5 niveaux. options doit être [] (vide).
 - Ne jamais demander les niveaux en texte libre"""
 
+        # Préfixes interdits — vérification post-génération
+        _FORBIDDEN_PREFIXES = (
+            "tu as d'abord", "tu as sélectionné", "tu as mentionné",
+            "tu as choisi", "comme tu l'as dit", "tu avais",
+            "tu répètes", "tu demandes", "tu viens de", "tu questionnes",
+            "tu optes", "tu veux", "tu as raison", "tu as exprimé",
+            "tu as indiqué", "tu as précisé", "tu as confirmé",
+        )
+
         try:
             response, _ = await self._llm.generate(
                 prompt=prompt,
-                system_prompt="Tu conduis un entretien de configuration de veille. Tes questions sont précises, contextualisées, et évitent toute redondance. Réponds uniquement avec du JSON valide.",
+                system_prompt="Tu conduis un entretien de configuration de veille. Tes questions sont précises et directes. INTERDIT : commencer par rappeler ce que l'utilisateur a dit ('Tu as...', 'Tu viens de...', 'Tu répètes...', 'Tu demandes... mais tu viens de...'). Va droit au but. Réponds uniquement avec du JSON valide.",
                 temperature=0.5, max_tokens=600, top_p=0.9,
             )
             raw = response.strip()
             start = raw.find("{")
             end = raw.rfind("}") + 1
             result = json.loads(raw[start:end])
-            return {"action": "ask", "question": result.get("question", {})}
+            question = result.get("question", {})
+            # Vérification post-génération : supprimer les rappels d'historique en début de question
+            text = question.get("text", "")
+            if text.lower().startswith(_FORBIDDEN_PREFIXES):
+                # Trouver le premier point ou tiret et couper le rappel
+                for sep in (". ", " — ", " : ", ", "):
+                    idx = text.find(sep)
+                    if idx != -1 and idx < 120:
+                        text = text[idx + len(sep):].strip()
+                        text = text[0].upper() + text[1:] if text else text
+                        break
+                question["text"] = text
+            return {"action": "ask", "question": question}
         except Exception as e:
             logger.error(f"_decide_next_action failed: {e}")
             return {"action": "ask", "question": {"text": "Peux-tu préciser les outils ou frameworks que tu utilises le plus ?", "type": "open"}}
@@ -480,6 +524,24 @@ Règles absolues :
                 "text": "Décris ton besoin, ton contexte et ton niveau actuel en quelques phrases libres.",
                 "type": "open",
             }}
+
+        # Détection signal de validation explicite — finalise sans passer par le LLM
+        _VALIDATION_SIGNALS = (
+            "je valide", "c'est bon", "c'est parfait", "parfait",
+            "valide", "go", "oui je valide", "non je valide",
+            "configuration validée", "ça me convient", "ça convient",
+            "ok", "d'accord", "très bien", "allons-y",
+        )
+        if qa_history:
+            last_a = qa_history[-1].get("a", "").lower().strip()
+            last_q = qa_history[-1].get("q", "").lower()
+            # Signal valide uniquement si la question précédente invitait à valider/confirmer
+            confirmation_question = any(w in last_q for w in (
+                "valider", "valide", "confirme", "confirmer", "finaliser",
+                "modifier", "ajuster", "configuration", "tout est bon",
+            ))
+            if confirmation_question and any(last_a == s or last_a.startswith(s) for s in _VALIDATION_SIGNALS):
+                return {"done": True, "reason": "Configuration validée par l'utilisateur."}
 
         # Bloc 1 : lire l'état
         state = await self._read_state(sujet_name, intention, initial_context, qa_history)
@@ -703,6 +765,33 @@ TERMES SUGGÉRÉS (must_match_suggested) :
   Si un domaine est couvert, ses outils de base DOIVENT apparaître.
 - 15 à 30 termes (plus large que confirmés pour couvrir tout l'écosystème)
 
+ACTEURS (actors) :
+- Organisations, entreprises, labs, projets open source à surveiller — noms propres UNIQUEMENT
+- Pas de termes techniques ni de frameworks dans cette liste
+- Ces acteurs seront utilisés comme signal secondaire (un article les mentionnant passe uniquement s'il contient aussi un terme must_match)
+- Exemples : "Anthropic", "Google DeepMind", "Mistral AI", "Hugging Face", "Meta AI"
+
+HORIZON TEMPOREL (date_horizon) :
+- Durée maximale des articles acceptés selon le rythme d'évolution du sujet
+- Valeurs possibles : "7d", "30d", "90d", "6m", "1y", "all"
+- "apprendre" avec fondamentaux → "all" ou "1y"
+- "surveiller" actualité tech → "30d" ou "90d"
+- "projets" en cours → "90d"
+- Déduis la valeur du contexte réel du sujet, pas seulement de l'intention
+
+NIVEAU (level) :
+- Niveau global de l'utilisateur pour ce sujet : novice / débutant / intermédiaire / avancé / expert
+- Utilise le niveau ACTUEL déclaré dans l'entretien (pas le niveau cible)
+- Servira à adapter le Briefing et la complexité des articles sélectionnés
+
+TYPES DE CONTENU (content_type) :
+- Types d'articles acceptés pour ce sujet
+- Valeurs possibles : "news", "paper", "blog_post", "release", "tutorial"
+- "apprendre" fondamentaux → ["paper", "tutorial", "blog_post"]
+- "surveiller" actualité → ["news", "release", "blog_post"]
+- "projets" → ["release", "blog_post", "tutorial"]
+- Adapte à la réalité du sujet
+
 SOURCES CANDIDATES :
 - Pour chaque acteur tech identifié, fournis 1 à 3 URLs candidates (blog officiel, flux RSS connu, page releases)
 - Format URL complet avec https:// (ex: https://pytorch.org/blog/, https://anthropic.com/news)
@@ -726,6 +815,10 @@ Réponds UNIQUEMENT avec ce JSON :
     "must_match_confirmed": ["terme1", ...],
     "must_match_suggested": ["terme1", ...],
     "must_not_match": ["terme_exclu1", ...],
+    "actors": ["Anthropic", "Google DeepMind", ...],
+    "date_horizon": "30d",
+    "level": "intermédiaire",
+    "content_type": ["news", "paper"],
     "min_match_count": 1,
     "depth_by_topic": {{"sujet": "niveau", ...}}
   }},
@@ -787,11 +880,11 @@ Réponds UNIQUEMENT avec ce JSON :
             all_exclusions = list(dict.fromkeys(llm_exclusions + state_exclusions))
             fc["must_not_match"] = all_exclusions
 
-            # ── is_fast_evolving : veille active (filtre fraîcheur) vs base stable ──
-            # "apprendre" → pas de filtre date (fondamentaux inclus)
-            # "surveiller" / "projets" → uniquement articles récents
-            is_fast_evolving = (intention != "apprendre")
-            fc["is_fast_evolving"] = is_fast_evolving
+            # ── is_fast_evolving : dérivé de date_horizon ────────────────────────
+            # "all" → pas de filtre date ; tout le reste → filtre actif
+            date_horizon = fc.get("date_horizon") or ("all" if intention == "apprendre" else "90d")
+            fc["date_horizon"] = date_horizon
+            fc["is_fast_evolving"] = (date_horizon != "all")
             result["filter_config"] = fc
 
             return result
