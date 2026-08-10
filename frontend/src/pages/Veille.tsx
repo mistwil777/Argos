@@ -38,7 +38,7 @@ function CadrageVeille({ onDone }: { onDone: () => void }) {
   const [creating, setCreating]           = useState(false)
 
   // File de questionnaires
-  const [queue, setQueue]   = useState<{ id: number; name: string; intention: string; context: string }[]>([])
+  const [, setQueue]   = useState<{ id: number; name: string; intention: string; context: string }[]>([])
   const [currentQ, setCurrentQ] = useState<{ id: number; name: string; intention: string; context: string } | null>(null)
   const [showLaunchWarning, setShowLaunchWarning] = useState(false)
   // Sujets en cours de découverte de sources (SSE)
@@ -85,7 +85,7 @@ function CadrageVeille({ onDone }: { onDone: () => void }) {
     setCreating(true)
     try {
       const ws = await api.createWorkspace({ name: wsName.trim(), icon: 'folder', color: '#6366f1' })
-      const created: { id: number; name: string; intention: string }[] = []
+      const created: { id: number; name: string; intention: string; context: string }[] = []
       for (const p of active) {
         const context = [description.trim(), p.rationale].filter(Boolean).join('\n')
         const s = await api.createSujet({ workspace_id: ws.id, name: p.name, intention_type: p.intention_type })
@@ -101,14 +101,8 @@ function CadrageVeille({ onDone }: { onDone: () => void }) {
 
   const transitioningRef = useRef(false)
 
-  function nextQuestionnaire(completedSujetId?: number, completedSujetName?: string) {
-    // Si un sujet vient d'être validé, on lance l'affichage SSE pour lui
-    if (completedSujetId) {
-      setDiscoveringSujets(prev => [
-        ...prev.filter(s => s.id !== completedSujetId),
-        { id: completedSujetId, name: completedSujetName || '' },
-      ])
-    }
+  function nextQuestionnaire(_completedSujetId?: number, _completedSujetName?: string) {
+    // Le stream SSE est désormais géré dans QuestionnaireModal (phase 'discovering')
     if (transitioningRef.current) return
     transitioningRef.current = true
     setQueue(prev => {
@@ -310,6 +304,7 @@ function CadrageVeille({ onDone }: { onDone: () => void }) {
       <AnimatePresence>
         {currentQ && (
           <QuestionnaireModal
+            key={currentQ.id}
             sujetId={currentQ.id}
             sujetName={currentQ.name}
             intentionType={currentQ.intention}

@@ -688,6 +688,7 @@ async def generate_filter_config(sujet_id: int, data: dict):
             initial_context=(data.get("initial_context") or "").strip(),
             qa_history=previous_qa,
             extra_info=extra_info,
+            sujet_id=sujet_id,
         )
 
         filter_cfg = result.get("filter_config", {"must_match": [], "min_match_count": 1})

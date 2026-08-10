@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, Loader2, Sparkles, Check, ChevronRight, Plus } from 'lucide-react'
 import { api } from '@/services/api'
 import ReactMarkdown from 'react-markdown'
+import SourceDiscoveryStream from '@/components/ui/SourceDiscoveryStream'
 
 const INTENTION_LABELS: Record<string, string> = {
   apprendre: 'Apprendre',
@@ -21,7 +22,7 @@ interface Props {
   onDone: (filterConfig: any, intentionType: string) => void
 }
 
-type Phase = 'interview' | 'summary' | 'filter'
+type Phase = 'interview' | 'summary' | 'filter' | 'discovering'
 
 export default function QuestionnaireModal({ sujetId, sujetName, intentionType, initialContext, onClose, onDone }: Props) {
   const [phase, setPhase] = useState<Phase>('interview')
@@ -29,7 +30,9 @@ export default function QuestionnaireModal({ sujetId, sujetName, intentionType, 
   // Interview
   const [history, setHistory] = useState<QA[]>([])
   const [currentQuestion, setCurrentQuestion] = useState('')
-  const [currentType, setCurrentType] = useState<'open' | 'multiselect' | 'scale5'>('open')
+  const [currentType, setCurrentType] = useState<'open' | 'multiselect' | 'scale5' | 'level_pair'>('open')
+  const [levelCurrent, setLevelCurrent] = useState('')
+  const [levelTarget, setLevelTarget] = useState('')
   const [currentOptions, setCurrentOptions] = useState<string[]>([])
   const [answer, setAnswer] = useState('')
   const [loadingNext, setLoadingNext] = useState(false)
@@ -37,6 +40,7 @@ export default function QuestionnaireModal({ sujetId, sujetName, intentionType, 
 
   // Bilan
   const [summaryMd, setSummaryMd] = useState('')
+  const [bilanTitle, setBilanTitle] = useState('')
   const [loadingSummary, setLoadingSummary] = useState(false)
   const [extraInfo, setExtraInfo] = useState('')
   const [addingExtra, setAddingExtra] = useState(false)
@@ -62,6 +66,8 @@ export default function QuestionnaireModal({ sujetId, sujetName, intentionType, 
   async function loadNextQuestion(qa: QA[]) {
     setLoadingNext(true)
     setAnswer('')
+    setLevelCurrent('')
+    setLevelTarget('')
     try {
       const result = await api.nextQuestion(sujetId, {
         intention_type: intentionType,
@@ -82,8 +88,12 @@ export default function QuestionnaireModal({ sujetId, sujetName, intentionType, 
   }
 
   async function submitAnswer() {
-    if (!answer.trim()) return
-    const newHistory = [...history, { q: currentQuestion, a: answer.trim() }]
+    // Pour level_pair, on compose la réponse depuis les deux sélecteurs
+    const effectiveAnswer = currentType === 'level_pair'
+      ? `Actuel : ${levelCurrent} → Cible : ${levelTarget}`
+      : answer.trim()
+    if (!effectiveAnswer.trim()) return
+    const newHistory = [...history, { q: currentQuestion, a: effectiveAnswer }]
     setHistory(newHistory)
     if (interviewDone) return
     await loadNextQuestion(newHistory)
@@ -100,6 +110,7 @@ export default function QuestionnaireModal({ sujetId, sujetName, intentionType, 
         ...(initialContext ? { initial_context: initialContext } : {}),
       })
       setSummaryMd(result.summary_md || '')
+      if (result.bilan_title) setBilanTitle(result.bilan_title)
     } catch (e: any) { alert(`Erreur : ${e.message}`) }
     finally { setLoadingSummary(false) }
   }
@@ -107,7 +118,6 @@ export default function QuestionnaireModal({ sujetId, sujetName, intentionType, 
   async function addExtraAndContinue() {
     if (!extraInfo.trim()) { generateFilter(); return }
     setAddingExtra(true)
-    // Régénérer le bilan avec les infos supplémentaires
     try {
       const result = await api.generateSummary(sujetId, {
         intention_type: intentionType,
@@ -117,6 +127,7 @@ export default function QuestionnaireModal({ sujetId, sujetName, intentionType, 
         ...(initialContext ? { initial_context: initialContext } : {}),
       })
       setSummaryMd(result.summary_md || '')
+      if (result.bilan_title) setBilanTitle(result.bilan_title)
     } catch (e: any) { alert(`Erreur : ${e.message}`) }
     finally { setAddingExtra(false) }
   }
@@ -148,16 +159,27 @@ export default function QuestionnaireModal({ sujetId, sujetName, intentionType, 
     loadNextQuestion(newHistory)
   }
 
-  function confirm() {
+  async function confirm() {
     setConfirming(true)
     const accepted = [
       ...confirmedItems.filter(f => f.accepted).map(f => f.term),
       ...suggestedItems.filter(f => f.accepted).map(f => f.term),
     ]
-    onDone({ must_match: accepted, min_match_count: 1 }, intentionType)
+    const filterConfig = { must_match: accepted, min_match_count: 1 }
+    try {
+      await api.updateSujet(sujetId, { filter_config: filterConfig })
+    } catch (e: any) {
+      console.error('confirm filter error:', e)
+    } finally {
+      setConfirming(false)
+    }
+    // Passe en phase découverte : le modal reste ouvert et affiche le stream SSE
+    setPhase('discovering')
   }
 
-  const canSubmit = answer.trim().length > 0
+  const canSubmit = currentType === 'level_pair'
+    ? levelCurrent.length > 0 && levelTarget.length > 0
+    : answer.trim().length > 0
   const progressPct = history.length > 0 ? Math.min(100, history.length * 12) : 0
 
   return (
@@ -172,7 +194,9 @@ export default function QuestionnaireModal({ sujetId, sujetName, intentionType, 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[hsl(var(--line))] bg-[hsl(var(--bg-2))] flex-shrink-0">
           <div>
-            <p className="text-[14px] font-bold text-[hsl(var(--text))]">{sujetName}</p>
+            <p className="text-[14px] font-bold text-[hsl(var(--text))]">
+              {(phase === 'summary' || phase === 'filter') && bilanTitle ? bilanTitle : sujetName}
+            </p>
             <div className="flex items-center gap-2 mt-0.5">
               <span className="text-[10.5px] font-mono text-[hsl(var(--text-3))]">{INTENTION_LABELS[intentionType]}</span>
               {phase === 'interview' && history.length > 0 && (
@@ -183,6 +207,7 @@ export default function QuestionnaireModal({ sujetId, sujetName, intentionType, 
               )}
               {phase === 'summary' && <span className="text-[10.5px] font-mono text-[hsl(var(--aqua))]">Bilan</span>}
               {phase === 'filter' && <span className="text-[10.5px] font-mono text-[hsl(var(--accent))]">Whitelist</span>}
+              {phase === 'discovering' && <span className="text-[10.5px] font-mono text-[hsl(var(--yellow))]">Découverte des sources…</span>}
             </div>
           </div>
           <button onClick={onClose} className="text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))] transition-colors">
@@ -282,6 +307,41 @@ export default function QuestionnaireModal({ sujetId, sujetName, intentionType, 
                           <p className="w-full text-[11px] font-mono text-[hsl(var(--text-3))]">Sélectionné : {answer}</p>
                         )}
                       </div>
+                    ) : currentType === 'level_pair' ? (
+                      // Deux rangées de chips : niveau actuel puis niveau cible
+                      (() => {
+                        const LEVELS = ['novice', 'débutant', 'intermédiaire', 'avancé', 'expert']
+                        const chipClass = (selected: boolean) =>
+                          `px-3 py-1.5 rounded-lg border text-[12px] font-medium transition-all cursor-pointer ${
+                            selected
+                              ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent-dim))] text-[hsl(var(--accent))]'
+                              : 'border-[hsl(var(--line))] text-[hsl(var(--text-2))] hover:border-[hsl(var(--accent-line))]'
+                          }`
+                        return (
+                          <div className="space-y-3">
+                            <div className="space-y-1.5">
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-3))]">Niveau actuel</p>
+                              <div className="flex flex-wrap gap-2">
+                                {LEVELS.map(l => (
+                                  <button key={l} onClick={() => setLevelCurrent(l)} className={chipClass(levelCurrent === l)}>
+                                    {l}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="space-y-1.5">
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-3))]">Niveau cible</p>
+                              <div className="flex flex-wrap gap-2">
+                                {LEVELS.map(l => (
+                                  <button key={l} onClick={() => setLevelTarget(l)} className={chipClass(levelTarget === l)}>
+                                    {l}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })()
                     ) : (
                       <textarea
                         ref={textareaRef}
@@ -418,6 +478,23 @@ export default function QuestionnaireModal({ sujetId, sujetName, intentionType, 
               )}
             </div>
           )}
+
+          {/* ── Phase découverte de sources (SSE inline) ── */}
+          {phase === 'discovering' && (
+            <div className="p-6 space-y-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Sparkles className="w-4 h-4 text-[hsl(var(--accent))]" />
+                <p className="text-[13px] font-bold text-[hsl(var(--text))]">Configuration enregistrée</p>
+              </div>
+              <p className="text-[12px] text-[hsl(var(--text-3))]">
+                Les sources candidates sont en cours de vérification. Tu peux fermer ce modal ou attendre la fin.
+              </p>
+              <SourceDiscoveryStream
+                sujetId={sujetId}
+                onComplete={() => onDone({}, intentionType)}
+              />
+            </div>
+          )}
         </div>
 
         {/* Footer */}
@@ -468,6 +545,14 @@ export default function QuestionnaireModal({ sujetId, sujetName, intentionType, 
                   ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Enregistrement…</>
                   : <><Check className="w-3.5 h-3.5" /> Valider la configuration</>
                 }
+              </button>
+            )}
+
+            {/* Découverte en cours — fermer sans attendre */}
+            {phase === 'discovering' && (
+              <button onClick={() => onDone({}, intentionType)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[hsl(var(--line))] text-[hsl(var(--text-2))] text-[12.5px] font-bold transition-all hover:bg-[hsl(var(--bg-3))]">
+                Fermer
               </button>
             )}
           </div>
