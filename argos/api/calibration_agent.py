@@ -16,15 +16,19 @@ logger = logging.getLogger(__name__)
 
 # ── Domaines interdits en dur — enforcement, pas une règle LLM ───────────────
 
+# Agrégateurs, forums, plateformes de cours — interdits quel que soit le sujet
 FORBIDDEN_DOMAINS = {
-    "arxiv.org", "medium.com", "towardsdatascience.com", "dev.to",
-    "hashnode.com", "substack.com", "wordpress.com", "blogger.com",
-    "reddit.com", "stackoverflow.com", "quora.com", "wikipedia.org",
-    "udemy.com", "coursera.org", "edx.org", "datacamp.com",
-    "kaggle.com", "analyticsvidhya.com", "machinelearningmastery.com",
-    "neptune.ai", "paperswithcode.com", "semanticscholar.org",
-    "researchgate.net", "springerlink.com", "ieeexplore.ieee.org",
-    "nature.com", "science.org",
+    "medium.com", "dev.to", "hashnode.com", "substack.com",
+    "wordpress.com", "blogger.com", "reddit.com", "stackoverflow.com",
+    "quora.com", "wikipedia.org", "udemy.com", "coursera.org",
+    "edx.org", "datacamp.com", "kaggle.com",
+}
+
+# Domaines académiques — autorisés pour intention="apprendre", interdits pour "surveiller"
+ACADEMIC_DOMAINS = {
+    "arxiv.org", "semanticscholar.org", "researchgate.net",
+    "springerlink.com", "ieeexplore.ieee.org", "nature.com", "science.org",
+    "paperswithcode.com",
 }
 
 LEVELS = ["novice", "débutant", "intermédiaire", "avancé", "expert"]
@@ -405,8 +409,9 @@ Contexte initial : {initial_context or "(aucun)"}
 {qa_text}
 
 CONTEXTE D'ARGOS :
-- Collecte uniquement des articles récents (<3 mois) depuis des sites officiels d'acteurs tech
-- Ne collecte PAS : livres, cours, MOOC, tutoriels, arxiv, revues académiques
+- Collecte des articles depuis les sources officielles des acteurs du domaine concerné
+- Pour intention "apprendre" : inclure aussi littérature académique et fondamentaux
+- Pour intention "surveiller" ou "projets" : articles récents (<3 mois), pas de cours ni MOOC
 - NE PAS poser de questions sur : médias préférés, fréquence de lecture, livres ou cours
 
 Génère la prochaine question la plus utile pour compléter le profil.
@@ -500,13 +505,15 @@ Règles absolues :
             if unsearched:
                 logger.info(f"CalibrationAgent: searching {len(unsearched)} new topics in parallel: {[t.name for t in unsearched]}")
                 context_terms = state.tools + state.actors + [t.name for t in state.topics_explicit]
-                ACADEMIC_KEYWORDS = {"statistique", "algèbre", "probabilité", "mathématique", "théorie", "algorithme"}
+                # intention="apprendre" → recherche élargie (pas de filtre date)
+                # tout le reste → recherche récente uniquement
+                is_fast = (intention != "apprendre")
 
                 # Toutes les recherches SearXNG lancées simultanément
                 results = await asyncio.gather(*[
                     self._search_topic(
                         t.name,
-                        is_fast_evolving=not any(kw in t.name.lower() for kw in ACADEMIC_KEYWORDS),
+                        is_fast_evolving=is_fast,
                         context_terms=context_terms,
                     )
                     for t in unsearched
@@ -700,7 +707,9 @@ SOURCES CANDIDATES :
 - Pour chaque acteur tech identifié, fournis 1 à 3 URLs candidates (blog officiel, flux RSS connu, page releases)
 - Format URL complet avec https:// (ex: https://pytorch.org/blog/, https://anthropic.com/news)
 - type : "rss" si c'est probablement un flux RSS, "website" sinon
-- JAMAIS : arxiv.org, medium.com, towardsdatascience.com, blogs perso, agrégateurs, sites de cours
+- JAMAIS : medium.com, blogs perso, agrégateurs, forums, sites de cours (udemy, coursera…)
+- Pour intention "surveiller"/"projets" : jamais arxiv.org, nature.com, revues académiques
+- Pour intention "apprendre" : arxiv.org, nature.com, paperswithcode.com sont acceptables
 
 DEPTH_BY_TOPIC (calibrage de profondeur) :
 - Pour chaque sujet : niveau parmi novice/débutant/intermédiaire/avancé/expert
@@ -751,9 +760,10 @@ Réponds UNIQUEMENT avec ce JSON :
                     hostname = urlparse(url).hostname or ""
                 except Exception:
                     hostname = ""
+                blocked = FORBIDDEN_DOMAINS | (ACADEMIC_DOMAINS if intention != "apprendre" else set())
                 is_forbidden = any(
                     hostname == f or hostname.endswith(f".{f}")
-                    for f in FORBIDDEN_DOMAINS
+                    for f in blocked
                 )
                 if is_forbidden:
                     removed_urls.append(url)
@@ -778,14 +788,9 @@ Réponds UNIQUEMENT avec ce JSON :
             fc["must_not_match"] = all_exclusions
 
             # ── is_fast_evolving : veille active (filtre fraîcheur) vs base stable ──
-            # Sujets académiques classiques → pas de filtre date (base de référence)
-            # Tout le reste → veille active, items > 12 mois rejetés
-            _ACADEMIC_KW = {"statistique", "algèbre", "probabilité", "mathématique",
-                            "théorie", "algorithme", "fondamentaux", "fondamental"}
-            topic_names_lower = " ".join(t.name.lower() for t in (state.topics_explicit or []))
-            is_academic = any(kw in topic_names_lower for kw in _ACADEMIC_KW)
-            # Intention "apprendre" avec sujets académiques → base stable
-            is_fast_evolving = not (intention == "apprendre" and is_academic)
+            # "apprendre" → pas de filtre date (fondamentaux inclus)
+            # "surveiller" / "projets" → uniquement articles récents
+            is_fast_evolving = (intention != "apprendre")
             fc["is_fast_evolving"] = is_fast_evolving
             result["filter_config"] = fc
 

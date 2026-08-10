@@ -532,7 +532,7 @@ export default function Dossiers() {
                 {(() => {
                   const totalDomains = activeSujet.knowledge_profile.official_domains.length + activeSujet.knowledge_profile.recognized_domains.length
                   const step1Done = totalDomains > 0
-                  const step2Done = activeSujet.source_count >= totalDomains && totalDomains > 0
+                  const step2Done = activeSujet.source_count > 0
                   const step3Done = hasCollected
 
                   return (
