@@ -20,7 +20,7 @@ export default function SourceDiscoveryStream({ sujetId, onComplete }: Props) {
   const [done, setDone] = useState(false)
 
   useEffect(() => {
-    const es = new EventSource(`/api/sujets/${sujetId}/sources-discovery-stream`)
+    const es = new EventSource(`/api/v1/sujets/${sujetId}/sources-discovery-stream`)
 
     es.onmessage = (e) => {
       try {
