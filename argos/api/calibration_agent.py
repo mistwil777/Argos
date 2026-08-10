@@ -4,6 +4,7 @@ Boucle : Lire → Décider (chercher / demander / finaliser)
 
 Niveaux : novice → débutant → intermédiaire → avancé → expert
 """
+import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
@@ -57,17 +58,44 @@ class CalibrationState:
         return [t for t in self.all_topics() if not t.searched]
 
     def uncovered(self) -> list[TopicState]:
+        """Topics sans niveau actuel ou cible."""
         return [
             t for t in self.all_topics()
             if t.level_current is None or t.level_target is None
         ]
 
+    def missing_angles(self) -> list[str]:
+        """
+        Angles thématiques obligatoires pas encore couverts.
+        Chaque item est une instruction pour le décideur LLM.
+        """
+        missing = []
+        if not self.tools and not self.actors:
+            missing.append("outils, frameworks et acteurs à surveiller (aucun mentionné)")
+        elif not self.tools:
+            missing.append("outils et frameworks concrets (aucun outil mentionné)")
+        elif not self.actors:
+            missing.append("acteurs et organisations à surveiller (aucun acteur mentionné)")
+        if self.inconsistencies:
+            missing.append(
+                f"clarification des incohérences détectées : {'; '.join(self.inconsistencies)}"
+            )
+        if not self.out_of_scope:
+            missing.append("périmètre explicite : ce qui est hors-scope (aucune exclusion mentionnée)")
+        return missing
+
     def is_ready_to_finalize(self, n_questions: int) -> bool:
-        if n_questions < 4:
+        # Minimum absolu — pas de raccourci possible
+        if n_questions < 10:
             return False
+        # Recherche obligatoire sur tous les topics avant finalisation
         if self.unsearched():
             return False
-        if self.uncovered() and n_questions < 8:
+        # Niveaux obligatoires — tolérance après 15 questions pour ne pas bloquer indéfiniment
+        if self.uncovered() and n_questions < 15:
+            return False
+        # Angles thématiques obligatoires — tolérance après 15 questions
+        if self.missing_angles() and n_questions < 15:
             return False
         return True
 
@@ -246,6 +274,60 @@ Règles :
             logger.warning(f"_search_topic parse failed for '{topic_name}': {e}")
         return []
 
+    # ── Clarification d'incohérences ────────────────────────────────────────
+
+    async def _ask_clarification(
+        self,
+        inconsistencies: list[str],
+        qa_history: list[dict],
+        sujet_name: str,
+    ) -> dict:
+        """
+        Génère une question de clarification ciblée sur la première incohérence
+        détectée. La question confronte directement l'utilisateur à la contradiction
+        avec bienveillance, et propose des options quand c'est possible.
+        """
+        # On traite la première incohérence non encore clarifiée
+        contradiction = inconsistencies[0]
+        qa_text = "\n".join(
+            f"Q{i+1}: {qa['q']}\nR{i+1}: {qa['a']}"
+            for i, qa in enumerate(qa_history)
+        ) if qa_history else "Aucun échange."
+
+        prompt = f"""Dans cet entretien de veille sur "{sujet_name}", une incohérence a été détectée :
+
+Incohérence : {contradiction}
+
+Échanges :
+{qa_text}
+
+Génère une question de clarification qui :
+1. Pointe la contradiction de façon bienveillante et précise ("Tu as mentionné X, mais aussi Y — comment tu vois ça ?")
+2. Propose des options cliquables si la réponse est listable (type multiselect, max 4 options)
+3. Sinon utilise type "open"
+4. Ne répète pas ce que l'utilisateur a déjà dit — va droit au fait
+
+Réponds UNIQUEMENT avec ce JSON :
+{{"text": "...", "type": "open" | "multiselect", "options": [...]}}"""
+
+        try:
+            response, _ = await self._llm.generate(
+                prompt=prompt,
+                system_prompt="Tu conduis un entretien de calibrage. Tes questions de clarification sont directes, bienveillantes et précises. JSON valide uniquement.",
+                temperature=0.3, max_tokens=400, top_p=0.9,
+            )
+            raw = response.strip()
+            start = raw.find("{")
+            end = raw.rfind("}") + 1
+            return json.loads(raw[start:end])
+        except Exception as e:
+            logger.error(f"_ask_clarification failed: {e}")
+            return {
+                "text": f"J'ai noté une possible contradiction : {contradiction}. Peux-tu clarifier ?",
+                "type": "open",
+                "options": [],
+            }
+
     # ── Bloc 2 : décideur ─────────────────────────────────────────────────────
 
     async def _decide_next_action(
@@ -270,6 +352,16 @@ Règles :
         if unsearched:
             return {"action": "search", "topic": unsearched[0].name}
 
+        # Enforcement : incohérences → question de clarification obligatoire en priorité absolue
+        # On ne passe au reste qu'une fois les incohérences clarifiées ou après 15 questions
+        if state.inconsistencies and n < 15:
+            clarification = await self._ask_clarification(
+                inconsistencies=state.inconsistencies,
+                qa_history=qa_history,
+                sujet_name=sujet_name,
+            )
+            return {"action": "ask", "question": clarification}
+
         # Prêt à finaliser ?
         if state.is_ready_to_finalize(n):
             return {"action": "finalize"}
@@ -290,14 +382,19 @@ Règles :
 
         uncovered = [t.name for t in state.uncovered()]
         inconsistencies = state.inconsistencies
+        missing = state.missing_angles()
 
         state_summary = f"""État actuel :
 - Sujets explicites : {[t.name for t in state.topics_explicit]}
 - Sujets implicites : {[t.name for t in state.topics_implicit]}
-- Sans niveau défini : {uncovered}
+- Outils/frameworks identifiés : {state.tools if state.tools else "aucun"}
+- Acteurs identifiés : {state.actors if state.actors else "aucun"}
+- Hors-périmètre explicite : {state.out_of_scope if state.out_of_scope else "aucun"}
+- Sans niveau défini : {uncovered if uncovered else "tous couverts"}
 - Incohérences détectées : {inconsistencies if inconsistencies else "aucune"}
-- Secteurs : {state.sectors}
-- Questions posées : {n}"""
+- Secteurs : {state.sectors if state.sectors else "non précisé"}
+- Questions posées : {n}
+- Angles encore à couvrir : {missing if missing else "tous couverts — prêt à finaliser"}"""
 
         prompt = f"""Tu conduis un entretien de configuration de veille ({intention}) sur "{sujet_name}".
 Contexte initial : {initial_context or "(aucun)"}
@@ -313,20 +410,33 @@ CONTEXTE D'ARGOS :
 - NE PAS poser de questions sur : médias préférés, fréquence de lecture, livres ou cours
 
 Génère la prochaine question la plus utile pour compléter le profil.
-Priorité : sujets sans niveau défini, incohérences à clarifier, acteurs/outils non précisés.
+Priorité d'ordre : 1) couvrir les angles manquants listés ci-dessus, 2) approfondir les sujets sans niveau, 3) proposer des outils/acteurs de l'écosystème pour confirmation.
+
+RÈGLE DE PROPOSITION OBLIGATOIRE :
+Pour chaque angle manquant ou outil non mentionné, ta question DOIT :
+- Proposer des exemples concrets issus de l'écosystème réel ("On trouve souvent X, Y, Z dans ce domaine")
+- Expliquer brièvement pourquoi ces outils sont pertinents pour la veille
+- Utiliser type "multiselect" avec les options si les choix sont listables (max 6)
+- Ne jamais poser une question vide comme "Quels outils utilises-tu ?" sans proposer
+
+Exemples de formulations correctes :
+- "En ML classique, scikit-learn et XGBoost sont incontournables pour la veille des releases. Tu veux les inclure ?"
+- "Pour le suivi d'Anthropic et Mistral, leurs blogs officiels et les releases GitHub sont les meilleures sources. D'autres acteurs à ajouter : OpenAI, DeepMind, Meta AI ?"
+- "Pour l'évaluation de LLM, RAGAS et lm-evaluation-harness sont les frameworks de référence. Tu les suis déjà ?"
 
 Si des termes d'écosystème ont été découverts par recherche, intègre-les dans ta question pour que l'utilisateur confirme leur pertinence plutôt que de les lister de mémoire.
 
 Niveaux possibles : novice → débutant → intermédiaire → avancé → expert
 
 Réponds UNIQUEMENT avec ce JSON :
-{{"question": {{"text": "...", "type": "open" | "multiselect", "options": [...]}}}}
+{{"question": {{"text": "...", "type": "open" | "multiselect" | "level_pair", "options": []}}}}
 
 Règles absolues :
 - Ne jamais demander ce qui est déjà connu
 - Une question = un seul angle précis
 - "multiselect" uniquement si les options sont listables à l'avance (max 6)
-- Pour les niveaux : demande niveau actuel ET cible dans la même question (ex: "Sur X, niveau actuel et cible ? novice/débutant/intermédiaire/avancé/expert")"""
+- Pour les niveaux actuel/cible : utilise TOUJOURS type "level_pair" — le frontend affichera deux rangées de boutons (Niveau actuel / Niveau cible) avec les 5 niveaux. options doit être [] (vide).
+- Ne jamais demander les niveaux en texte libre"""
 
         try:
             response, _ = await self._llm.generate(
@@ -388,17 +498,23 @@ Règles absolues :
         if action["action"] == "search":
             unsearched = state.unsearched()  # déjà filtrés par le cache ci-dessus
             if unsearched:
-                logger.info(f"CalibrationAgent: searching {len(unsearched)} new topics: {[t.name for t in unsearched]}")
-                # Contexte de l'entretien pour préciser les requêtes
+                logger.info(f"CalibrationAgent: searching {len(unsearched)} new topics in parallel: {[t.name for t in unsearched]}")
                 context_terms = state.tools + state.actors + [t.name for t in state.topics_explicit]
-                # Sujets académiques classiques : pas de filtre date
                 ACADEMIC_KEYWORDS = {"statistique", "algèbre", "probabilité", "mathématique", "théorie", "algorithme"}
-                for topic in unsearched:
-                    is_evolving = not any(kw in topic.name.lower() for kw in ACADEMIC_KEYWORDS)
-                    terms = await self._search_topic(topic.name, is_fast_evolving=is_evolving, context_terms=context_terms)
+
+                # Toutes les recherches SearXNG lancées simultanément
+                results = await asyncio.gather(*[
+                    self._search_topic(
+                        t.name,
+                        is_fast_evolving=not any(kw in t.name.lower() for kw in ACADEMIC_KEYWORDS),
+                        context_terms=context_terms,
+                    )
+                    for t in unsearched
+                ])
+                for topic, terms in zip(unsearched, results):
                     topic.searched = True
                     topic.ecosystem_terms = terms
-                    cache[topic.name] = terms  # mémoriser pour les prochains appels
+                    cache[topic.name] = terms
                     logger.info(f"CalibrationAgent: '{topic.name}' → {len(terms)} terms found")
 
             # Relancer le décideur avec state enrichi
@@ -441,7 +557,13 @@ c) Acteurs, outils, frameworks nommés
 d) Ce qui est hors périmètre
 e) Concepts du domaine ABSENTS mais clairement liés — que l'utilisateur a probablement oubliés
 
-ÉTAPE 2 — Rédige le bilan markdown :
+ÉTAPE 2 — Génère un titre court pour ce bilan :
+- 2 à 4 mots maximum, sans article (pas de "la", "le", "les", "l'", "un", "une")
+- Doit refléter le BESOIN GLOBAL exprimé, pas le nom technique du dossier
+- Exemples corrects : "Veille IA moderne", "ML & Alignement", "GenAI & Évaluation"
+- Exemples incorrects : "ML_DL", "Machine Learning", "Bases_IA" (trop technique ou trop générique)
+
+ÉTAPE 3 — Rédige le bilan markdown :
 
 ## Besoin global
 2-3 phrases de synthèse.
@@ -464,7 +586,7 @@ Termes techniques précis pour le filtre.
 ## Suggestions — à considérer ?
 OBLIGATOIRE : 4 à 8 concepts, outils ou acteurs étroitement liés mais NON mentionnés. Pour chacun, une phrase expliquant pourquoi il pourrait être pertinent.
 
-Réponds UNIQUEMENT avec : {{"summary_md": "..."}}"""
+Réponds UNIQUEMENT avec : {{"bilan_title": "...", "summary_md": "..."}}"""
 
         try:
             response, _ = await self._llm.generate(
@@ -475,7 +597,11 @@ Réponds UNIQUEMENT avec : {{"summary_md": "..."}}"""
             raw = response.strip()
             start = raw.find("{")
             end = raw.rfind("}") + 1
-            return json.loads(raw[start:end])
+            result = json.loads(raw[start:end])
+            # Garantit la présence de bilan_title même si le LLM l'omet
+            if not result.get("bilan_title"):
+                result["bilan_title"] = sujet_name
+            return result
         except Exception as e:
             logger.error(f"generate_summary failed: {e}")
             raise
@@ -489,13 +615,46 @@ Réponds UNIQUEMENT avec : {{"summary_md": "..."}}"""
         initial_context: str,
         qa_history: list[dict],
         extra_info: str = "",
+        sujet_id: int | None = None,
     ) -> dict:
         """
         Génère filter_config, official_domains, learning_context, project_context.
         Enforcement en dur : tous les domaines de FORBIDDEN_DOMAINS sont retirés.
+        sujet_id optionnel : permet de récupérer les ecosystem_terms du cache de recherche.
         """
         qa_text = "\n".join(f"Q: {qa['q']}\nR: {qa['a']}" for qa in qa_history)
         extra_ctx = f"\nInformations supplémentaires :\n{extra_info}" if extra_info else ""
+
+        # Récupère les termes d'écosystème découverts pendant l'entretien (cache SearXNG)
+        ecosystem_ctx = ""
+        if sujet_id is not None:
+            cache = get_search_cache(sujet_id)
+            if cache:
+                all_terms = []
+                for topic_name, terms in cache.items():
+                    if terms:
+                        all_terms.append(f"  {topic_name} : {', '.join(terms)}")
+                if all_terms:
+                    ecosystem_ctx = "\n\nTermes découverts par recherche pendant l'entretien (à intégrer en priorité dans must_match_suggested) :\n" + "\n".join(all_terms)
+
+        # Récupère les exclusions explicites depuis le state reconstruit
+        out_of_scope_terms: list[str] = []
+        try:
+            state = await self._read_state(
+                sujet_name=sujet_name,
+                intention=intention,
+                initial_context=initial_context,
+                qa_history=qa_history,
+            )
+            out_of_scope_terms = state.out_of_scope or []
+        except Exception as _state_err:
+            logger.debug(f"generate_output: could not read state for out_of_scope: {_state_err}")
+
+        out_of_scope_ctx = (
+            f"\n\nExclusions EXPLICITES de l'utilisateur (must_not_match obligatoire) :\n"
+            + "\n".join(f"  - {t}" for t in out_of_scope_terms)
+            if out_of_scope_terms else ""
+        )
 
         prompt = f"""Génère la configuration de filtrage finale pour une veille ({intention}) sur "{sujet_name}".
 
@@ -503,7 +662,7 @@ Description initiale :
 {initial_context or "(aucune)"}
 
 Entretien :
-{qa_text}{extra_ctx}
+{qa_text}{extra_ctx}{ecosystem_ctx}{out_of_scope_ctx}
 
 ÉTAPE 1 — Analyse interne :
 - Liste SÉPARÉMENT :
@@ -514,14 +673,28 @@ Entretien :
 
 ÉTAPE 2 — Génère :
 
+EXCLUSIONS (must_not_match) :
+- Si l'utilisateur a explicitement exclu des termes, domainesou sujets → les lister ici
+- Ces termes seront bannis à la réception : tout article contenant l'un d'eux sera rejeté
+- Format : liste de termes/mots-clés courts (pas de phrases)
+
 TERMES CONFIRMÉS (must_match_confirmed) :
 - Uniquement les noms, variantes et acronymes de ce que l'utilisateur a explicitement nommé
 - 10 à 25 termes
 
 TERMES SUGGÉRÉS (must_match_suggested) :
 - Termes du même écosystème que l'agent propose — l'utilisateur devra les valider
-- Couvre les sous-domaines mentionnés (ex: ML classique → scikit-learn, XGBoost, LightGBM, k-means)
-- 10 à 20 termes
+- OBLIGATOIRE : inclure les outils de base incontournables de chaque domaine identifié.
+  Exemples non exhaustifs par famille (à adapter au contexte réel) :
+  · ML classique → scikit-learn, XGBoost, LightGBM, CatBoost, statsmodels, pandas, numpy, scipy
+  · Deep Learning → PyTorch, TensorFlow, Keras, ONNX, torchvision
+  · NLP/LLM → Hugging Face Transformers, Tokenizers, Datasets, PEFT, TRL
+  · MLOps → MLflow, DVC, Weights & Biases, Kubeflow, Ray
+  · Agents → LangChain, LangGraph, LangSmith, AutoGen, CrewAI
+  · Évaluation → RAGAS, DeepEval, Evals, OpenAI Evals, lm-evaluation-harness
+  · Alignement → TRL, trlx, OpenRLHF, DeepSpeed-Chat
+  Si un domaine est couvert, ses outils de base DOIVENT apparaître.
+- 15 à 30 termes (plus large que confirmés pour couvrir tout l'écosystème)
 
 SOURCES CANDIDATES :
 - Pour chaque acteur tech identifié, fournis 1 à 3 URLs candidates (blog officiel, flux RSS connu, page releases)
@@ -543,6 +716,7 @@ Réponds UNIQUEMENT avec ce JSON :
   "filter_config": {{
     "must_match_confirmed": ["terme1", ...],
     "must_match_suggested": ["terme1", ...],
+    "must_not_match": ["terme_exclu1", ...],
     "min_match_count": 1,
     "depth_by_topic": {{"sujet": "niveau", ...}}
   }},
@@ -596,6 +770,23 @@ Réponds UNIQUEMENT avec ce JSON :
             fc["must_match_confirmed"] = confirmed
             fc["must_match_suggested"] = suggested
             fc["must_match"] = confirmed  # champ actif = seulement les confirmés par défaut
+
+            # ── Merge out_of_scope du state → must_not_match (dédoublonné) ────
+            llm_exclusions = [t.lower().strip() for t in (fc.get("must_not_match") or []) if t]
+            state_exclusions = [t.lower().strip() for t in out_of_scope_terms if t]
+            all_exclusions = list(dict.fromkeys(llm_exclusions + state_exclusions))
+            fc["must_not_match"] = all_exclusions
+
+            # ── is_fast_evolving : veille active (filtre fraîcheur) vs base stable ──
+            # Sujets académiques classiques → pas de filtre date (base de référence)
+            # Tout le reste → veille active, items > 12 mois rejetés
+            _ACADEMIC_KW = {"statistique", "algèbre", "probabilité", "mathématique",
+                            "théorie", "algorithme", "fondamentaux", "fondamental"}
+            topic_names_lower = " ".join(t.name.lower() for t in (state.topics_explicit or []))
+            is_academic = any(kw in topic_names_lower for kw in _ACADEMIC_KW)
+            # Intention "apprendre" avec sujets académiques → base stable
+            is_fast_evolving = not (intention == "apprendre" and is_academic)
+            fc["is_fast_evolving"] = is_fast_evolving
             result["filter_config"] = fc
 
             return result

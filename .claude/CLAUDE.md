@@ -18,3 +18,13 @@ Pour chaque nouvelle fonctionnalité ou modification non triviale :
 
 Les tests existants doivent passer avant tout commit sur `main`.
 Ne jamais écrire de test avec `print()` à la place d'`assert`. Un test sans `assert` n'est pas un test.
+
+## Explications techniques — règle de communication
+
+Le user est spécialiste IA/ML, pas développeur logiciel ni fullstack.
+
+Quand tu expliques un comportement technique :
+- Utilise le langage du domaine IA/ML et des analogies concrètes du quotidien
+- Introduis maximum 2 termes techniques par explication
+- Chaque terme technique introduit doit être défini en une phrase simple AVANT d'être utilisé
+- Jamais de jargon fullstack, DevOps ou infrastructure sans définition préalable
