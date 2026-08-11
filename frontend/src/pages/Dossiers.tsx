@@ -64,7 +64,7 @@ export default function Dossiers() {
   const [collecting, setCollecting] = useState(false)
   const [collectDone, setCollectDone] = useState(false)
   const [hasCollected, setHasCollected] = useState(false)
-  const [sourcesOpen, setSourcesOpen] = useState(false)
+  const [, setSourcesOpen] = useState(false)
 
   // Questionnaire de configuration
   const [questionnaireOpen, setQuestionnaireOpen] = useState(false)
@@ -549,7 +549,7 @@ export default function Dossiers() {
                 {/* ── Étape 1 : Profil de connaissance ── */}
                 {(() => {
                   const totalDomains = (activeSujet.knowledge_profile.official_domains?.length ?? 0) + (activeSujet.knowledge_profile.recognized_domains?.length ?? 0)
-                  const step1Done = totalDomains > 0
+                  const step1Done = totalDomains > 0 || (activeSujet.knowledge_profile.keywords?.length ?? 0) > 0
                   const step2Done = activeSujet.source_count > 0
                   const step3Done = hasCollected
 
@@ -699,35 +699,37 @@ export default function Dossiers() {
                                   Sources prêtes. Les articles apparaîtront après la prochaine collecte — lancez-la en étape 3.
                                 </p>
                               )}
-                              {/* Sources repliables */}
-                              <button onClick={() => setSourcesOpen(v => !v)}
-                                className="w-full flex items-center gap-2 text-left text-[11px] font-mono text-[hsl(var(--text-2))] hover:text-[hsl(var(--accent))] transition-colors">
-                                <ChevronRight className={`w-3 h-3 transition-transform ${sourcesOpen ? 'rotate-90' : ''}`} />
-                                Voir les sources surveillées
-                              </button>
-                              <AnimatePresence>
-                                {sourcesOpen && (
-                                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                                    <div className="max-h-40 overflow-y-auto divide-y divide-[hsl(var(--line))] rounded border border-[hsl(var(--line))]">
-                                      {activeSujet.sources?.map(src => (
-                                        <div key={src.id} className="flex items-center gap-3 px-3 py-1.5 hover:bg-[hsl(var(--bg-2))] transition-colors">
-                                          <button onClick={() => toggleSource(src.id, src.active)} className="flex-shrink-0">
-                                            {src.active ? <ToggleRight className="w-4 h-4 text-[hsl(var(--accent))]" /> : <ToggleLeft className="w-4 h-4 text-[hsl(var(--text-3))]" />}
-                                          </button>
-                                          <div className="min-w-0 flex-1">
+                              {/* Sources — affichées par défaut, RSS en tête */}
+                              {activeSujet.sources && activeSujet.sources.length > 0 && (
+                                <div className="divide-y divide-[hsl(var(--line))] rounded border border-[hsl(var(--line))] overflow-hidden">
+                                  {[...activeSujet.sources]
+                                    .sort((a, b) => {
+                                      if (a.type === 'rss' && b.type !== 'rss') return -1
+                                      if (a.type !== 'rss' && b.type === 'rss') return 1
+                                      return a.name.localeCompare(b.name)
+                                    })
+                                    .map(src => (
+                                      <div key={src.id} className="flex items-center gap-3 px-3 py-1.5 hover:bg-[hsl(var(--bg-2))] transition-colors">
+                                        <button onClick={() => toggleSource(src.id, src.active)} className="flex-shrink-0">
+                                          {src.active ? <ToggleRight className="w-4 h-4 text-[hsl(var(--accent))]" /> : <ToggleLeft className="w-4 h-4 text-[hsl(var(--text-3))]" />}
+                                        </button>
+                                        <div className="min-w-0 flex-1">
+                                          <div className="flex items-center gap-2">
                                             <p className={`text-[11px] font-medium truncate ${src.active ? 'text-[hsl(var(--text))]' : 'text-[hsl(var(--text-3))]'}`}>{src.name}</p>
-                                            <a href={src.url} target="_blank" rel="noreferrer"
-                                              className="text-[9.5px] font-mono text-[hsl(var(--accent))] hover:underline flex items-center gap-1 truncate">
-                                              <ExternalLink className="w-2 h-2 flex-shrink-0" />
-                                              <span className="truncate">{src.url}</span>
-                                            </a>
+                                            <span className={`text-[9px] font-mono font-bold flex-shrink-0 ${src.type === 'rss' ? 'text-[hsl(var(--aqua))]' : 'text-[hsl(var(--accent))]'}`}>
+                                              {src.type === 'rss' ? 'RSS' : 'WEB'}
+                                            </span>
                                           </div>
+                                          <a href={src.url} target="_blank" rel="noreferrer"
+                                            className="text-[9.5px] font-mono text-[hsl(var(--text-3))] hover:text-[hsl(var(--accent))] hover:underline flex items-center gap-1 truncate">
+                                            <ExternalLink className="w-2 h-2 flex-shrink-0" />
+                                            <span className="truncate">{src.url}</span>
+                                          </a>
                                         </div>
-                                      ))}
-                                    </div>
-                                  </motion.div>
-                                )}
-                              </AnimatePresence>
+                                      </div>
+                                    ))}
+                                </div>
+                              )}
                             </>
                           ) : (
                             <>

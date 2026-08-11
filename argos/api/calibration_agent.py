@@ -435,7 +435,7 @@ CONTEXTE D'ARGOS :
 - Collecte des articles depuis les sources officielles des acteurs du domaine concerné
 - Pour intention "apprendre" : inclure aussi littérature académique et fondamentaux
 - Pour intention "surveiller" ou "projets" : articles récents (<3 mois), pas de cours ni MOOC
-- NE PAS poser de questions sur : médias préférés, fréquence de lecture, livres ou cours
+- NE PAS poser de questions sur : médias préférés, fréquence de lecture, livres ou cours, fréquence de notification, alertes, synthèses périodiques (Argos gère cela automatiquement)
 {recommendation_instruction}
 Génère la prochaine question la plus utile pour compléter le profil.
 Priorité d'ordre : 1) couvrir les angles manquants listés ci-dessus, 2) approfondir les sujets sans niveau, 3) proposer des outils/acteurs de l'écosystème pour confirmation.
