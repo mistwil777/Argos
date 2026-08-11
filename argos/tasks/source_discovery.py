@@ -173,20 +173,15 @@ Réponds UNIQUEMENT avec ce JSON :
         return {"valid": True, "reason": "validation LLM non disponible", "final_url": url}
 
 
-@celery_app.task(bind=True, max_retries=2)
-def discover_source(
-    self,
+def _discover_source_impl(
     sujet_id: int,
-    candidate: dict,  # {"url": str, "type": str, "name": str}
+    candidate: dict,
     sujet_name: str,
+    task_id: str = "unknown",
 ) -> dict:
-    """
-    Tâche Celery : découverte et validation d'une source candidate.
-    Publie les statuts en temps réel dans Redis.
-    """
+    """Logique de découverte d'une source — testable sans Celery."""
     url = candidate.get("url", "")
     name = candidate.get("name", urlparse(url).hostname or url)
-    task_id = self.request.id or "unknown"
 
     _push_status(sujet_id, task_id, "probing", url, name, "Vérification HTTP en cours…")
 
@@ -202,7 +197,6 @@ def discover_source(
     if rss_url_pw:
         _push_status(sujet_id, task_id, "rss_found", rss_url_pw, name, "Flux RSS détecté via Playwright")
         return _save_source(sujet_id, rss_url_pw, name, "rss", task_id)
-    # Préférer le HTML Playwright (plus complet) si disponible
     if html_pw:
         html = html_pw
 
@@ -218,6 +212,22 @@ def discover_source(
     # 4. Rien trouvé
     _push_status(sujet_id, task_id, "not_found", url, name, "Aucun flux ni page d'actualités valide")
     return {"status": "not_found", "url": url}
+
+
+@celery_app.task(bind=True, max_retries=2)
+def discover_source(
+    self,
+    sujet_id: int,
+    candidate: dict,
+    sujet_name: str,
+) -> dict:
+    """Tâche Celery : découverte et validation d'une source candidate."""
+    return _discover_source_impl(
+        sujet_id=sujet_id,
+        candidate=candidate,
+        sujet_name=sujet_name,
+        task_id=self.request.id or "unknown",
+    )
 
 
 def _save_source(sujet_id: int, url: str, name: str, source_type: str, task_id: str) -> dict:
