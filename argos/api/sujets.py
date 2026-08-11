@@ -18,6 +18,15 @@ router = APIRouter(tags=["sujets"])
 db = DatabaseManager(settings.database_url)
 
 
+def estimate_discovery_duration(n_sources: int) -> str:
+    """Retourne une fourchette de durée lisible pour N sources à découvrir."""
+    if n_sources == 0:
+        return "quelques secondes"
+    low = max(1, round(n_sources * 15 / 60))
+    high = max(low + 1, round(n_sources * 30 / 60))
+    return f"{low}–{high} min"
+
+
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def _slugify(text: str) -> str:
@@ -477,13 +486,32 @@ async def next_question(sujet_id: int, data: dict):
 async def generate_summary(sujet_id: int, data: dict):
     from argos.api.calibration_agent import get_agent
     try:
-        return await get_agent().generate_summary(
+        result = await get_agent().generate_summary(
             sujet_name=data.get("sujet_name", ""),
             intention=data.get("intention_type", "surveiller"),
             initial_context=(data.get("initial_context") or "").strip(),
             qa_history=data.get("previous_qa", []),
             extra_info=(data.get("extra_info") or "").strip(),
         )
+        # Sauvegarder le bilan dans knowledge_profile
+        summary_md = result.get("summary_md", "")
+        bilan_title = result.get("bilan_title", "")
+        if summary_md:
+            try:
+                with db.get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("SELECT knowledge_profile FROM sujets WHERE id = %s", (sujet_id,))
+                        row = cur.fetchone()
+                        existing = row[0] if row else {}
+                        updated = {**(existing or {}), "bilan_md": summary_md, "bilan_title": bilan_title}
+                        cur.execute(
+                            "UPDATE sujets SET knowledge_profile = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+                            (json.dumps(updated), sujet_id),
+                        )
+                        conn.commit()
+            except Exception as _save_err:
+                logger.warning(f"generate_summary: could not save bilan to DB: {_save_err}")
+        return result
     except Exception as e:
         logger.error(f"generate_summary: {e}", exc_info=True)
         raise HTTPException(500, str(e))

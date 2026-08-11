@@ -158,7 +158,7 @@ Règles d'extraction :
 - topics_explicit : sujets/domaines/frameworks nommés DIRECTEMENT dans le contexte ou les réponses
 - topics_implicit : sujets IMPLICITES déduits du contexte (ex: "j'ai fait du fine-tuning LoRA" → implicite: "PyTorch", "PEFT ecosystem", "pipeline de données")
 - Pour chaque topic : niveau_actuel et niveau_cible si mentionné, sinon null. Niveaux possibles : novice, débutant, intermédiaire, avancé, expert
-- tools : frameworks, librairies, outils nommés (LangChain, scikit-learn, etc.)
+- tools : frameworks, librairies, outils nommés explicitement
 - actors : entreprises, labs, projets open source nommés (Anthropic, Mistral, Hugging Face, etc.)
 - sectors : secteurs applicatifs mentionnés (industrie, bancaire, défense, etc.)
 - out_of_scope : ce qui a été explicitement exclu
@@ -737,7 +737,7 @@ Entretien :
 - Liste SÉPARÉMENT :
   a) Termes CONFIRMÉS : tout ce que l'utilisateur a nommé EXPLICITEMENT (noms exacts, variantes, acronymes de ce qu'il a dit)
   b) Termes SUGGÉRÉS : termes connexes du même écosystème NON mentionnés mais clairement dans le périmètre (synonymes, composants, alternatives proches)
-- Pour chaque framework/outil : ses composants (ex: LangChain → LangGraph, LangSmith, LCEL)
+- Pour chaque framework/outil nommé dans l'entretien : inclure ses composants et variantes connus
 - Les sites officiels des acteurs identifiés
 
 ÉTAPE 2 — Génère :
@@ -753,16 +753,9 @@ TERMES CONFIRMÉS (must_match_confirmed) :
 
 TERMES SUGGÉRÉS (must_match_suggested) :
 - Termes du même écosystème que l'agent propose — l'utilisateur devra les valider
-- OBLIGATOIRE : inclure les outils de base incontournables de chaque domaine identifié.
-  Exemples non exhaustifs par famille (à adapter au contexte réel) :
-  · ML classique → scikit-learn, XGBoost, LightGBM, CatBoost, statsmodels, pandas, numpy, scipy
-  · Deep Learning → PyTorch, TensorFlow, Keras, ONNX, torchvision
-  · NLP/LLM → Hugging Face Transformers, Tokenizers, Datasets, PEFT, TRL
-  · MLOps → MLflow, DVC, Weights & Biases, Kubeflow, Ray
-  · Agents → LangChain, LangGraph, LangSmith, AutoGen, CrewAI
-  · Évaluation → RAGAS, DeepEval, Evals, OpenAI Evals, lm-evaluation-harness
-  · Alignement → TRL, trlx, OpenRLHF, DeepSpeed-Chat
-  Si un domaine est couvert, ses outils de base DOIVENT apparaître.
+- Base-toi EXCLUSIVEMENT sur les termes découverts par recherche pendant l'entretien (ecosystem_ctx ci-dessus) et sur ce que l'utilisateur a nommé — pas sur tes connaissances générales
+- Pour chaque domaine identifié dans l'entretien : inclure ses outils, frameworks et concepts clés tels qu'ils apparaissent dans l'écosystème réel du sujet
+- Le domaine peut être n'importe quoi (droit, finance, médecine, IA, géopolitique…) — adapte les termes au contexte réel, jamais de liste générique
 - 15 à 30 termes (plus large que confirmés pour couvrir tout l'écosystème)
 
 ACTEURS (actors) :
