@@ -52,6 +52,7 @@ export default function Library() {
 
   // ── Onglet actif ──
   const [tab, setTab] = useState<'articles' | 'documents'>('articles')
+  const [ragFilter, setRagFilter] = useState<'all' | 'bruts' | 'rag'>('all')
 
   // ── Articles (items) ──
   const [items, setItems]         = useState<any[]>([])
@@ -621,7 +622,7 @@ export default function Library() {
               <button onClick={() => setTab('articles')}
                 className={`flex items-center gap-2 pb-3 border-b-2 text-[13px] font-semibold transition-all ${tab === 'articles' ? 'border-[hsl(var(--accent))] text-[hsl(var(--accent))]' : 'border-transparent text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))]'}`}>
                 <Radio className="w-3.5 h-3.5" />
-                Articles collectés
+                Bruts
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-[hsl(var(--bg-3))] border border-[hsl(var(--line))]">
                   {items.length}
                 </span>
@@ -642,12 +643,17 @@ export default function Library() {
               {tab === 'articles' && (
                 <motion.div key="tab-articles" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                   className="flex-1 flex flex-col overflow-hidden">
-                  {/* Description */}
-                  <div className="flex-shrink-0 px-8 py-3 bg-[hsl(var(--bg-2))] border-b border-[hsl(var(--line))] flex items-center gap-2">
-                    <Radio className="w-3 h-3 text-[hsl(var(--accent))]" />
-                    <p className="text-[11.5px] text-[hsl(var(--text-3))]">
-                      Pages web récupérées automatiquement depuis vos sources surveillées — matière brute de votre veille.
-                    </p>
+                  {/* Sous-filtres Bruts / Dans le RAG */}
+                  <div className="flex-shrink-0 px-8 py-2 bg-[hsl(var(--bg-2))] border-b border-[hsl(var(--line))] flex items-center gap-3">
+                    {(['all', 'bruts', 'rag'] as const).map(f => {
+                      const labels = { all: 'Tous', bruts: 'Bruts', rag: 'Dans le RAG' }
+                      return (
+                        <button key={f} onClick={() => setRagFilter(f)}
+                          className={`text-[11px] font-mono px-2.5 py-1 rounded transition-colors ${ragFilter === f ? 'bg-[hsl(var(--accent))] text-white' : 'text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))]'}`}>
+                          {labels[f]}
+                        </button>
+                      )
+                    })}
                   </div>
                   {/* Barre batch articles */}
                   <AnimatePresence>
@@ -694,19 +700,27 @@ export default function Library() {
                     {!itemsLoading && items.length > 0 && (
                       <div className="space-y-2">
                         {/* Tout sélectionner */}
-                        <div className="flex items-center gap-2 pb-1">
-                          <button onClick={e => {
-                            e.stopPropagation()
-                            if (selectedItemIds.size === items.length) setSelectedItemIds(new Set())
-                            else setSelectedItemIds(new Set(items.map((it: any) => it.id)))
-                          }} className="flex items-center gap-1.5 text-[10.5px] font-mono text-[hsl(var(--text-3))] hover:text-[hsl(var(--accent))] transition-colors">
-                            {selectedItemIds.size === items.length && items.length > 0
-                              ? <CheckSquare className="w-3.5 h-3.5 text-[hsl(var(--accent))]" />
-                              : <Square className="w-3.5 h-3.5" />}
-                            Tout sélectionner
-                          </button>
-                        </div>
-                        {items.map((item: any, i: number) => (
+                        {(() => {
+                          const filteredItems = items.filter((it: any) =>
+                            ragFilter === 'all' ? true :
+                            ragFilter === 'rag' ? it.rag_indexed :
+                            !it.rag_indexed
+                          )
+                          return (
+                          <>
+                          <div className="flex items-center gap-2 pb-1">
+                            <button onClick={e => {
+                              e.stopPropagation()
+                              if (selectedItemIds.size === filteredItems.length) setSelectedItemIds(new Set())
+                              else setSelectedItemIds(new Set(filteredItems.map((it: any) => it.id)))
+                            }} className="flex items-center gap-1.5 text-[10.5px] font-mono text-[hsl(var(--text-3))] hover:text-[hsl(var(--accent))] transition-colors">
+                              {selectedItemIds.size === filteredItems.length && filteredItems.length > 0
+                                ? <CheckSquare className="w-3.5 h-3.5 text-[hsl(var(--accent))]" />
+                                : <Square className="w-3.5 h-3.5" />}
+                              Tout sélectionner ({filteredItems.length})
+                            </button>
+                          </div>
+                          {filteredItems.map((item: any, i: number) => (
                           <motion.div key={item.id}
                             initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: i * 0.02 }}
@@ -745,6 +759,9 @@ export default function Library() {
                             </div>
                           </motion.div>
                         ))}
+                          </>
+                          )
+                        })()}
                       </div>
                     )}
                   </div>

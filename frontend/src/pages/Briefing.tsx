@@ -1,4 +1,5 @@
 import { useEffect, useState, lazy, Suspense } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Newspaper, RefreshCw, Loader2, Sparkles, ChevronDown,
@@ -37,6 +38,12 @@ export default function Briefing() {
   const [readSujetId, setReadSujetId] = useState<number | null>(null)
   const [sujets, setSujets] = useState<any[]>([])
   const [genModal, setGenModal] = useState<{ itemIds: number[]; itemTitle: string; sujetId?: number | null } | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [sujetFilter, setSujetFilter] = useState<number | null>(() => {
+    const v = searchParams.get('sujet')
+    return v ? parseInt(v) : null
+  })
+  const [firstVisit, setFirstVisit] = useState(() => !!searchParams.get('sujet'))
   const [alerts, setAlerts]     = useState<any[]>([])
   const [alertsOpen, setAlertsOpen] = useState(false)
   const [resolvingId, setResolvingId] = useState<number | null>(null)
@@ -227,6 +234,19 @@ export default function Briefing() {
             <MessageSquare className="w-3.5 h-3.5" />
             Assistant
           </button>
+          <select
+            value={sujetFilter ?? ''}
+            onChange={e => {
+              const v = e.target.value ? parseInt(e.target.value) : null
+              setSujetFilter(v)
+              setFirstVisit(false)
+              if (v) setSearchParams({ sujet: String(v) })
+              else setSearchParams({})
+            }}
+            className="bg-[hsl(var(--bg-2))] border border-[hsl(var(--accent-line))] rounded px-2 py-1.5 text-[11.5px] font-mono text-[hsl(var(--accent))] outline-none">
+            <option value="">Tous les sujets</option>
+            {sujets.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
           <select value={hours} onChange={e => setHours(+e.target.value)}
             className="bg-[hsl(var(--bg-2))] border border-[hsl(var(--line))] rounded px-2 py-1.5 text-[11.5px] font-mono text-[hsl(var(--text-2))] outline-none">
             <option value={24}>24h</option>
@@ -248,6 +268,23 @@ export default function Briefing() {
           </motion.button>
         </div>
       </div>
+
+      {/* Message d'accueil après collecte */}
+      {firstVisit && sujetFilter && !loading && (
+        <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+          className="panel-accent px-5 py-4 flex items-start gap-3">
+          <Sparkles className="w-4 h-4 text-[hsl(var(--accent))] flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-[13px] font-semibold text-[hsl(var(--text))]">Ta première collecte est prête</p>
+            <p className="text-[11.5px] text-[hsl(var(--text-2))] mt-0.5">
+              Génère ton briefing pour découvrir les résultats — le LLM regroupe les articles par thème et te propose un résumé en 3 lignes.
+            </p>
+          </div>
+          <button onClick={() => setFirstVisit(false)} className="flex-shrink-0 text-[hsl(var(--text-3))] hover:text-[hsl(var(--text))]">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </motion.div>
+      )}
 
       {loading && (
         <div className="flex items-center justify-center py-20">
@@ -303,9 +340,11 @@ export default function Briefing() {
 
             {/* Delta structuré avec checkboxes */}
             {(() => {
-              // Construire un index id → item depuis top_items
+              // Construire un index id → item depuis top_items, filtré par sujet si actif
               const itemIndex: Record<number, any> = {}
-              ;(displayBriefing.top_items || []).forEach((it: any) => { itemIndex[it.id] = it })
+              ;(displayBriefing.top_items || [])
+                .filter((it: any) => !sujetFilter || it.sujet_id === sujetFilter)
+                .forEach((it: any) => { itemIndex[it.id] = it })
               // Groupes depuis le champ groups ({nom: [id,...]}) ou fallback top_items
               const groups: Record<string, number[]> = displayBriefing.groups && Object.keys(displayBriefing.groups).length > 0
                 ? displayBriefing.groups

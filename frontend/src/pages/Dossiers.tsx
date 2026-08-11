@@ -198,10 +198,11 @@ export default function Dossiers() {
       await Promise.all(activeSujet.sources.filter(s => s.active).map(s => api.runPipelineSource(s.id)))
       setCollectDone(true)
       setHasCollected(true)
-      setTimeout(() => setCollectDone(false), 3000)
       const updated = await api.getSujet(activeSujet.id)
       setActiveSujet(updated)
       await load()
+      // Redirection vers Briefing après collecte
+      setTimeout(() => navigate(`/briefing?sujet=${activeSujet.id}`), 1500)
     } catch (e) { console.error(e) }
     finally { setCollecting(false) }
   }
