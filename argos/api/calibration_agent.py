@@ -54,6 +54,7 @@ class CalibrationState:
     out_of_scope: list[str] = field(default_factory=list)
     sectors: list[str] = field(default_factory=list)
     inconsistencies: list[str] = field(default_factory=list)
+    angles_covered: list[str] = field(default_factory=list)  # thèmes déjà traités par une question
 
     def all_topics(self) -> list[TopicState]:
         return self.topics_explicit + self.topics_implicit
@@ -163,6 +164,7 @@ Règles d'extraction :
 - sectors : secteurs applicatifs mentionnés (industrie, bancaire, défense, etc.)
 - out_of_scope : ce qui a été explicitement exclu
 - inconsistencies : contradictions détectées entre réponses (ex: "niveau avancé" + "je ne sais pas ce qu'est X")
+- angles_covered : liste des THÈMES déjà traités par au moins une question dans l'historique. Utilise ces étiquettes exactes si applicable : "niveau_actuel_cible", "outils_frameworks", "acteurs", "out_of_scope", "secteurs", "type_contenu", "horizon_temporel". Ajoute tout autre thème traité en texte libre.
 
 Réponds UNIQUEMENT avec ce JSON :
 {{
@@ -176,7 +178,8 @@ Réponds UNIQUEMENT avec ce JSON :
   "actors": ["..."],
   "sectors": ["..."],
   "out_of_scope": ["..."],
-  "inconsistencies": ["..."]
+  "inconsistencies": ["..."],
+  "angles_covered": ["niveau_actuel_cible", "outils_frameworks", "..."]
 }}"""
 
         try:
@@ -208,6 +211,7 @@ Réponds UNIQUEMENT avec ce JSON :
             state.sectors = data.get("sectors", [])
             state.out_of_scope = data.get("out_of_scope", [])
             state.inconsistencies = data.get("inconsistencies", [])
+            state.angles_covered = data.get("angles_covered", [])
             return state
 
         except Exception as e:
@@ -398,6 +402,7 @@ Réponds UNIQUEMENT avec ce JSON :
 - Incohérences détectées : {inconsistencies if inconsistencies else "aucune"}
 - Secteurs : {state.sectors if state.sectors else "non précisé"}
 - Questions posées : {n}
+- Angles déjà traités par une question : {state.angles_covered if state.angles_covered else "aucun"}
 - Angles encore à couvrir : {missing if missing else "tous couverts — prêt à finaliser"}"""
 
         # Détection d'une demande directe de recommandation dans la dernière réponse
@@ -453,6 +458,8 @@ Niveaux possibles : novice → débutant → intermédiaire → avancé → expe
 
 RÈGLES DE STYLE ABSOLUES :
 - Ne JAMAIS commencer par un rappel ou une reformulation de ce que l'utilisateur a dit. Interdit : "Tu as dit...", "Tu as mentionné...", "Tu as choisi...", "Tu veux... mais tu dis aussi...", "Tu as exprimé... mais tu questionnes maintenant...", et toute formulation du type "Tu X mais tu Y" qui invente une contradiction.
+- Ne JAMAIS récapituler la liste des outils ou acteurs déjà confirmés dans ta question. Ce n'est pas un bilan — c'est une question. Interdit : "Ta veille couvre maintenant X, Y, Z. Veux-tu ajouter..." → Correct : "Veux-tu ajouter..."
+- Ne JAMAIS poser une question sur un angle déjà listé dans "Angles déjà traités par une question". Si "niveau_actuel_cible" est déjà couvert, ne pas reposer une question sur le niveau.
 - Aller droit au but : la question, pas l'historique
 - Une question = un seul angle précis
 - Si l'utilisateur dit qu'il ne sait pas, est perdu, ou demande un plan : NE PAS reposer une question sur comment l'aider. Prendre une décision à sa place, la proposer clairement, et demander confirmation. Exemple : "Je te propose de commencer par les concepts fondamentaux (ce qu'est un benchmark, pourquoi évaluer), puis les outils pratiques. On part sur cette progression ?"
