@@ -25,6 +25,7 @@ interface Sujet {
     official_domains: string[]; recognized_domains: string[]
     trusted_queries: string[]; keywords: string[]
   }
+  filter_config?: { must_match?: string[]; actors?: string[] }
   sources?: Source[]
 }
 
@@ -618,7 +619,11 @@ export default function Dossiers() {
                             const tooltips: Record<string, string> = {
                               trusted_queries: 'Requêtes envoyées à SearXNG pour découvrir de nouveaux contenus. Chaque nuit, Argos relance ces recherches et ingère les résultats pertinents dans le RAG.',
                             }
-                            const items: string[] = activeSujet.knowledge_profile[key] || []
+                            const items: string[] = activeSujet.knowledge_profile[key]?.length
+                              ? activeSujet.knowledge_profile[key]
+                              : key === 'trusted_queries'
+                                ? (activeSujet.filter_config?.must_match ?? [])
+                                : []
                             const rows = key === 'trusted_queries' ? 6 : key === 'keywords' ? 6 : 5
                             return (
                               <div key={key}>

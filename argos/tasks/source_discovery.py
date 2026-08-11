@@ -246,6 +246,26 @@ def _save_source(sujet_id: int, url: str, name: str, source_type: str, task_id: 
             """,
             (sujet_id, url, name, source_type),
         )
+
+        # Mise à jour automatique du profil de connaissance avec le domaine de la source
+        domain = urlparse(url).hostname or ""
+        if domain:
+            domain_field = "official_domains" if source_type == "rss" else "recognized_domains"
+            cur.execute(
+                f"""
+                UPDATE sujets
+                SET knowledge_profile = jsonb_set(
+                    knowledge_profile,
+                    '{{{domain_field}}}',
+                    COALESCE(knowledge_profile->'{domain_field}', '[]'::jsonb) || to_jsonb(%s::text),
+                    true
+                )
+                WHERE id = %s
+                  AND NOT (COALESCE(knowledge_profile->'{domain_field}', '[]'::jsonb) @> to_jsonb(%s::text))
+                """,
+                (domain, sujet_id, domain),
+            )
+
         cur.close()
         conn.close()
         logger.info(f"Source saved: sujet={sujet_id} url={url} type={source_type}")
