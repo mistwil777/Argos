@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { api } from '@/services/api'
 import QuestionnaireModal from '@/components/ui/QuestionnaireModal'
+import SourceDiscoveryStream from '@/components/ui/SourceDiscoveryStream'
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -70,6 +71,7 @@ export default function Dossiers() {
   const [questionnaireSujetId, setQuestionnaireSujetId] = useState<number | null>(null)
   const [questionnaireSujetName, setQuestionnaireSujetName] = useState('')
   const [questionnaireIntention, setQuestionnaireIntention] = useState('surveiller')
+  const [discoveryRunningSujetId, setDiscoveryRunningSujetId] = useState<number | null>(null)
 
   // Renommage inline
   const [renameWsId, setRenameWsId]     = useState<number | null>(null)
@@ -525,6 +527,22 @@ export default function Dossiers() {
                 </div>
               </div>
 
+              {/* Bandeau découverte en cours */}
+              {discoveryRunningSujetId === activeSujet.id && (
+                <div className="flex-shrink-0 px-6 py-3 border-b border-[hsl(var(--line))] bg-[hsl(var(--bg-2))]">
+                  <SourceDiscoveryStream
+                    sujetId={activeSujet.id}
+                    onComplete={async () => {
+                      setDiscoveryRunningSujetId(null)
+                      const data = await api.getSujets(activeWs ?? undefined)
+                      setSujets(data.sujets || [])
+                      const updated = data.sujets?.find((s: any) => s.id === activeSujet.id)
+                      if (updated) openSujet(updated)
+                    }}
+                  />
+                </div>
+              )}
+
               {/* Corps scrollable */}
               <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
 
@@ -675,6 +693,12 @@ export default function Dossiers() {
                         <div className="px-4 py-3 space-y-3">
                           {step2Done ? (
                             <>
+                              {/* Explication si pas encore d'articles */}
+                              {activeSujet.item_count === 0 && (
+                                <p className="text-[11px] text-[hsl(var(--text-3))] leading-relaxed">
+                                  Sources prêtes. Les articles apparaîtront après la prochaine collecte — lancez-la en étape 3.
+                                </p>
+                              )}
                               {/* Sources repliables */}
                               <button onClick={() => setSourcesOpen(v => !v)}
                                 className="w-full flex items-center gap-2 text-left text-[11px] font-mono text-[hsl(var(--text-2))] hover:text-[hsl(var(--accent))] transition-colors">
@@ -790,8 +814,11 @@ export default function Dossiers() {
             sujetName={questionnaireSujetName}
             intentionType={questionnaireIntention}
             onClose={() => setQuestionnaireOpen(false)}
-            onDone={async (_filterConfig, _intentionType) => {
+            onDone={async (_filterConfig, _intentionType, stillDiscovering) => {
               setQuestionnaireOpen(false)
+              if (stillDiscovering && questionnaireSujetId) {
+                setDiscoveryRunningSujetId(questionnaireSujetId)
+              }
               // Rafraîchir le sujet pour refléter intention_type + filter_config
               const data = await api.getSujets(activeWs ?? undefined)
               setSujets(data.sujets || [])

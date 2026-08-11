@@ -19,7 +19,7 @@ interface Props {
   intentionType: string
   initialContext?: string
   onClose: () => void
-  onDone: (filterConfig: any, intentionType: string) => void
+  onDone: (filterConfig: any, intentionType: string, stillDiscovering?: boolean) => void
 }
 
 type Phase = 'interview' | 'summary' | 'filter' | 'discovering'
@@ -585,9 +585,9 @@ export default function QuestionnaireModal({ sujetId, sujetName, intentionType, 
 
             {/* Découverte en cours — fermer sans attendre */}
             {phase === 'discovering' && (
-              <button onClick={() => onDone({}, intentionType)}
+              <button onClick={() => onDone({}, intentionType, true)}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[hsl(var(--line))] text-[hsl(var(--text-2))] text-[12.5px] font-bold transition-all hover:bg-[hsl(var(--bg-3))]">
-                Fermer
+                Fermer — continuer en arrière-plan
               </button>
             )}
           </div>
