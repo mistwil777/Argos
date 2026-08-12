@@ -71,22 +71,30 @@ function Panel({ title, icon: Icon, children }: { title: string; icon: any; chil
 function SectionGeneral() {
   const { ttsEnabled, setTtsEnabled } = useVoice()
   const { theme, toggleTheme } = useTheme()
-  const [hours,     setHours]     = useState(loadHours)
-  const [briefTime, setBriefTime] = useState(loadBriefH)
-  const [saved,     setSaved]     = useState(false)
-  const [adminOpen, setAdminOpen] = useState(false)
-  const [indexing,  setIndexing]  = useState(false)
-  const [indexMsg,  setIndexMsg]  = useState<string | null>(null)
+  const [hours,           setHours]           = useState(loadHours)
+  const [briefTime,       setBriefTime]       = useState(loadBriefH)
+  const [saved,           setSaved]           = useState(false)
+  const [adminOpen,       setAdminOpen]       = useState(false)
+  const [indexing,        setIndexing]        = useState(false)
+  const [indexMsg,        setIndexMsg]        = useState<string | null>(null)
+  const [readingLanguage, setReadingLanguage] = useState<string>('')
 
   useEffect(() => {
     const stored = localStorage.getItem('argos:tts_enabled')
     if (stored !== null) setTtsEnabled(stored === 'true')
+    api.updateMe({}).then((u: any) => {
+      const lang = u?.preferences?.reading_language || ''
+      setReadingLanguage(lang)
+    }).catch(() => {})
   }, [setTtsEnabled])
 
-  function save() {
+  async function save() {
     localStorage.setItem(LS_HOURS,   String(hours))
     localStorage.setItem(LS_BRIEF_H, briefTime)
     localStorage.setItem('argos:tts_enabled', String(ttsEnabled))
+    try {
+      await api.updateMe({ preferences: { reading_language: readingLanguage } })
+    } catch { /* silencieux */ }
     setSaved(true)
     setTimeout(() => setSaved(false), 2500)
   }
@@ -135,6 +143,26 @@ function SectionGeneral() {
             <motion.div animate={{ x: ttsEnabled ? 20 : 2 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }}
               className="absolute top-1 w-4 h-4 rounded-full bg-white shadow" />
           </button>
+        </div>
+      </Panel>
+
+      <Panel title="Lecture" icon={Settings2}>
+        <div className="px-4 py-4 space-y-3">
+          <div>
+            <label className="text-[11px] font-mono text-[hsl(var(--text-3))] uppercase tracking-wider block mb-1.5">Langue de lecture cible</label>
+            <select value={readingLanguage} onChange={e => setReadingLanguage(e.target.value)}
+              className="w-full bg-[hsl(var(--bg))] border border-[hsl(var(--line))] rounded px-3 py-2 text-[12.5px] font-mono text-[hsl(var(--text-2))] outline-none focus:border-[hsl(var(--accent-line))] transition-colors">
+              <option value="">Aucune (langue originale)</option>
+              <option value="français">Français</option>
+              <option value="anglais">Anglais</option>
+              <option value="espagnol">Espagnol</option>
+              <option value="allemand">Allemand</option>
+              <option value="portugais">Portugais</option>
+            </select>
+            <p className="text-[10.5px] text-[hsl(var(--text-3))] mt-1.5">
+              Quand une langue est sélectionnée, les articles sont traduits automatiquement à l'ouverture.
+            </p>
+          </div>
         </div>
       </Panel>
 

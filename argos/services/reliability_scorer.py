@@ -69,6 +69,16 @@ OFFICIAL_DOMAINS: set[str] = {
     # Frameworks (blogs officiels)
     "blog.langchain.dev", "langchain.dev",
     "docker.com", "www.docker.com",
+    # MLflow (Apache / Linux Foundation)
+    "mlflow.org", "www.mlflow.org",
+    # Ray / Anyscale
+    "ray.io", "docs.ray.io",
+    # Weights & Biases
+    "wandb.ai", "docs.wandb.ai",
+    # scikit-learn
+    "scikit-learn.org",
+    # FastAPI / Pydantic
+    "fastapi.tiangolo.com", "docs.pydantic.dev",
 }
 
 # Domaines reconnus mais non officiels — acceptés avec score élevé
@@ -132,40 +142,169 @@ MIN_TEXT_LENGTH = 200        # mots minimum pour un item informatif
 MIN_INFORMATIVE_RATIO = 0.5  # ratio texte informatif / total
 
 
+# ─── Extraction token domaine ─────────────────────────────────────────────────
+
+def _domain_token(domain: str) -> str:
+    """Extrait le token principal d'un domaine : 'mlflow.org' → 'mlflow'."""
+    parts = domain.split(".")
+    # Ignorer les sous-domaines connus (www, docs, api, blog, developer)
+    skip = {"www", "docs", "api", "blog", "developer", "dev", "en", "fr"}
+    for part in parts:
+        if part not in skip and len(part) > 2:
+            return part.lower()
+    return parts[0].lower() if parts else ""
+
+
+def _heuristic_tier(domain: str, title: str = "", keywords: list | None = None) -> tuple[str, float, str]:
+    """
+    Heuristique pure — aucun appel externe.
+    Retourne (tier, score, reason).
+    """
+    token = _domain_token(domain)
+
+    # 1. Patterns rejetés
+    for pattern in REJECTED_DOMAIN_PATTERNS:
+        if re.search(pattern, domain):
+            return "rejected", 0.0, f"Domaine rejeté (pattern : {pattern})"
+
+    # 2. TLD institutionnel → official
+    if re.search(r"\.(gov|gouv\.\w+|edu|ac\.\w+|parliament\.\w+)$", domain):
+        return "official", 1.0, f"TLD institutionnel : {domain}"
+
+    # 3. GitHub
+    if "github.com" in domain:
+        return "recognized", 0.8, "GitHub"
+
+    # 4. Match sémantique token ↔ titre/keywords
+    haystack = (title + " " + " ".join(keywords or [])).lower()
+    if token and token in haystack:
+        # Sous-domaine docs/developer → confiance forte
+        if re.match(r"^(docs|developer|api|dev)\.", domain):
+            return "official", 0.95, f"Domaine doc officiel ({token})"
+        return "official", 0.85, f"Token '{token}' présent dans le contenu — source primaire probable"
+
+    # 5. Domaines .org génériques
+    if domain.endswith(".org"):
+        return "recognized", 0.7, f"Domaine .org : {domain}"
+
+    # 6. Reconnus génériques
+    if domain in RECOGNIZED_DOMAINS or any(domain.endswith("." + d) for d in RECOGNIZED_DOMAINS):
+        return "recognized", 0.75, f"Domaine reconnu : {domain}"
+
+    return "unknown", 0.4, f"Domaine inconnu : {domain}"
+
+
+# ─── Cache DB ─────────────────────────────────────────────────────────────────
+
+def _get_cached_reputation(domain: str, db) -> Optional[dict]:
+    """Lit le cache domain_reputation. Retourne None si absent."""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT tier, confidence, verified_by FROM domain_reputation WHERE domain = %s",
+                    (domain,)
+                )
+                row = cur.fetchone()
+        if row:
+            return {"tier": row[0], "confidence": row[1], "verified_by": row[2]}
+    except Exception as e:
+        logger.debug(f"[REPUTATION] cache read error: {e}")
+    return None
+
+
+def _set_cached_reputation(domain: str, tier: str, confidence: float, verified_by: str, token: str = "", db=None):
+    """Écrit dans domain_reputation. Silencieux en cas d'erreur."""
+    if not db:
+        return
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO domain_reputation (domain, tier, confidence, verified_by, token, verified_at)
+                    VALUES (%s, %s, %s, %s, %s, NOW())
+                    ON CONFLICT (domain) DO UPDATE
+                      SET tier = EXCLUDED.tier,
+                          confidence = EXCLUDED.confidence,
+                          verified_by = EXCLUDED.verified_by,
+                          verified_at = NOW()
+                """, (domain, tier, confidence, verified_by, token))
+                conn.commit()
+    except Exception as e:
+        logger.debug(f"[REPUTATION] cache write error: {e}")
+
+
+# ─── Vérification LLM ─────────────────────────────────────────────────────────
+
+async def verify_domain_with_llm(domain: str, token: str, llm_provider, db) -> str:
+    """
+    Vérifie via LLM si `domain` est le site officiel de `token`.
+    Met à jour domain_reputation. Retourne le tier final.
+    """
+    prompt = (
+        f"Is '{domain}' the official website for the tool, project, or organization named '{token}'? "
+        f"Answer with exactly one word: yes or no."
+    )
+    try:
+        raw, _ = await llm_provider.generate(
+            prompt=prompt,
+            system_prompt="You are a factual classifier. Answer with exactly one word: yes or no.",
+            max_tokens=5,
+            temperature=0.0,
+        )
+        answer = raw.strip().lower()
+        if "yes" in answer:
+            tier, confidence = "official", 0.95
+        else:
+            tier, confidence = "unknown", 0.4
+        _set_cached_reputation(domain, tier, confidence, "llm", token, db)
+        logger.info(f"[REPUTATION] LLM verified {domain} → {tier}")
+        return tier
+    except Exception as e:
+        logger.warning(f"[REPUTATION] LLM verify failed for {domain}: {e}")
+        return "unknown"
+
+
 # ─── Scorer domaine ───────────────────────────────────────────────────────────
 
-def score_domain(url: str) -> ReliabilityResult:
+def score_domain(url: str, title: str = "", keywords: list | None = None, db=None) -> ReliabilityResult:
     """
     Évalue la fiabilité d'un domaine source.
-    Résultat mis en cache par l'appelant si nécessaire.
+    1. Cache DB (domain_reputation)
+    2. Liste blanche historique (OFFICIAL_DOMAINS)
+    3. Heuristique sémantique (token ↔ contenu)
+    La vérification LLM est déclenchée de façon asynchrone par le pipeline.
     """
     domain = _extract_domain(url)
     if not domain:
         return ReliabilityResult(False, 0.0, "URL invalide", "rejected")
 
-    # Patterns rejetés
-    for pattern in REJECTED_DOMAIN_PATTERNS:
-        if re.search(pattern, domain):
-            return ReliabilityResult(
-                False, 0.0,
-                f"Domaine rejeté (pattern commercial : {pattern})",
-                "rejected"
-            )
+    # 0. Cache DB
+    if db:
+        cached = _get_cached_reputation(domain, db)
+        if cached:
+            tier = cached["tier"]
+            if tier == "rejected":
+                return ReliabilityResult(False, 0.0, f"Domaine rejeté (cache)", "rejected")
+            score = cached["confidence"]
+            return ReliabilityResult(True, score, f"Cache {cached['verified_by']} : {tier}", tier)
 
-    # Officiel
+    # 1. Liste blanche historique
     if domain in OFFICIAL_DOMAINS or any(domain.endswith("." + d) for d in OFFICIAL_DOMAINS):
-        return ReliabilityResult(True, 1.0, f"Domaine officiel : {domain}", "official")
+        if db:
+            _set_cached_reputation(domain, "official", 1.0, "whitelist", _domain_token(domain), db)
+        return ReliabilityResult(True, 1.0, f"Domaine officiel (whitelist) : {domain}", "official")
 
-    # Reconnu
-    if domain in RECOGNIZED_DOMAINS or any(domain.endswith("." + d) for d in RECOGNIZED_DOMAINS):
-        return ReliabilityResult(True, 0.75, f"Domaine reconnu : {domain}", "recognized")
+    # 2. Heuristique
+    tier, score, reason = _heuristic_tier(domain, title, keywords)
+    if tier == "rejected":
+        return ReliabilityResult(False, 0.0, reason, "rejected")
 
-    # GitHub : accepté mais score variable selon le repo
-    if "github.com" in domain:
-        return ReliabilityResult(True, 0.8, "GitHub — évaluation repo requise", "recognized")
+    # Mettre en cache les résultats heuristiques pour les futurs items
+    if db:
+        _set_cached_reputation(domain, tier, score, "heuristic", _domain_token(domain), db)
 
-    # Inconnu : accepté avec score faible, soumis à l'analyse du contenu
-    return ReliabilityResult(True, 0.4, f"Domaine inconnu : {domain}", "unknown")
+    return ReliabilityResult(True, score, reason, tier)
 
 
 # ─── Scorer item ──────────────────────────────────────────────────────────────
@@ -184,8 +323,8 @@ def score_item(
 
     Retourne passed=False avec reason si l'item doit être rejeté.
     """
-    # 1. Évaluation domaine
-    domain_result = score_domain(url)
+    # 1. Évaluation domaine (avec titre pour heuristique sémantique)
+    domain_result = score_domain(url, title=title)
     if not domain_result.passed:
         return domain_result
 

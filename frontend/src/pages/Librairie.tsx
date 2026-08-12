@@ -44,8 +44,8 @@ export default function Librairie() {
                 <Loader2 className="w-5 h-5 animate-spin text-[hsl(var(--accent))]" />
               </div>
             }>
-              {tab === 'documents' && <LibraryContent />}
-              {tab === 'kg'        && <KGContent />}
+              {tab === 'documents' && <LibraryContent key="lib" />}
+              {tab === 'kg'        && <KGContent key="kg" />}
             </Suspense>
           </motion.div>
         </AnimatePresence>

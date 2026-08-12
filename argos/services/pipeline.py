@@ -56,6 +56,7 @@ async def run_pipeline_for_source(source_id: int) -> dict:
 
     inserted = await _step_collect(src_id, src_name, src_url, src_type, src_wid, db)
     classified_ids = await _step_classify(src_url, db)
+    await _step_verify_domains(src_url, db)
 
     result = {
         "source_id": source_id,
@@ -167,7 +168,100 @@ async def _step_classify(src_url: str, db) -> list[int]:
             logger.warning(f"[PIPELINE] Classify item {item_id} échoué, item conservé en pending : {e}")
 
     logger.info(f"[PIPELINE] Classify — {len(classified)}/{len(pending_ids)} classifiés")
+
+    # Tagger les items classifiés medium/high/critical avec cleaned_content
+    if classified:
+        await _step_tag_content(classified, db)
+
     return classified
+
+
+async def _step_tag_content(item_ids: list[int], db) -> None:
+    """Classifie les passages veille/apprentissage sur les items eligibles."""
+    from argos.services.content_tagger import tag_items_batch
+
+    with db.get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id FROM items
+                WHERE id = ANY(%s)
+                  AND importance IN ('medium', 'high', 'critical')
+                  AND cleaned_content IS NOT NULL
+                  AND content_tagged_at IS NULL
+            """, (item_ids,))
+            to_tag = [r[0] for r in cur.fetchall()]
+
+    if not to_tag:
+        return
+
+    llm = _make_llm()
+    stats = await tag_items_batch(to_tag, db, llm)
+    logger.info(f"[PIPELINE] Content tagging — {stats}")
+
+
+async def _step_verify_domains(src_url: str, db) -> None:
+    """
+    Vérifie via LLM les domaines 'unknown' rencontrés dans cette collecte.
+    Un domaine n'est vérifié qu'une seule fois (cache domain_reputation).
+    """
+    from argos.services.reliability_scorer import verify_domain_with_llm, _domain_token, _get_cached_reputation
+    from urllib.parse import urlparse
+
+    with db.get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT DISTINCT url, title, keywords
+                FROM items
+                WHERE source_url = %s
+                  AND reliability_tier = 'unknown'
+                  AND reliability_passed = TRUE
+            """, (src_url,))
+            rows = cur.fetchall()
+
+    if not rows:
+        return
+
+    llm = _make_llm()
+    verified = 0
+
+    for url, title, keywords in rows:
+        try:
+            parsed = urlparse(url)
+            domain = parsed.netloc.lstrip("www.")
+            if not domain:
+                continue
+
+            # Skip si déjà dans le cache
+            cached = _get_cached_reputation(domain, db)
+            if cached and cached["verified_by"] in ("llm", "whitelist"):
+                continue
+
+            token = _domain_token(domain)
+            if not token:
+                continue
+
+            # Vérifier seulement si le token est présent dans titre/keywords (signal sémantique)
+            haystack = (title or "" + " " + " ".join(keywords or [])).lower()
+            if token not in haystack:
+                continue
+
+            tier = await verify_domain_with_llm(domain, token, llm, db)
+
+            # Mettre à jour les items existants avec ce domaine
+            with db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    score = 0.95 if tier == "official" else 0.4
+                    cur.execute("""
+                        UPDATE items SET reliability_tier = %s, reliability_score = %s
+                        WHERE url LIKE %s AND reliability_tier = 'unknown'
+                    """, (tier, score, f"%{domain}%"))
+                    conn.commit()
+            verified += 1
+        except Exception as e:
+            logger.warning(f"[PIPELINE] Domain verify {url}: {e}")
+
+    if verified:
+        logger.info(f"[PIPELINE] Domain verification — {verified} domaine(s) vérifiés via LLM")
 
 
 async def _step_ingest_priority(src_url: str, workspace_id: Optional[int], db) -> int:
@@ -204,25 +298,15 @@ async def _step_ingest_priority(src_url: str, workspace_id: Optional[int], db) -
     rag = RAGService(llm_provider=llm, vector_store=vs, db_manager=db)
     ingested = 0
 
-    from argos.services.knowledge_graph import extract_and_index as kg_extract
-
     for item_id, title, url, summary, existing_digest in items:
         try:
             if existing_digest:
-                # Digest déjà généré, indexer directement
-                rag.index_item(item_id)
-                await kg_extract(item_id, title, existing_digest, source_url=url or "", db=db)
                 ingested += 1
-                logger.info(f"[PIPELINE] Item {item_id} ré-indexé dans RAG + KG (digest existant)")
+                logger.info(f"[PIPELINE] Item {item_id} — digest existant, pas d'ingestion auto")
                 continue
 
-            # Score de pertinence (sans embedding pour l'instant — P2 HDBSCAN)
-            score_data = compute_item_score(
-                url=url or "",
-                text=summary or "",
-            )
+            score_data = compute_item_score(url=url or "", text=summary or "")
 
-            # Digest LLM
             digest = await generate_digest(
                 url=url or "",
                 title=title or "",
@@ -230,7 +314,6 @@ async def _step_ingest_priority(src_url: str, workspace_id: Optional[int], db) -
                 llm_provider=llm,
             )
 
-            # Sauvegarder digest + score
             with db.get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute("""
@@ -248,13 +331,10 @@ async def _step_ingest_priority(src_url: str, workspace_id: Optional[int], db) -
                     ))
                     conn.commit()
 
-            # Indexer dans RAG + KG
-            rag.index_item(item_id)
-            await kg_extract(item_id, title, digest.get("markdown", ""), source_url=url or "", db=db)
             ingested += 1
             logger.info(
-                f"[PIPELINE] Item {item_id} ingéré — score={score_data['score']} "
-                f"domain={score_data['domain_score']} density={score_data['density_score']}"
+                f"[PIPELINE] Item {item_id} digest généré — score={score_data['score']} "
+                f"(pas d'ingestion auto RAG/KG)"
             )
 
         except Exception as e:
@@ -338,10 +418,10 @@ async def run_pipeline_batch(limit: int = 20) -> dict:
                             score_data["score"], item_id,
                         ))
                         conn.commit()
-                rag.index_item(item_id)
                 ingested += 1
+                logger.info(f"[PIPELINE-BATCH] Item {item_id} digest généré (pas d'ingestion auto RAG/KG)")
             except Exception as e:
-                logger.warning(f"[PIPELINE-BATCH] Ingest {item_id} : {e}")
+                logger.warning(f"[PIPELINE-BATCH] Digest {item_id} : {e}")
 
     logger.info(f"[PIPELINE-BATCH] classified={classified} ingested={ingested}")
     return {"classified": classified, "ingested": ingested}

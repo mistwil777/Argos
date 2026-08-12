@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   FileText, BookOpen, Map, BarChart3,
@@ -8,10 +8,12 @@ import {
   Search, Sparkles, SlidersHorizontal, Wand2, RotateCcw,
   CheckSquare, Square, Folder, Tag, ChevronRight, Library as LibraryIcon,
   Radio, ExternalLink, Upload, FilePlus,
+  Maximize2, Minimize2,
 } from 'lucide-react'
 import { api } from '@/services/api'
 import { timeAgo } from '@/lib/utils'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import DocumentGeneratorModal from '@/components/ui/DocumentGeneratorModal'
 
 const DOC_TYPE_META: Record<string, { icon: any; label: string; color: string; pill: string }> = {
@@ -41,6 +43,7 @@ type NavLevel = 'workspaces' | 'sujets' | 'docs'
 
 export default function Library() {
   const location = useLocation()
+  const navigate = useNavigate()
 
   // ── Navigation ──
   const [level, setLevel]               = useState<NavLevel>('workspaces')
@@ -52,7 +55,8 @@ export default function Library() {
 
   // ── Onglet actif ──
   const [tab, setTab] = useState<'articles' | 'documents'>('articles')
-  const [ragFilter, setRagFilter] = useState<'all' | 'bruts' | 'rag'>('all')
+  const [ragFilter, setRagFilter] = useState<'all' | 'bruts' | 'rag'>('bruts')
+  const [docRagFilter, setDocRagFilter] = useState<'all' | 'rag'>('all')
 
   // ── Articles (items) ──
   const [items, setItems]         = useState<any[]>([])
@@ -97,6 +101,9 @@ export default function Library() {
   const [editTitle, setEditTitle] = useState('')
   const [editContent, setEditContent] = useState('')
   const [saving, setSaving]       = useState(false)
+  const [ragIndexing, setRagIndexing] = useState(false)
+  const [docFullscreen, setDocFullscreen] = useState(false)
+  const [itemRagIndexing, setItemRagIndexing] = useState(false)
 
   const [copied, setCopied]       = useState(false)
   const [deleting, setDeleting]   = useState<number | null>(null)
@@ -192,7 +199,19 @@ export default function Library() {
   // Auto-open generator modal
   useEffect(() => {
     const q = (location.state as any)?.generateQuery
-    if (q) { setGenModal({ prefill: q }); window.history.replaceState({}, '') }
+    if (q) { setGenModal({ prefill: q }); navigate(location.pathname, { replace: true, state: {} }) }
+  }, [location.state])
+
+  // Auto-open document from external navigation (e.g. Briefing → "Conserver")
+  useEffect(() => {
+    const docId = (location.state as any)?.openDocId
+    if (docId) {
+      navigate(location.pathname, { replace: true, state: {} })
+      api.getDocument(docId).then(full => {
+        setSelected(full); setEditTitle(full.title); setEditContent(full.content_markdown); setEditMode(false)
+        setDocReadPct(full.reading_progress || 0)
+      }).catch(() => {})
+    }
   }, [location.state])
 
   // Recherche — fonctionne depuis n'importe quel niveau
@@ -394,7 +413,7 @@ export default function Library() {
     if (readFilter === 'reading') return d.reading_progress > 0 && d.reading_progress < 100
     if (readFilter === 'done') return d.reading_progress === 100
     return true
-  })
+  }).filter(d => docRagFilter === 'rag' ? d.rag_indexed : true)
 
   // ─── RENDU ────────────────────────────────────────────────────────────────
 
@@ -809,6 +828,14 @@ export default function Library() {
                             </button>
                           ))}
                         </div>
+                        <div className="flex items-center rounded border border-[hsl(var(--line))] overflow-hidden text-[10.5px] font-mono">
+                          {([['all','Tous'],['rag','Dans le RAG']] as const).map(([val, label]) => (
+                            <button key={val} onClick={() => setDocRagFilter(val)}
+                              className={`px-2 py-1 transition-colors ${docRagFilter === val ? 'bg-[hsl(var(--accent-dim))] text-[hsl(var(--accent))]' : 'text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))]'}`}>
+                              {label}
+                            </button>
+                          ))}
+                        </div>
                         {docs.length > 0 && (
                           <button onClick={selectedIds.size === docs.length ? clearSelection : selectAll}
                             className="flex items-center gap-1.5 px-2 py-1 rounded border border-[hsl(var(--line))] text-[11px] font-mono text-[hsl(var(--text-3))] hover:border-[hsl(var(--accent-line))] hover:text-[hsl(var(--accent))] transition-colors">
@@ -887,10 +914,15 @@ export default function Library() {
                                       ? <span className="pill text-[10px] bg-green-500/10 text-[hsl(var(--green))] border border-green-500/20">✓ Terminé</span>
                                       : <span className="pill text-[10px] bg-yellow-500/10 text-[hsl(var(--amber))] border border-yellow-500/20">{doc.reading_progress}%</span>
                                   }
+                                  {doc.rag_indexed && (
+                                    <span className="pill text-[10px] bg-[hsl(var(--accent-dim))] text-[hsl(var(--accent))] border border-[hsl(var(--accent-line))] flex items-center gap-1">
+                                      <DatabaseZap className="w-2.5 h-2.5" />RAG
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                               <p className="text-[13.5px] font-semibold text-[hsl(var(--text))] leading-snug mb-2 line-clamp-2">{doc.title}</p>
-                              <p className="text-[11.5px] text-[hsl(var(--text-3))] leading-snug line-clamp-3">{doc.excerpt?.replace(/#+\s/g, '')}</p>
+                              <p className="text-[11.5px] text-[hsl(var(--text-3))] leading-snug line-clamp-3">{doc.excerpt?.replace(/#+\s/g, '').replace(/\*\*[^*]*\*\*/g, '').replace(/\[[^\]]*\]\([^)]*\)/g, '').replace(/^-{3,}$/gm, '').replace(/\s+/g, ' ').trim()}</p>
                               <div className="flex items-center justify-between mt-4 pt-3 border-t border-[hsl(var(--line))]">
                                 <span className="text-[10.5px] font-mono text-[hsl(var(--text-3))]">
                                   {doc.nb_sources > 0 ? `${doc.nb_sources} source${doc.nb_sources > 1 ? 's' : ''}` : 'thème libre'}
@@ -927,7 +959,7 @@ export default function Library() {
             onClick={e => { if (e.target === e.currentTarget) setSelected(null) }}>
             <motion.div initial={{ opacity: 0, scale: 0.95, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
               transition={{ type: 'spring', stiffness: 300, damping: 28 }}
-              className="w-full max-w-4xl max-h-[92vh] flex flex-col panel overflow-hidden">
+              className={`flex flex-col panel overflow-hidden transition-all ${docFullscreen ? 'fixed inset-4 z-[60] max-w-none max-h-none' : 'w-full max-w-4xl max-h-[92vh]'}`}>
               <div className="flex items-start justify-between px-6 py-4 border-b border-[hsl(var(--line))] bg-[hsl(var(--bg-2))] flex-shrink-0">
                 <div className="flex-1 min-w-0 pr-4">
                   {editMode
@@ -945,9 +977,14 @@ export default function Library() {
                     <span className="text-[10.5px] font-mono text-[hsl(var(--text-3))]">{timeAgo(selected.created_at)}</span>
                   </div>
                 </div>
-                <button onClick={() => setSelected(null)} className="text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))] transition-colors flex-shrink-0">
-                  <X className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button onClick={() => setDocFullscreen(f => !f)} className="text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))] transition-colors">
+                    {docFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                  </button>
+                  <button onClick={() => { setSelected(null); setDocFullscreen(false) }} className="text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))] transition-colors">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
               {/* Barre progression lecture */}
               <div className="h-0.5 bg-[hsl(var(--bg-3))] flex-shrink-0">
@@ -982,7 +1019,7 @@ export default function Library() {
                       <textarea value={editContent} onChange={e => { setEditContent(e.target.value); setBeforeAi('') }}
                         className="flex-1 min-h-[300px] bg-[hsl(var(--bg-3))] border border-[hsl(var(--line))] rounded-lg px-4 py-3 text-[12.5px] text-[hsl(var(--text-2))] outline-none font-mono leading-relaxed resize-none focus:border-[hsl(var(--accent-line))]" />
                     </div>
-                  : <div className="prose-app max-w-none"><ReactMarkdown>{selected.content_markdown}</ReactMarkdown></div>
+                  : <div className="prose-app max-w-none"><ReactMarkdown remarkPlugins={[remarkGfm]}>{selected.content_markdown}</ReactMarkdown></div>
                 }
               </div>
               <div className="flex items-center justify-between px-6 py-4 border-t border-[hsl(var(--line))] bg-[hsl(var(--bg-2))] flex-shrink-0">
@@ -998,6 +1035,24 @@ export default function Library() {
                       <button onClick={() => setEditMode(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-[hsl(var(--line))] text-[11.5px] font-mono text-[hsl(var(--text-2))] hover:border-[hsl(var(--accent-line))] hover:text-[hsl(var(--accent))] transition-colors">
                         <Pencil className="w-3 h-3" /> Éditer
                       </button>
+                      {selected.rag_indexed ? (
+                        <span className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-[hsl(var(--green)/.3)] text-[11.5px] font-mono text-[hsl(var(--green))] bg-green-500/5">
+                          <DatabaseZap className="w-3 h-3" />✓ Ingéré dans le RAG
+                        </span>
+                      ) : (
+                        <button disabled={ragIndexing} onClick={async () => {
+                          setRagIndexing(true)
+                          try {
+                            await api.indexDocument(selected.id)
+                            setSelected({ ...selected, rag_indexed: true })
+                            setDocs((prev: any[]) => prev.map(d => d.id === selected.id ? { ...d, rag_indexed: true } : d))
+                          } catch (e: any) { alert(`Erreur RAG : ${e.message}`) }
+                          finally { setRagIndexing(false) }
+                        }} className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-[hsl(var(--accent-line))] text-[11.5px] font-mono text-[hsl(var(--accent))] hover:bg-[hsl(var(--accent-dim))] transition-colors disabled:opacity-40">
+                          {ragIndexing ? <Loader2 className="w-3 h-3 animate-spin" /> : <DatabaseZap className="w-3 h-3" />}
+                          Ingérer dans le RAG
+                        </button>
+                      )}
                     </>
                   ) : (
                     <>
@@ -1082,7 +1137,7 @@ export default function Library() {
                     {!itemPreviewLoading && itemPreview && (
                       <div className="prose-app max-w-none">
                         {itemPreview.markdown
-                          ? <ReactMarkdown>{itemPreview.markdown}</ReactMarkdown>
+                          ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{itemPreview.markdown}</ReactMarkdown>
                           : <p className="text-[12px] text-[hsl(var(--text-3))] italic">Contenu non disponible pour cet article.</p>
                         }
                       </div>
@@ -1139,11 +1194,30 @@ export default function Library() {
                 )}
                 {/* Actions */}
                 <div className="flex items-center gap-3">
+                  {!itemModal.rag_indexed && (
+                    <motion.button
+                      onClick={async () => {
+                        setItemRagIndexing(true)
+                        try {
+                          await api.ingestItemRag(itemModal.id)
+                          setItemModal({ ...itemModal, rag_indexed: true })
+                          setItems((prev: any[]) => prev.map(it => it.id === itemModal.id ? { ...it, rag_indexed: true } : it))
+                        } catch (e: any) { alert(`Erreur RAG : ${e.message}`) }
+                        finally { setItemRagIndexing(false) }
+                      }}
+                      disabled={itemRagIndexing}
+                      whileTap={{ scale: 0.97 }}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[hsl(var(--accent))] text-white text-[12.5px] font-bold disabled:opacity-40 transition-all"
+                    >
+                      {itemRagIndexing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <DatabaseZap className="w-3.5 h-3.5" />}
+                      {itemRagIndexing ? 'Ingestion…' : 'Ingérer dans le RAG'}
+                    </motion.button>
+                  )}
                   <motion.button
                     onClick={saveItemAsDoc}
                     disabled={itemSaving || itemPreviewLoading || !itemPreview?.markdown}
                     whileTap={{ scale: 0.97 }}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[hsl(var(--accent))] text-white text-[12.5px] font-bold disabled:opacity-40 transition-all"
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[hsl(var(--accent-line))] text-[hsl(var(--accent))] text-[12.5px] font-bold hover:bg-[hsl(var(--accent-dim))] disabled:opacity-40 transition-all"
                   >
                     {itemSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                     {itemSaving ? 'Enregistrement…' : 'Conserver dans Documents générés'}

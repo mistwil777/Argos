@@ -476,7 +476,8 @@ async def list_items(
                         id, title, summary, url, source_type, source_url,
                         item_type, importance, classification_status,
                         published_at, created_at, workspace_id,
-                        keywords, digest_markdown, rag_indexed, sujet_id
+                        keywords, digest_markdown, rag_indexed, sujet_id,
+                        content_tags
                     FROM items
                     WHERE {where_clause}
                     ORDER BY created_at DESC
@@ -507,6 +508,7 @@ async def list_items(
                         "digest_markdown": row[13],
                         "rag_indexed": bool(row[14]),
                         "sujet_id": row[15],
+                        "content_tags": row[16] or {},
                     })
                 
                 # Get total count
@@ -840,32 +842,8 @@ async def get_item_raw_content(item_id: int, translate: bool = Query(default=Fal
 
 
 async def _auto_rag_index(item_id: int, title: str, summary: str, digest_markdown: str = ""):
-    """Index an item into LanceDB using digest_markdown (fallback: summary). Never raw content."""
-    try:
-        import asyncio as _asyncio
-        from argos.services.vector_store_singleton import get_vector_store
-        vs = get_vector_store()
-        content = (digest_markdown or summary or "").strip()
-        if not content:
-            return
-        item_data = {"id": item_id, "title": title, "summary": content[:2000], "content": content, "workspace_id": None}
-        await _asyncio.to_thread(vs.index_item, item_data)
-        with db.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("UPDATE items SET rag_indexed=TRUE, rag_indexed_at=NOW() WHERE id=%s", (item_id,))
-                conn.commit()
-        logger.info(f"Auto-indexed item {item_id} into RAG")
-
-        # KG extraction en arrière-plan (non bloquant)
-        if digest_markdown:
-            try:
-                from argos.services.knowledge_graph import extract_and_index as kg_extract
-                await kg_extract(item_id, title, digest_markdown, db=db)
-            except Exception as kg_err:
-                logger.warning(f"KG extraction failed for item {item_id}: {kg_err}")
-
-    except Exception as e:
-        logger.warning(f"Auto-RAG indexing failed for item {item_id}: {e}")
+    """Désactivé — ingestion RAG/KG manuelle uniquement."""
+    pass
 
 
 @api_router.post("/items/preview-pdf-url")
@@ -1117,29 +1095,34 @@ async def ingest_preview(item_id: int):
     try:
         with db.get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT url, title, summary, digest_markdown FROM items WHERE id = %s", (item_id,))
+                cur.execute("SELECT url, title, summary, digest_markdown, cleaned_content FROM items WHERE id = %s", (item_id,))
                 row = cur.fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Item not found")
-        url, title, current_summary, existing_digest = row
+        url, title, current_summary, existing_digest, existing_cleaned = row
 
-        # Digest déjà généré — retour immédiat sans appel LLM
-        if existing_digest:
+        # Digest déjà généré — retour immédiat si cleaned_content aussi présent
+        if existing_digest and existing_cleaned:
             return {
                 "item_id": item_id,
                 "url": url,
                 "title": title,
                 "current_summary": current_summary,
                 "markdown": existing_digest,
+                "cleaned_content": existing_cleaned,
                 "json": {},
                 "content_length": 0,
                 "pages_crawled": 0,
                 "cached": True,
             }
 
-        from argos.services.web_browser import browse
+        from argos.services.web_browser import browse, html_to_markdown
         from argos.services.digest_generator import generate_digest
         from argos.services.llm_provider import create_llm_provider
+
+        need_digest = not existing_digest
+        digest = {}
+        raw_html = ""
 
         llm = create_llm_provider(
             provider_type=settings.llm_provider,
@@ -1189,27 +1172,39 @@ async def ingest_preview(item_id: int):
             content = "\n\n---\n\n".join(content_parts)
             pages_crawled = len(pages)
         else:
-            browse_result = await browse(url, use_playwright=False)
+            browse_result = await browse(url, use_playwright=True)
             content = browse_result.get("content", "")
+            raw_html = browse_result.get("html", "")
             fetched_title = browse_result.get("title") or title
             pages_crawled = 1
 
-        digest = await generate_digest(url, fetched_title, content[:50000], None, llm)
-        digest_md = digest.get("markdown", "")
+        cleaned_content = html_to_markdown(raw_html) if raw_html else content
 
-        # Stocker le digest pour éviter de le régénérer aux prochains accès
-        if digest_md:
-            import json as _json
+        if need_digest:
+            digest = await generate_digest(url, fetched_title, content[:50000], None, llm)
+            digest_md = digest.get("markdown", "")
+        else:
+            digest_md = existing_digest
+
+        # Stocker cleaned_content (et digest si nouveau)
+        if cleaned_content:
             try:
                 with db.get_connection() as conn:
                     with conn.cursor() as cur:
-                        cur.execute(
-                            "UPDATE items SET digest_markdown=%s, digest_json=%s::jsonb, digest_generated_at=NOW() WHERE id=%s",
-                            (digest_md, _json.dumps(digest.get("json", {})), item_id)
-                        )
+                        if need_digest and digest_md:
+                            import json as _json
+                            cur.execute(
+                                "UPDATE items SET digest_markdown=%s, digest_json=%s::jsonb, digest_generated_at=NOW(), cleaned_content=%s WHERE id=%s",
+                                (digest_md, _json.dumps(digest.get("json", {})), cleaned_content, item_id)
+                            )
+                        else:
+                            cur.execute(
+                                "UPDATE items SET cleaned_content=%s WHERE id=%s",
+                                (cleaned_content, item_id)
+                            )
                         conn.commit()
             except Exception as save_err:
-                logger.warning(f"Could not save digest for item {item_id}: {save_err}")
+                logger.warning(f"Could not save content for item {item_id}: {save_err}")
 
         return {
             "item_id": item_id,
@@ -1217,6 +1212,7 @@ async def ingest_preview(item_id: int):
             "title": fetched_title,
             "current_summary": current_summary,
             "markdown": digest_md,
+            "cleaned_content": cleaned_content,
             "json": digest.get("json", {}),
             "content_length": len(content),
             "pages_crawled": pages_crawled,
@@ -1600,6 +1596,54 @@ async def batch_ignore_items(data: Dict[str, Any]):
                 conn.commit()
         return {"success": True, "updated": len(item_ids)}
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/items/{item_id}/translate")
+async def translate_item(item_id: int, data: Dict[str, Any]):
+    """Traduit le contenu d'un item dans la langue cible via LLM."""
+    target_language = (data.get("language") or "").strip()
+    if not target_language:
+        raise HTTPException(status_code=400, detail="language requis")
+
+    with db.get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT title, cleaned_content, summary FROM items WHERE id = %s",
+                (item_id,)
+            )
+            row = cur.fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Item introuvable")
+
+    title, cleaned_content, summary = row
+    content_to_translate = cleaned_content or summary or ""
+    if not content_to_translate:
+        raise HTTPException(status_code=422, detail="Aucun contenu à traduire")
+
+    llm = create_llm_provider(
+        provider_type=settings.llm_provider,
+        openai_api_key=settings.openai_api_key,
+        aws_access_key_id=settings.aws_access_key_id,
+        aws_secret_access_key=settings.aws_secret_access_key,
+        aws_region=settings.aws_region,
+        model=settings.default_classification_model,
+    )
+
+    system_prompt = f"Tu es un traducteur professionnel. Traduis fidèlement le texte en {target_language}. Conserve le formatage markdown. Ne traduis pas les noms propres, les sigles techniques, ni les termes spécialisés universels. Réponds uniquement avec le texte traduit, sans introduction ni commentaire."
+    prompt = f"Traduis ce texte en {target_language} :\n\n{content_to_translate[:20000]}"
+
+    try:
+        translated, _ = await llm.generate(
+            prompt=prompt,
+            system_prompt=system_prompt,
+            max_tokens=4000,
+            temperature=0.1,
+        )
+        return {"translated": translated, "language": target_language, "title": title}
+    except Exception as e:
+        logger.error(f"[TRANSLATE] item {item_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -2325,13 +2369,13 @@ async def kg_rebuild():
                 cur.execute("TRUNCATE kg_node_sources, kg_edges, kg_nodes RESTART IDENTITY CASCADE")
                 conn.commit()
 
-        # Récupérer tous les items avec digest
+        # Récupérer tous les items avec cleaned_content (fallback: digest_markdown)
         with db.get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT id, title, digest_markdown, source_url
+                    SELECT id, title, COALESCE(cleaned_content, digest_markdown), source_url
                     FROM items
-                    WHERE digest_markdown IS NOT NULL
+                    WHERE (cleaned_content IS NOT NULL OR digest_markdown IS NOT NULL)
                       AND classification_status = 'classified'
                     ORDER BY created_at DESC
                     LIMIT 200
@@ -2339,8 +2383,8 @@ async def kg_rebuild():
                 rows = cur.fetchall()
 
         processed = 0
-        for item_id, title, digest, source_url in rows:
-            await kg_extract(item_id, title or "", digest or "", source_url or "", db=db)
+        for item_id, title, content, source_url in rows:
+            await kg_extract(item_id, title or "", content or "", source_url or "", db=db)
             processed += 1
 
         with db.get_connection() as conn:
@@ -3066,6 +3110,51 @@ async def admin_rag_diag(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@api_router.post("/admin/tag-content")
+async def admin_tag_content(
+    request: Dict[str, Any] = {},
+    x_admin_token: Optional[str] = Header(default=None)
+):
+    """Déclenche le content tagging veille/apprentissage sur les items eligibles sans tag."""
+    _check_admin(x_admin_token)
+    try:
+        from argos.services.content_tagger import tag_items_batch
+
+        sujet_id = request.get("sujet_id")
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                query = """
+                    SELECT id FROM items
+                    WHERE importance IN ('medium', 'high', 'critical')
+                      AND cleaned_content IS NOT NULL
+                      AND content_tagged_at IS NULL
+                """
+                params = []
+                if sujet_id:
+                    query += " AND sujet_id = %s"
+                    params.append(sujet_id)
+                query += " ORDER BY created_at DESC LIMIT 100"
+                cur.execute(query, params)
+                to_tag = [r[0] for r in cur.fetchall()]
+
+        if not to_tag:
+            return {"tagged": 0, "skipped": 0, "failed": 0, "message": "Aucun item à tagger"}
+
+        llm = create_llm_provider(
+            provider_type=settings.llm_provider,
+            openai_api_key=settings.openai_api_key,
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            aws_region=settings.aws_region,
+            model=settings.default_classification_model,
+        )
+        stats = await tag_items_batch(to_tag, db, llm)
+        return {**stats, "total_eligible": len(to_tag)}
+    except Exception as e:
+        logger.error(f"Error in admin tag-content: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ===========================================
 # Web Tools Endpoints — REST wrappers for web.browse / web.search / web.digest
 # ===========================================
@@ -3409,27 +3498,16 @@ async def generate_document(data: Dict[str, Any]):
             with db.get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
-                        "SELECT id, title, summary, url, digest_markdown FROM items WHERE id = ANY(%s) ORDER BY importance DESC NULLS LAST",
+                        "SELECT id, title, summary, url, digest_markdown, cleaned_content FROM items WHERE id = ANY(%s) ORDER BY importance DESC NULLS LAST",
                         (item_ids,)
                     )
                     rows = cur.fetchall()
-            from argos.services.web_browser import browse_with_requests
-            import asyncio as _asyncio
             parts = []
             for r in rows:
                 title_s = r[1] or ""
                 url_s = r[3] or ""
-                # Try to fetch full content, fall back to digest then summary
-                try:
-                    if url_s and not url_s.startswith("upload://") and not url_s.lower().endswith(".pdf"):
-                        result = await browse_with_requests(url_s)
-                        content_s = result.get("content", "")[:8000]
-                    else:
-                        content_s = ""
-                except Exception:
-                    content_s = ""
-                if not content_s:
-                    content_s = (r[4] or r[2] or "")[:5000]
+                # Priorité : contenu complet nettoyé > digest > résumé
+                content_s = r[5] or r[4] or r[2] or ""
                 parts.append(f"### {title_s}\nURL: {url_s}\n\n{content_s}")
             sources_text = "\n\n".join(parts)
 
@@ -4158,11 +4236,11 @@ async def index_document(doc_id: int):
     try:
         with db.get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT title, content_markdown FROM documents WHERE id = %s", (doc_id,))
+                cur.execute("SELECT title, content_markdown, source_item_ids FROM documents WHERE id = %s", (doc_id,))
                 row = cur.fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Document not found")
-        title, content = row
+        title, content, source_item_ids = row
 
         from argos.services.vector_store_singleton import get_vector_store
         import asyncio as _asyncio
@@ -4173,6 +4251,11 @@ async def index_document(doc_id: int):
         with db.get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("UPDATE documents SET rag_indexed=TRUE, rag_indexed_at=NOW() WHERE id=%s", (doc_id,))
+                if source_item_ids:
+                    cur.execute(
+                        "UPDATE items SET rag_indexed=TRUE, rag_indexed_at=NOW() WHERE id = ANY(%s)",
+                        (source_item_ids,)
+                    )
                 conn.commit()
 
         return {"success": True, "id": doc_id, "rag_indexed": True}
@@ -4409,7 +4492,7 @@ Style : factuel, direct, sans introduction ni conclusion de politesse.
 Tu NE paraphrases PAS les titres — tu donnes des faits nouveaux, des impacts concrets.
 Réponds UNIQUEMENT en français."""
 
-_BRIEFING_PROMPT = """Voici les items de veille validés (fiabilité confirmée) des dernières {hours}h, groupés par sujet :
+_BRIEFING_PROMPT = """Voici les items de veille validés (fiabilité confirmée) des dernières {hours}h :
 
 {items_text}
 
@@ -4421,6 +4504,9 @@ Génère un briefing Delta avec EXACTEMENT ce format markdown :
 (Ce qui change concrètement aujourd'hui dans l'écosystème — 3 phrases max, aucune redite des titres)
 
 {groups_section}
+
+## Pour commencer — lecture recommandée
+{pour_commencer}
 
 ## Signal faible à surveiller
 (1 tendance émergente non encore couverte par les items — signe avant-coureur, pas une certitude)"""
@@ -4519,7 +4605,7 @@ def _group_items_by_entity(items: list[dict]) -> dict[str, list[dict]]:
     return dict(sorted(groups.items(), key=lambda x: len(x[1]), reverse=True))
 
 
-async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int] = None) -> dict:
+async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int] = None, sujet_id: Optional[int] = None) -> dict:
     """
     Génère le briefing Delta quotidien.
     N'utilise QUE les items avec reliability_passed = TRUE des dernières {hours}h.
@@ -4530,7 +4616,35 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
     from argos.services.llm_provider import create_llm_provider
 
     ws_filter = f"AND workspace_id = {workspace_id}" if workspace_id is not None else ""
+    sujet_filter = f"AND sujet_id = {sujet_id}" if sujet_id is not None else ""
     today_str = _dt.date.today().strftime("%d/%m/%Y")
+
+    # ── Contexte du sujet (niveau + bilan + filter_config) ───────────────────
+    sujet_context = ""
+    must_match_terms: list[str] = []
+    if sujet_id is not None:
+        try:
+            with db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT name, knowledge_profile, filter_config FROM sujets WHERE id = %s", (sujet_id,)
+                    )
+                    row = cur.fetchone()
+                    if row:
+                        sujet_name, kp, fc = row[0], row[1] or {}, row[2] or {}
+                        level = (kp.get("level_current") or kp.get("level") or
+                                 kp.get("niveau_actuel") or "novice")
+                        bilan = kp.get("bilan_md", "")[:2000]
+                        sujet_context = f"\nSujet ciblé : {sujet_name}\nNiveau de l'utilisateur : {level}\n"
+                        if bilan:
+                            sujet_context += f"Profil d'apprentissage :\n{bilan}\n"
+                        # Termes de la whitelist pour filtrer les items
+                        must_match_terms = (
+                            fc.get("must_match_confirmed") or
+                            fc.get("must_match") or []
+                        )
+        except Exception:
+            pass
 
     # ── IDs déjà cités dans les briefings précédents (7 derniers jours) ─────
     already_cited_ids: set = set()
@@ -4557,7 +4671,7 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
             cur.execute(f"""
                 SELECT id, title, summary, url, importance, item_type,
                        keywords, source_type, reliability_tier, reliability_score,
-                       created_at
+                       created_at, sujet_id, content_tags
                 FROM items
                 WHERE reliability_passed = TRUE
                   AND classification_status = 'classified'
@@ -4566,6 +4680,7 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
                   AND (published_at IS NULL OR published_at > NOW() - INTERVAL '90 days')
                   {exclude_clause}
                   {ws_filter}
+                  {sujet_filter}
                 ORDER BY importance DESC, reliability_score DESC NULLS LAST, created_at DESC
                 LIMIT 40
             """)
@@ -4578,12 +4693,13 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
                 cur.execute(f"""
                     SELECT id, title, summary, url, importance, item_type,
                            keywords, source_type, reliability_tier, reliability_score,
-                           created_at
+                           created_at, sujet_id, content_tags
                     FROM items
                     WHERE reliability_passed = TRUE
                       AND classification_status = 'classified'
                       AND (published_at IS NULL OR published_at > NOW() - INTERVAL '90 days')
                       {ws_filter}
+                      {sujet_filter}
                     ORDER BY created_at DESC
                     LIMIT 20
                 """)
@@ -4599,11 +4715,12 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
                     SELECT id, title, summary, url, importance, item_type,
                            keywords, source_type,
                            NULL as reliability_tier, NULL as reliability_score,
-                           created_at
+                           created_at, sujet_id, content_tags
                     FROM items
                     WHERE classification_status = 'classified'
                       AND reliability_passed IS NULL
                       {ws_filter}
+                      {sujet_filter}
                     ORDER BY created_at DESC
                     LIMIT 20
                 """)
@@ -4615,7 +4732,7 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
             url = r[3] or ""
             domain_result = score_domain(url)
             if domain_result.passed:
-                rows_pass.append(r[:8] + (domain_result.domain_tier, domain_result.score, r[10]))
+                rows_pass.append(r[:8] + (domain_result.domain_tier, domain_result.score, r[10], r[11]))
                 # Mettre à jour en base pour les prochains appels
                 try:
                     with db.get_connection() as conn:
@@ -4669,9 +4786,29 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
             "reliability_tier": r[8] or "unknown",
             "reliability_score": float(r[9]) if r[9] else 0.0,
             "created_at":       r[10].isoformat() if r[10] else None,
+            "sujet_id":         r[11],
+            "content_tags":     r[12] or {},
         }
         for r in rows
     ]
+
+    # ── Filtre must_match : exclure items hors périmètre du sujet ─────────────
+    if must_match_terms:
+        terms_lower = [t.lower() for t in must_match_terms]
+        def _item_matches(item: dict) -> bool:
+            haystack = (
+                item["title"] + " " + item["summary"] + " " +
+                " ".join(item.get("keywords") or [])
+            ).lower()
+            return any(t in haystack for t in terms_lower)
+
+        filtered = [i for i in items if _item_matches(i)]
+        if filtered:
+            items = filtered
+        # Si filtered vide : aucun item pertinent — on garde items pour ne pas
+        # bloquer le briefing, mais on le signale dans les stats
+        else:
+            logger.warning(f"Briefing sujet {sujet_id}: aucun item ne matche must_match ({len(must_match_terms)} termes). Items bruts conservés.")
 
     # ── Grouper par entité ─────────────────────────────────────────────────
     groups = _group_items_by_entity(items)
@@ -4712,11 +4849,29 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
         model=settings.aws_bedrock_model,
     )
 
+    # ── Construire la section "Pour commencer" selon le profil ───────────────
+    if sujet_context:
+        pour_commencer = f"""PROFIL D'APPRENTISSAGE DE L'UTILISATEUR :
+{sujet_context}
+
+INSTRUCTION : Parmi les items listés ci-dessus, sélectionne UNIQUEMENT 2-3 articles qui respectent TOUTES ces contraintes :
+1. L'article porte sur un outil ou concept EXPLICITEMENT prioritaire dans le profil (section "Sujets et niveaux" ou "Acteurs, outils, frameworks")
+2. L'article N'EST PAS dans la section "Hors périmètre" du profil
+3. Si une section "Hors périmètre" mentionne explicitement un thème (ex: vision, multimodal, hardware), tout article sur ce thème est EXCLU même s'il vient d'un acteur clé
+4. PRIORITÉ AUX ARTICLES INTRODUCTIFS : préférer un article qui explique CE QU'EST l'outil ou le concept (définition, cas d'usage, pourquoi ça existe) plutôt qu'un article sur une feature avancée. Un user novice doit d'abord comprendre l'outil avant d'en maîtriser les options avancées.
+5. Pour chaque article : vérifie que son titre et résumé suggèrent une introduction ou un cas d'usage concret, pas une configuration avancée.
+
+Pour chaque article retenu : titre en gras, 1 phrase expliquant CE QUE L'OUTIL FAIT et pourquoi c'est un bon point de départ, lien → URL [READ:id]"""
+    else:
+        pour_commencer = "(Omettre cette section — aucun profil d'apprentissage disponible.)"
+
     prompt = _BRIEFING_PROMPT.format(
         hours=hours,
         date=today_str,
         items_text=items_text[:14000],
         groups_section=groups_section[:12000],
+        sujet_context=sujet_context,
+        pour_commencer=pour_commencer,
     )
 
     markdown, usage = await llm.generate(
@@ -4780,41 +4935,51 @@ async def generate_briefing(data: Dict[str, Any] = {}):
 
         hours = int(data.get("hours", 24))
         workspace_id = data.get("workspace_id")
+        sujet_id = data.get("sujet_id")
         force = bool(data.get("force", False))
         today = _dt.date.today()
 
-        # Check if briefing already exists for today
+        # Check if briefing already exists for today (scoped by sujet_id)
         if not force:
             with db.get_connection() as conn:
                 with conn.cursor() as cur:
-                    cur.execute(
-                        "SELECT id FROM daily_briefings WHERE briefing_date = %s", (today,)
-                    )
+                    if sujet_id is not None:
+                        cur.execute(
+                            "SELECT id FROM daily_briefings WHERE briefing_date = %s AND sujet_id = %s",
+                            (today, sujet_id)
+                        )
+                    else:
+                        cur.execute(
+                            "SELECT id FROM daily_briefings WHERE briefing_date = %s AND sujet_id IS NULL",
+                            (today,)
+                        )
                     existing = cur.fetchone()
             if existing:
                 return {"already_exists": True, "date": str(today), "id": existing[0]}
 
-        result = await _generate_briefing_content(hours, workspace_id)
+        result = await _generate_briefing_content(hours, workspace_id, sujet_id)
         if "error" in result:
             raise HTTPException(status_code=422, detail=result["message"])
 
         with db.get_connection() as conn:
             with conn.cursor() as cur:
+                # Supprimer l'éventuel briefing existant (cas force=True)
+                if sujet_id is not None:
+                    cur.execute(
+                        "DELETE FROM daily_briefings WHERE briefing_date = %s AND sujet_id = %s",
+                        (today, sujet_id)
+                    )
+                else:
+                    cur.execute(
+                        "DELETE FROM daily_briefings WHERE briefing_date = %s AND sujet_id IS NULL",
+                        (today,)
+                    )
                 cur.execute(
                     """INSERT INTO daily_briefings
                        (briefing_date, executive_summary, top_items, trends, stats,
-                        workspace_id, tokens_used, cost_usd, cited_sources, groups)
-                       VALUES (%s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s, %s,
+                        workspace_id, sujet_id, tokens_used, cost_usd, cited_sources, groups)
+                       VALUES (%s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s, %s, %s,
                                %s::jsonb, %s::jsonb)
-                       ON CONFLICT (briefing_date) DO UPDATE SET
-                         executive_summary = EXCLUDED.executive_summary,
-                         top_items         = EXCLUDED.top_items,
-                         trends            = EXCLUDED.trends,
-                         stats             = EXCLUDED.stats,
-                         tokens_used       = EXCLUDED.tokens_used,
-                         cited_sources     = EXCLUDED.cited_sources,
-                         groups            = EXCLUDED.groups,
-                         generated_at      = NOW()
                        RETURNING id""",
                     (
                         today,
@@ -4823,6 +4988,7 @@ async def generate_briefing(data: Dict[str, Any] = {}):
                         _json.dumps(result["trends"]),
                         _json.dumps(result["stats"]),
                         workspace_id,
+                        sujet_id,
                         result["tokens_used"],
                         result["cost_usd"],
                         _json.dumps(result.get("cited_sources", [])),
@@ -4882,20 +5048,29 @@ async def list_briefings(limit: int = Query(default=30, ge=1, le=90)):
 
 
 @api_router.get("/briefing/today")
-async def get_today_briefing():
-    """Get today's briefing if it exists."""
+async def get_today_briefing(sujet_id: Optional[int] = Query(default=None)):
+    """Get today's briefing if it exists, optionally scoped by sujet_id."""
     try:
         import datetime as _dt
         today = _dt.date.today()
         with db.get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    """SELECT id, briefing_date, executive_summary, top_items, trends, stats,
-                              tokens_used, cost_usd, generated_at,
-                              cited_sources, groups
-                       FROM daily_briefings WHERE briefing_date = %s""",
-                    (today,)
-                )
+                if sujet_id is not None:
+                    cur.execute(
+                        """SELECT id, briefing_date, executive_summary, top_items, trends, stats,
+                                  tokens_used, cost_usd, generated_at,
+                                  cited_sources, groups
+                           FROM daily_briefings WHERE briefing_date = %s AND sujet_id = %s""",
+                        (today, sujet_id)
+                    )
+                else:
+                    cur.execute(
+                        """SELECT id, briefing_date, executive_summary, top_items, trends, stats,
+                                  tokens_used, cost_usd, generated_at,
+                                  cited_sources, groups
+                           FROM daily_briefings WHERE briefing_date = %s AND sujet_id IS NULL""",
+                        (today,)
+                    )
                 row = cur.fetchone()
         if not row:
             return {"exists": False, "date": str(today)}

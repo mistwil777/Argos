@@ -66,9 +66,9 @@ export const api = {
   watchedPages: () => rpc('web.watched_pages', {}),
 
   // Briefing quotidien
-  generateBriefing: (hours = 24, force = false) =>
-    request<any>('/api/v1/briefing/generate', { method: 'POST', body: JSON.stringify({ hours, force }) }),
-  getTodayBriefing: () => request<any>('/api/v1/briefing/today'),
+  generateBriefing: (hours = 24, force = false, sujetId?: number) =>
+    request<any>('/api/v1/briefing/generate', { method: 'POST', body: JSON.stringify({ hours, force, sujet_id: sujetId }) }),
+  getTodayBriefing: (sujetId?: number) => request<any>(`/api/v1/briefing/today${sujetId != null ? `?sujet_id=${sujetId}` : ''}`),
   listBriefings: (limit = 30) => request<any[]>(`/api/v1/briefing/list?limit=${limit}`),
   getBriefing: (id: number) => request<any>(`/api/v1/briefing/${id}`),
   deleteBriefing: (id: number) => request<any>(`/api/v1/briefing/${id}`, { method: 'DELETE' }),
@@ -130,6 +130,8 @@ export const api = {
     request<any>(`/api/v1/items/${item_id}/ignore`, { method: 'POST' }),
   ingestItemRag: (item_id: number) =>
     request<any>(`/api/v1/items/${item_id}/ingest-rag`, { method: 'POST' }),
+  translateItem: (item_id: number, language: string) =>
+    request<any>(`/api/v1/items/${item_id}/translate`, { method: 'POST', body: JSON.stringify({ language }) }),
   batchSaveItems: (item_ids: number[]) =>
     request<any>('/api/v1/items/batch/save', { method: 'POST', body: JSON.stringify({ item_ids }) }),
   batchIgnoreItems: (item_ids: number[]) =>

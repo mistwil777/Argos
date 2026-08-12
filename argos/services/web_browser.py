@@ -147,8 +147,17 @@ async def browse_with_playwright(url: str, timeout_ms: int = 30000) -> dict:
             response = await page.goto(fetch_url, wait_until="domcontentloaded", timeout=timeout_ms)
             status_code = response.status if response else 0
 
-            # Wait for main content
-            await _human_delay(1.0, 2.5)
+            # Wait for JS-rendered content (React/Next.js/Vue pages)
+            try:
+                await page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass  # timeout acceptable — on prend ce qui est là
+
+            # Scroll to bottom to trigger lazy-loading
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            await _human_delay(1.0, 2.0)
+            await page.evaluate("window.scrollTo(0, 0)")
+            await _human_delay(0.3, 0.8)
 
             html = await page.content()
             title = await page.title()
@@ -165,6 +174,7 @@ async def browse_with_playwright(url: str, timeout_ms: int = 30000) -> dict:
             "final_url": final_url,
             "title": title,
             "content": content_text[:50000],
+            "html": html,
             "links": links,
             "content_length": len(content_text),
             "engine": "playwright",
@@ -264,6 +274,110 @@ def _extract_content_from_html(html: str) -> tuple:
     return title, text, links[:100]
 
 
+def html_to_markdown(html: str) -> str:
+    """
+    Converts HTML to clean markdown using trafilatura for JS-heavy pages.
+    Falls back to regex-based extraction if trafilatura returns nothing.
+    """
+    import re as _re
+
+    # Try trafilatura first — handles React/Next.js/Vue pages correctly
+    try:
+        import trafilatura
+        result = trafilatura.extract(html, include_comments=False, include_tables=True, output_format='markdown')
+        if result and len(result) > 200:
+            return result
+    except Exception:
+        pass
+
+    # Fallback: regex-based extraction
+    content_html = ""
+    for pattern in [
+        r'<article[^>]*>(.*?)</article>',
+        r'<main[^>]*>(.*?)</main>',
+        r'<div[^>]+role=["\']main["\'][^>]*>(.*?)</div>',
+        r'<div[^>]+class=["\'][^"\']*content[^"\']*["\'][^>]*>(.*?)</div>',
+    ]:
+        match = _re.search(pattern, html, _re.DOTALL | _re.IGNORECASE)
+        if match:
+            content_html = match.group(1)
+            break
+    if not content_html:
+        body = _re.search(r'<body[^>]*>(.*?)</body>', html, _re.DOTALL | _re.IGNORECASE)
+        content_html = body.group(1) if body else html
+        for tag in ['nav', 'header', 'footer', 'aside']:
+            content_html = _re.sub(rf'<{tag}[^>]*>.*?</{tag}>', ' ', content_html, flags=_re.DOTALL | _re.IGNORECASE)
+
+    # Remove noise
+    content_html = _re.sub(r'<(script|style|noscript|button|svg|iframe)[^>]*>.*?</\1>', ' ', content_html, flags=_re.DOTALL | _re.IGNORECASE)
+    content_html = _re.sub(r'<[^>]+aria-hidden=["\']true["\'][^>]*>.*?</[a-z]+>', ' ', content_html, flags=_re.DOTALL | _re.IGNORECASE)
+
+    # Code blocks
+    content_html = _re.sub(r'<pre[^>]*>(.*?)</pre>', lambda m: '\n```\n' + _re.sub(r'<[^>]+>', '', m.group(1)).strip() + '\n```\n', content_html, flags=_re.DOTALL | _re.IGNORECASE)
+
+    # Headings → markdown
+    for level, tag in enumerate(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'], 1):
+        prefix = '#' * level + ' '
+        content_html = _re.sub(
+            rf'<{tag}[^>]*>(.*?)</{tag}>',
+            lambda m, p=prefix: '\n' + p + _re.sub(r'<[^>]+>', '', m.group(1)).strip() + '\n',
+            content_html, flags=_re.DOTALL | _re.IGNORECASE
+        )
+
+    # Bold / italic
+    content_html = _re.sub(r'<(strong|b)[^>]*>(.*?)</\1>', lambda m: '**' + m.group(2) + '**', content_html, flags=_re.DOTALL | _re.IGNORECASE)
+    content_html = _re.sub(r'<(em|i)[^>]*>(.*?)</\1>', lambda m: '_' + m.group(2) + '_', content_html, flags=_re.DOTALL | _re.IGNORECASE)
+
+    # Links
+    content_html = _re.sub(r'<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', lambda m: f'[{_re.sub(r"<[^>]+>","",m.group(2)).strip()}]({m.group(1)})', content_html, flags=_re.DOTALL | _re.IGNORECASE)
+
+    # List items
+    content_html = _re.sub(r'<li[^>]*>(.*?)</li>', lambda m: '\n- ' + _re.sub(r'<[^>]+>', '', m.group(1)).strip(), content_html, flags=_re.DOTALL | _re.IGNORECASE)
+    content_html = _re.sub(r'<[uo]l[^>]*>', '\n', content_html, flags=_re.IGNORECASE)
+    content_html = _re.sub(r'</[uo]l>', '\n', content_html, flags=_re.IGNORECASE)
+
+    # Paragraphs / divs → newlines
+    for block in ['p', 'div', 'br', 'tr', 'blockquote']:
+        content_html = _re.sub(rf'</?{block}[^>]*>', '\n', content_html, flags=_re.IGNORECASE)
+
+    # Strip remaining tags
+    text = _re.sub(r'<[^>]+>', '', content_html)
+
+    # Decode entities
+    text = text.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>') \
+               .replace('&quot;', '"').replace('&#39;', "'").replace('&nbsp;', ' ') \
+               .replace('&mdash;', '—').replace('&ndash;', '–').replace('&hellip;', '…').replace('&para;', '')
+    text = _re.sub(r'&[a-zA-Z0-9#]+;', '', text)
+
+    # Clean lines
+    lines = [l.strip() for l in text.splitlines()]
+    cleaned, blank = [], 0
+    for line in lines:
+        if not line:
+            blank += 1
+            if blank <= 1:
+                cleaned.append('')
+        else:
+            blank = 0
+            cleaned.append(line)
+
+    result = '\n'.join(cleaned).strip()
+
+    # Last resort: BeautifulSoup plain text if regex produced almost nothing
+    if len(result) < 200:
+        try:
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(html, 'html.parser')
+            for tag in soup(['script', 'style', 'nav', 'header', 'footer', 'aside', 'noscript']):
+                tag.decompose()
+            result = soup.get_text(separator='\n', strip=True)
+            result = _re.sub(r'\n{3,}', '\n\n', result).strip()
+        except Exception:
+            pass
+
+    return result
+
+
 async def browse_with_requests(url: str, timeout: int = 20) -> dict:
     """
     Lightweight fallback using requests (no JS rendering).
@@ -301,6 +415,7 @@ async def browse_with_requests(url: str, timeout: int = 20) -> dict:
             "final_url": resp.url,
             "title": title,
             "content": text[:50000],
+            "html": html,
             "links": links,
             "content_length": len(text),
             "engine": "requests",

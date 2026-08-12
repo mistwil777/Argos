@@ -1,17 +1,19 @@
 import { useEffect, useState, lazy, Suspense } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Newspaper, RefreshCw, Loader2, Sparkles, ChevronDown,
   TrendingUp, Clock, ExternalLink, ShieldCheck, Tag,
   AlertTriangle, GitMerge, Check, X, Archive, Trash2, Info,
   MessageSquare, PanelRightOpen, PanelRightClose, Save,
-  BookmarkPlus, Database, EyeOff, Square, CheckSquare, Layers
+  BookmarkPlus, Database, EyeOff, Square, CheckSquare, Layers,
+  Maximize2, Minimize2
 } from 'lucide-react'
 import DocumentGeneratorModal from '@/components/ui/DocumentGeneratorModal'
 import { api } from '@/services/api'
 import { timeAgo } from '@/lib/utils'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 const AssistantPanel = lazy(() => import('@/pages/Assistant'))
 
@@ -24,6 +26,7 @@ const TIER_COLOR: Record<string, string> = {
 
 export default function Briefing() {
   const [assistantOpen, setAssistantOpen] = useState(false)
+  const navigate = useNavigate()
   const [today, setToday]       = useState<any>(null)
   const [history, setHistory]   = useState<any[]>([])
   const [selected, setSelected] = useState<any>(null)
@@ -31,7 +34,9 @@ export default function Briefing() {
   const [generating, setGenerating] = useState(false)
   const [histOpen, setHistOpen] = useState(false)
   const [hours, setHours]       = useState(24)
-  const [readModal, setReadModal] = useState<{ item: any; content: string } | null>(null)
+  const [readModal, setReadModal] = useState<{ item: any; content: string; cleanedContent: string } | null>(null)
+  const [expandedSummaries, setExpandedSummaries] = useState<Set<number>>(new Set())
+  const [readFullscreen, setReadFullscreen] = useState(false)
   const [readLoading, setReadLoading] = useState(false)
   const [readSaving, setReadSaving] = useState(false)
   const [readSaved, setReadSaved] = useState(false)
@@ -41,7 +46,9 @@ export default function Briefing() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [sujetFilter, setSujetFilter] = useState<number | null>(() => {
     const v = searchParams.get('sujet')
-    return v ? parseInt(v) : null
+    if (v) return parseInt(v)
+    const stored = localStorage.getItem('briefing_sujet_filter')
+    return stored ? parseInt(stored) : null
   })
   const [firstVisit, setFirstVisit] = useState(() => !!searchParams.get('sujet'))
   const [alerts, setAlerts]     = useState<any[]>([])
@@ -53,23 +60,35 @@ export default function Briefing() {
   const [itemActionLoading, setItemActionLoading] = useState<Record<number, string | null>>({})
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set())
   const [batchLoading, setBatchLoading] = useState<string | null>(null)
+  const [briefingMode, setBriefingMode] = useState<'veille' | 'apprentissage'>('veille')
+  const [readingLanguage, setReadingLanguage] = useState<string>('')
+  const [readTranslating, setReadTranslating] = useState(false)
+  const [readTranslated, setReadTranslated] = useState(false)
 
-  useEffect(() => { loadAll(); loadAlerts(); api.getSujets(1).then((r: any) => setSujets(Array.isArray(r) ? r : r.sujets || [])) }, [])
+  useEffect(() => {
+    loadAll()
+    loadAlerts()
+    api.getSujets().then((r: any) => setSujets(Array.isArray(r) ? r : r.sujets || []))
+    api.updateMe({}).then((u: any) => setReadingLanguage(u?.preferences?.reading_language || '')).catch(() => {})
+  }, [sujetFilter])
 
   async function loadAll() {
     setLoading(true)
     try {
-      const [t, h] = await Promise.all([api.getTodayBriefing(), api.listBriefings(30)])
+      const [t, h] = await Promise.all([
+        api.getTodayBriefing(sujetFilter ?? undefined),
+        api.listBriefings(30)
+      ])
       setToday(t)
       setHistory(Array.isArray(h) ? h : [])
-      if (t?.exists) setSelected(t)
+      if (t?.exists) { setSelected(t); setFirstVisit(false) }
     } finally { setLoading(false) }
   }
 
   async function generate(force = false) {
     setGenerating(true)
     try {
-      const r = await api.generateBriefing(hours, force)
+      const r = await api.generateBriefing(hours, force, sujetFilter ?? undefined)
       if (r.already_exists && !force) {
         // Load the existing one
         const existing = await api.getBriefing(r.id)
@@ -94,13 +113,26 @@ export default function Briefing() {
   async function openRead(item: any) {
     setReadLoading(true)
     setReadSaved(false)
+    setReadTranslated(false)
     setReadSujetId(item.sujet_id ?? null)
-    setReadModal({ item, content: '' })
+    setReadModal({ item, content: '', cleanedContent: '' })
     try {
       const r = await api.ingestPreview(item.id)
-      setReadModal({ item, content: r.markdown || r.content || '' })
+      const cleaned = r.cleaned_content && r.cleaned_content.length > 500 ? r.cleaned_content : ''
+      const baseContent = r.markdown || r.content || ''
+      setReadModal({ item, content: baseContent, cleanedContent: cleaned })
+
+      if (readingLanguage) {
+        setReadTranslating(true)
+        try {
+          const t = await api.translateItem(item.id, readingLanguage)
+          setReadModal({ item, content: t.translated, cleanedContent: t.translated })
+          setReadTranslated(true)
+        } catch { /* garder l'original */ }
+        finally { setReadTranslating(false) }
+      }
     } catch {
-      setReadModal({ item, content: item.summary || 'Contenu non disponible.' })
+      setReadModal({ item, content: item.summary || 'Contenu non disponible.', cleanedContent: '' })
     } finally { setReadLoading(false) }
   }
 
@@ -108,15 +140,21 @@ export default function Briefing() {
     if (!readModal?.item || readSaving) return
     setReadSaving(true)
     try {
-      await api.saveDocument({
+      const url = readModal.item.url || ''
+      const sourceFooter = url ? `\n\n---\n\n**Source :** [${url}](${url})` : ''
+      const doc = await api.saveDocument({
         title: readModal.item.title,
         doc_type: 'fiche',
-        content_markdown: readModal.content,
+        content_markdown: (readModal.cleanedContent || readModal.content) + sourceFooter,
         summary: readModal.item.summary || '',
         source_item_ids: [readModal.item.id],
         sujet_id: readSujetId,
       })
       setReadSaved(true)
+      setTimeout(() => {
+        setReadModal(null)
+        navigate('/librairie', { state: { openDocId: doc.id } })
+      }, 600)
     } catch (e: any) { alert(`Erreur : ${e.message}`) }
     finally { setReadSaving(false) }
   }
@@ -223,7 +261,18 @@ export default function Briefing() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Toggle Veille / Apprentissage */}
+          <div className="flex items-center rounded border border-[hsl(var(--line))] overflow-hidden text-[11px] font-mono">
+            <button onClick={() => setBriefingMode('veille')}
+              className={`px-3 py-1.5 transition-colors ${briefingMode === 'veille' ? 'bg-[hsl(var(--accent))] text-white' : 'text-[hsl(var(--text-2))] hover:text-[hsl(var(--text))]'}`}>
+              Veille
+            </button>
+            <button onClick={() => setBriefingMode('apprentissage')}
+              className={`px-3 py-1.5 transition-colors ${briefingMode === 'apprentissage' ? 'bg-[hsl(var(--accent))] text-white' : 'text-[hsl(var(--text-2))] hover:text-[hsl(var(--text))]'}`}>
+              Apprentissage
+            </button>
+          </div>
           <button onClick={() => setAssistantOpen(v => !v)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded border text-[11.5px] font-mono transition-all ${
               assistantOpen
@@ -240,8 +289,8 @@ export default function Briefing() {
               const v = e.target.value ? parseInt(e.target.value) : null
               setSujetFilter(v)
               setFirstVisit(false)
-              if (v) setSearchParams({ sujet: String(v) })
-              else setSearchParams({})
+              if (v) { setSearchParams({ sujet: String(v) }); localStorage.setItem('briefing_sujet_filter', String(v)) }
+              else { setSearchParams({}); localStorage.removeItem('briefing_sujet_filter') }
             }}
             className="bg-[hsl(var(--bg-2))] border border-[hsl(var(--accent-line))] rounded px-2 py-1.5 text-[11.5px] font-mono text-[hsl(var(--accent))] outline-none">
             <option value="">Tous les sujets</option>
@@ -343,20 +392,26 @@ export default function Briefing() {
               // Construire un index id → item depuis top_items, filtré par sujet si actif
               const itemIndex: Record<number, any> = {}
               ;(displayBriefing.top_items || [])
-                .filter((it: any) => !sujetFilter || it.sujet_id === sujetFilter)
                 .forEach((it: any) => { itemIndex[it.id] = it })
               // Groupes depuis le champ groups ({nom: [id,...]}) ou fallback top_items
               const groups: Record<string, number[]> = displayBriefing.groups && Object.keys(displayBriefing.groups).length > 0
                 ? displayBriefing.groups
                 : { 'Sources': (displayBriefing.top_items || []).map((it: any) => it.id) }
-              const allVisibleIds = Object.values(groups).flat().filter((id: number) => itemIndex[id] && itemActions[id] !== 'ignored')
+              const allVisibleIds = Object.values(groups).flat().filter((id: number) => {
+                if (!itemIndex[id] || itemActions[id] === 'ignored') return false
+                const cat = itemIndex[id]?.content_tags?.category
+                if (briefingMode === 'veille') return !cat || cat === 'veille' || cat === 'mixed'
+                return cat === 'apprentissage' || cat === 'mixed'
+              })
               const allSelected = allVisibleIds.length > 0 && allVisibleIds.every((id: number) => selectedItems.has(id))
-              // Extraire le résumé 3 lignes et signal faible depuis le markdown
+              // Extraire les sections depuis le markdown
               const md = displayBriefing.markdown || displayBriefing.executive_summary || ''
               const summaryMatch = md.match(/### Résumé en 3 lignes\n([\s\S]*?)(?=\n###|\n##|$)/)
               const signalMatch = md.match(/## Signal faible[\s\S]*?$/)
+              const pourCommencerMatch = md.match(/## Pour commencer[^\n]*\n([\s\S]*?)(?=\n##|$)/)
               const summaryText = summaryMatch ? summaryMatch[1].trim() : ''
               const signalText = signalMatch ? signalMatch[0].trim() : ''
+              const pourCommencerText = pourCommencerMatch ? pourCommencerMatch[1].trim() : ''
 
               return (
               <div className="col-span-2 panel overflow-hidden flex flex-col">
@@ -411,19 +466,83 @@ export default function Briefing() {
                 </AnimatePresence>
 
                 <div className="overflow-auto max-h-[620px] px-5 py-4 space-y-5">
-                  {/* Résumé 3 lignes */}
-                  {summaryText && (
+
+                  {/* Apprentissage — Pour commencer en premier */}
+                  {briefingMode === 'apprentissage' && pourCommencerText && (() => {
+                    // Parser les entrées : - **Titre** raison → URL [READ:id]
+                    const recEntries = [...pourCommencerText.matchAll(
+                      /[-*]\s+\*\*([^*]+)\*\*\s*(.*?)\s*→\s*(https?:\/\/\S+?)\s*\[READ:(\d+)\]/gs
+                    )].map(m => ({ title: m[1].trim(), reason: m[2].trim(), url: m[3].trim(), id: parseInt(m[4]) }))
+
+                    return (
+                      <div className="rounded-lg border border-[hsl(var(--accent-line))] bg-[hsl(var(--accent-dim))] px-4 py-3 space-y-3">
+                        <p className="text-[11px] font-mono text-[hsl(var(--accent))] uppercase tracking-wider flex items-center gap-1.5">
+                          <Sparkles className="w-3 h-3" />
+                          Pour commencer — sélection selon ton profil
+                        </p>
+                        {recEntries.length > 0 ? recEntries.map(entry => {
+                          const item = itemIndex[entry.id]
+                          return (
+                            <div key={entry.id} className="rounded border border-[hsl(var(--accent-line))] bg-[hsl(var(--bg))] p-3 space-y-1.5">
+                              <p className="text-[13px] font-semibold text-[hsl(var(--text))] leading-snug">{entry.title}</p>
+                              {entry.reason && <p className="text-[11.5px] text-[hsl(var(--text-2))]">{entry.reason}</p>}
+                              {item?.summary && <p className="text-[11px] text-[hsl(var(--text-3))] line-clamp-2">{item.summary}</p>}
+                              <div className="flex items-center gap-2 pt-0.5 flex-wrap">
+                                <span className="text-[10px] font-mono text-[hsl(var(--text-3))]">
+                                  → <a href={entry.url} target="_blank" rel="noreferrer" className="hover:underline hover:text-[hsl(var(--accent))]">
+                                    {(() => { try { return new URL(entry.url).hostname } catch { return entry.url } })()}
+                                  </a>
+                                </span>
+                                {item && (
+                                  <>
+                                    <button onClick={() => openRead(item)}
+                                      className="text-[10px] font-mono text-[hsl(var(--accent))] border border-[hsl(var(--accent-line))] px-2 py-0.5 rounded hover:bg-[hsl(var(--accent))] hover:text-white transition-colors">
+                                      Lire
+                                    </button>
+                                    <button disabled={!!itemActionLoading[entry.id]} onClick={() => handleItemAction(entry.id, 'save')}
+                                      className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded border border-[hsl(var(--line))] text-[hsl(var(--text-3))] hover:border-[hsl(var(--accent-line))] hover:text-[hsl(var(--accent))] transition-colors disabled:opacity-40">
+                                      {itemActionLoading[entry.id] === 'save' ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <BookmarkPlus className="w-2.5 h-2.5" />}
+                                      Sauvegarder
+                                    </button>
+                                    <button disabled={!!itemActionLoading[entry.id]} onClick={() => handleItemAction(entry.id, 'ingest')}
+                                      className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded border border-[hsl(var(--line))] text-[hsl(var(--text-3))] hover:border-[hsl(var(--accent-line))] hover:text-[hsl(var(--accent))] transition-colors disabled:opacity-40">
+                                      {itemActionLoading[entry.id] === 'ingest' ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Database className="w-2.5 h-2.5" />}
+                                      RAG
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        }) : (
+                          <div className="prose-app text-[13px]">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{pourCommencerText}</ReactMarkdown>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+
+                  {/* Résumé 3 lignes — Veille uniquement */}
+                  {briefingMode === 'veille' && summaryText && (
                     <div>
                       <p className="text-[11px] font-mono text-[hsl(var(--text-3))] uppercase tracking-wider mb-2">Résumé en 3 lignes</p>
                       <div className="prose-app text-[13px]">
-                        <ReactMarkdown>{summaryText}</ReactMarkdown>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{summaryText}</ReactMarkdown>
                       </div>
                     </div>
                   )}
 
-                  {/* Groupes d'items */}
-                  {Object.entries(groups).map(([groupName, ids]) => {
-                    const groupItems = (ids as number[]).map((id: number) => itemIndex[id]).filter(Boolean)
+                  {/* Groupes d'items — Veille / Apprentissage */}
+                  {(briefingMode === 'veille' || briefingMode === 'apprentissage') && Object.entries(groups).map(([groupName, ids]) => {
+                    const groupItems = (ids as number[])
+                      .map((id: number) => itemIndex[id])
+                      .filter(Boolean)
+                      .filter((item: any) => {
+                        const cat = item.content_tags?.category
+                        if (briefingMode === 'veille') return !cat || cat === 'veille' || cat === 'mixed'
+                        return cat === 'apprentissage' || cat === 'mixed'
+                      })
                     if (!groupItems.length) return null
                     return (
                       <div key={groupName}>
@@ -452,7 +571,15 @@ export default function Briefing() {
                                   )}
                                 </div>
                                 {item.summary && (
-                                  <p className="text-[12px] text-[hsl(var(--text-2))] leading-relaxed line-clamp-3 mb-2">{item.summary}</p>
+                                  <div className="mb-2">
+                                    <p className={`text-[12px] text-[hsl(var(--text-2))] leading-relaxed ${expandedSummaries.has(item.id) ? '' : 'line-clamp-3'}`}>{item.summary}</p>
+                                    {item.summary.length > 150 && !expandedSummaries.has(item.id) && (
+                                      <button onClick={e => { e.stopPropagation(); setExpandedSummaries(prev => new Set(prev).add(item.id)) }}
+                                        className="text-[11px] font-mono text-[hsl(var(--accent))] hover:underline mt-0.5">
+                                        (+ lire la suite)
+                                      </button>
+                                    )}
+                                  </div>
                                 )}
                                 <div className="flex items-center gap-3 flex-wrap">
                                   {item.url && (
@@ -502,11 +629,11 @@ export default function Briefing() {
                     )
                   })}
 
-                  {/* Signal faible */}
-                  {signalText && (
+                  {/* Signal faible — veille uniquement */}
+                  {briefingMode === 'veille' && signalText && (
                     <div className="border-t border-[hsl(var(--line))] pt-4">
                       <div className="prose-app text-[12.5px]">
-                        <ReactMarkdown>{signalText}</ReactMarkdown>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{signalText}</ReactMarkdown>
                       </div>
                     </div>
                   )}
@@ -776,17 +903,30 @@ export default function Briefing() {
           onClick={e => { if (e.target === e.currentTarget) setReadModal(null) }}>
           <motion.div initial={{ opacity: 0, scale: 0.95, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95 }} transition={{ type: 'spring', stiffness: 300, damping: 28 }}
-            className="w-full max-w-2xl max-h-[85vh] flex flex-col panel overflow-hidden">
+            className={`flex flex-col panel overflow-hidden transition-all ${readFullscreen ? 'fixed inset-4 z-[60] max-w-none max-h-none' : 'w-full max-w-2xl max-h-[85vh]'}`}>
             <div className="flex items-center justify-between px-5 py-3 border-b border-[hsl(var(--line))] bg-[hsl(var(--bg-2))] flex-shrink-0">
               <p className="text-[13px] font-bold text-[hsl(var(--text))] line-clamp-1 pr-4">{readModal.item.title}</p>
-              <button onClick={() => setReadModal(null)} className="text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))]">
+              <div className="flex items-center gap-2">
+              <button onClick={() => setReadFullscreen(f => !f)} className="text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))]">
+                {readFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+              </button>
+              <button onClick={() => { setReadModal(null); setReadFullscreen(false) }} className="text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))]">
                 <X className="w-4 h-4" />
               </button>
+              </div>
             </div>
+            {readTranslated && (
+              <div className="flex items-center gap-1.5 px-5 py-1.5 bg-[hsl(var(--accent-dim))] border-b border-[hsl(var(--accent-line))]">
+                <span className="text-[10px] font-mono text-[hsl(var(--accent))]">Traduit en {readingLanguage}</span>
+              </div>
+            )}
             <div className="flex-1 overflow-auto px-5 py-4">
-              {readLoading
-                ? <div className="flex items-center justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-[hsl(var(--accent))]" /></div>
-                : <div className="prose-app max-w-none"><ReactMarkdown>{readModal.content}</ReactMarkdown></div>
+              {(readLoading || readTranslating)
+                ? <div className="flex flex-col items-center justify-center py-12 gap-2">
+                    <Loader2 className="w-5 h-5 animate-spin text-[hsl(var(--accent))]" />
+                    {readTranslating && <span className="text-[11px] font-mono text-[hsl(var(--text-3))]">Traduction en {readingLanguage}…</span>}
+                  </div>
+                : <div className="prose-app max-w-none"><ReactMarkdown remarkPlugins={[remarkGfm]}>{readModal.cleanedContent || readModal.content}</ReactMarkdown></div>
               }
             </div>
             <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-[hsl(var(--line))] bg-[hsl(var(--bg-2))] flex-shrink-0">

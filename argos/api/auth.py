@@ -34,13 +34,13 @@ def get_current_user(
     with db.get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, email, full_name, role, onboarding_done FROM users WHERE id = %s",
+                "SELECT id, email, full_name, role, onboarding_done, preferences FROM users WHERE id = %s",
                 (int(payload["sub"]),),
             )
             row = cur.fetchone()
     if not row:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Utilisateur introuvable")
-    return {"id": row[0], "email": row[1], "full_name": row[2], "role": row[3], "onboarding_done": row[4]}
+    return {"id": row[0], "email": row[1], "full_name": row[2], "role": row[3], "onboarding_done": row[4], "preferences": row[5] or {}}
 
 
 @auth_router.post("/register", status_code=201)
@@ -107,11 +107,16 @@ async def update_me(
     user: dict = Depends(get_current_user),
     db: DatabaseManager = Depends(_get_db),
 ):
+    import json as _json
     fields = {}
     if "full_name" in body:
         fields["full_name"] = (body["full_name"] or "").strip()
     if "onboarding_done" in body:
         fields["onboarding_done"] = bool(body["onboarding_done"])
+    if "preferences" in body:
+        current = user.get("preferences") or {}
+        current.update(body["preferences"])
+        fields["preferences"] = _json.dumps(current)
 
     if not fields:
         return user
@@ -120,10 +125,10 @@ async def update_me(
     with db.get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                f"UPDATE users SET {set_clause} WHERE id = %s RETURNING id, email, full_name, role, onboarding_done",
+                f"UPDATE users SET {set_clause} WHERE id = %s RETURNING id, email, full_name, role, onboarding_done, preferences",
                 (*fields.values(), user["id"]),
             )
             row = cur.fetchone()
             conn.commit()
 
-    return {"id": row[0], "email": row[1], "full_name": row[2], "role": row[3], "onboarding_done": row[4]}
+    return {"id": row[0], "email": row[1], "full_name": row[2], "role": row[3], "onboarding_done": row[4], "preferences": row[5] or {}}
