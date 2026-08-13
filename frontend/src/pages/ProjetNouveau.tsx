@@ -26,8 +26,6 @@ export default function ProjetNouveau() {
   // Step 1 — infos
   const [name, setName]       = useState('')
   const [desc, setDesc]       = useState('')
-  const [webhook, setWebhook] = useState('')
-
   // Created project
   const [projectId, setProjectId] = useState<number | null>(null)
 
@@ -63,7 +61,6 @@ export default function ProjetNouveau() {
       const p = await api.createProject({
         name: name.trim(),
         description: desc.trim() || undefined,
-        teams_webhook_url: webhook.trim() || undefined,
       })
       setProjectId(p.id)
       setStep('cdc')
@@ -226,14 +223,6 @@ export default function ProjetNouveau() {
                     value={desc} onChange={e => setDesc(e.target.value)}
                     rows={3} placeholder="Quelques phrases sur le contexte..."
                     className="input w-full resize-none"
-                  />
-                </label>
-                <label className="block space-y-1.5">
-                  <span className="text-[12px] font-mono text-[hsl(var(--text-3))]">Webhook Teams (optionnel)</span>
-                  <input
-                    value={webhook} onChange={e => setWebhook(e.target.value)}
-                    placeholder="https://outlook.office.com/webhook/..."
-                    className="input w-full font-mono text-[12px]"
                   />
                 </label>
               </div>

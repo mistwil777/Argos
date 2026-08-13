@@ -119,11 +119,23 @@ class Settings(BaseSettings):
     )
     
     # ============================================
-    # Microsoft Teams Bot
+    # Email SMTP (notifications)
     # ============================================
-    teams_webhook_url: str | None = Field(
+    smtp_host: str | None = Field(
         default=None,
-        description="Teams Incoming Webhook URL for notifications"
+        description="SMTP server hostname (ex: smtp.office365.com)"
+    )
+    smtp_port: int = Field(
+        default=587,
+        description="SMTP server port (587 pour STARTTLS)"
+    )
+    smtp_user: str | None = Field(
+        default=None,
+        description="Adresse email expéditeur (ex: argos@capgemini.com)"
+    )
+    smtp_password: str | None = Field(
+        default=None,
+        description="Mot de passe SMTP"
     )
 
     # ============================================

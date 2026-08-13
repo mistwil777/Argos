@@ -11,7 +11,7 @@ from argos.database import DatabaseManager
 from argos.config import settings
 from argos.api.auth import get_current_user
 from argos.services.project_calibration_agent import CdcAnalyzer, ProjectCalibrationAgent
-from argos.services.teams_notifier import notify_calibration_done_teams
+from argos.services.email_notifier import notify_calibration_done_email
 from argos.services.project_service import ProjectService
 
 logger = logging.getLogger(__name__)
@@ -121,18 +121,16 @@ async def finalize_calibration(
             cdc_analysis=body.cdc_analysis,
             qa_history=body.qa_history,
         )
-        # Notification Teams fire-and-forget
-        project = ProjectService(db).get_project(project_id=project_id, user_id=current_user["id"])
-        if project and project.get("teams_webhook_url"):
-            try:
-                await notify_calibration_done_teams(
-                    webhook_url=project["teams_webhook_url"],
-                    project_name=body.project_name,
-                    subjects=[s["name"] for s in result.get("subjects", [])],
-                    n_sources=len(result.get("source_candidates", [])),
-                )
-            except Exception as e:
-                logger.warning(f"Teams calibration notification failed: {e}")
+        # Notification email fire-and-forget
+        try:
+            await notify_calibration_done_email(
+                to_email=current_user.get("email"),
+                project_name=body.project_name,
+                subjects=[s["name"] for s in result.get("subjects", [])],
+                n_sources=len(result.get("source_candidates", [])),
+            )
+        except Exception as e:
+            logger.warning(f"Email calibration notification failed: {e}")
         return result
     except Exception as e:
         logger.error(f"finalize_calibration error: {e}")

@@ -11,7 +11,7 @@ from argos.database import DatabaseManager
 from argos.config import settings
 from argos.api.auth import get_current_user
 from argos.services.project_service import ProjectService, SourceProposalService
-from argos.services.teams_notifier import notify_member_invited_teams, notify_proposal_reviewed_teams
+from argos.services.email_notifier import notify_member_invited_email, notify_proposal_reviewed_email
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["projects"])
@@ -31,13 +31,11 @@ def _proposal_svc():
 class ProjectCreate(BaseModel):
     name: str
     description: Optional[str] = None
-    teams_webhook_url: Optional[str] = None
 
 
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
-    teams_webhook_url: Optional[str] = None
 
 
 class MemberInvite(BaseModel):
@@ -77,7 +75,6 @@ async def create_project(body: ProjectCreate, current_user=Depends(get_current_u
             owner_id=current_user["id"],
             name=body.name,
             description=body.description,
-            teams_webhook_url=body.teams_webhook_url,
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
@@ -144,19 +141,17 @@ async def invite_member(project_id: int, body: MemberInvite,
             role=body.role,
             sujet_access=body.sujet_access,
         )
-        # Notification Teams fire-and-forget
+        # Notification email fire-and-forget
         project = svc.get_project(project_id=project_id, user_id=current_user["id"])
-        if project and project.get("teams_webhook_url"):
-            try:
-                await notify_member_invited_teams(
-                    webhook_url=project["teams_webhook_url"],
-                    project_name=project["name"],
-                    invited_email=body.email,
-                    role=body.role,
-                    invited_by=current_user.get("email", str(current_user["id"])),
-                )
-            except Exception as e:
-                logger.warning(f"Teams invite notification failed: {e}")
+        try:
+            await notify_member_invited_email(
+                to_email=member.get("email"),
+                project_name=project["name"] if project else body.email,
+                inviter_name=current_user.get("full_name") or current_user.get("email", ""),
+                role=body.role,
+            )
+        except Exception as e:
+            logger.warning(f"Email invite notification failed: {e}")
         return member
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
@@ -208,18 +203,17 @@ async def review_proposal_route(project_id: int, proposal_id: int,
             note=body.note,
         )
         project = svc.get_project(project_id=project_id, user_id=current_user["id"])
-        if project and project.get("teams_webhook_url"):
-            try:
-                await notify_proposal_reviewed_teams(
-                    webhook_url=project["teams_webhook_url"],
-                    project_name=project["name"],
-                    source_url=proposal.get("url", ""),
-                    decision=body.decision,
-                    note=body.note,
-                    reviewed_by=current_user.get("email", str(current_user["id"])),
-                )
-            except Exception as e:
-                logger.warning(f"Teams proposal notification failed: {e}")
+        try:
+            proposer_email = proposal.get("proposed_by_email") or proposal.get("proposed_by")
+            await notify_proposal_reviewed_email(
+                to_email=proposer_email,
+                project_name=project["name"] if project else "",
+                source_url=proposal.get("url", ""),
+                decision=body.decision,
+                note=body.note,
+            )
+        except Exception as e:
+            logger.warning(f"Email proposal notification failed: {e}")
         return proposal
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))

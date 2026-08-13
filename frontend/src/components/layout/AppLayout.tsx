@@ -13,7 +13,6 @@ const NAV_MAIN = [
   { to: '/veille',    icon: Eye,           label: 'Veille',    tip: 'Cadrer et gérer ce que vous surveillez' },
   { to: '/briefing',  icon: Newspaper,     label: 'Briefing',  tip: 'Résumé quotidien et assistant pour creuser' },
   { to: '/librairie', icon: BookOpen,      label: 'Librairie', tip: 'Documents générés, fiches, synthèses et Knowledge Graph' },
-  { to: '/projets',   icon: FolderKanban,  label: 'Projets',   tip: 'Espaces projet partagés avec arborescence dédiée' },
 ]
 
 const META: Record<string, { title: string; badge?: string; desc?: string }> = {
@@ -71,6 +70,44 @@ function NavItem({ to, icon: Icon, label, tip, end }: {
   )
 }
 
+function NavItemProject() {
+  const tip = 'Espaces projet partagés avec arborescence dédiée'
+  return (
+    <NavLink to="/projets" className="block group relative">
+      {({ isActive }) => (
+        <>
+          <div className={cn(
+            'flex items-center gap-2.5 px-3 py-2 rounded-md cursor-pointer transition-all text-[13px] font-semibold relative',
+            isActive
+              ? 'text-[#1a1200]'
+              : 'text-[#c8a230] hover:text-[#f0c84a] hover:bg-[#e8a600]/10'
+          )}>
+            {isActive && (
+              <motion.div
+                layoutId="nav-project-bg"
+                className="absolute inset-0 rounded-md"
+                style={{ background: 'linear-gradient(90deg, #c8860a 0%, #e8a600 100%)' }}
+                transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+              />
+            )}
+            <FolderKanban className="w-4 h-4 flex-shrink-0 relative z-10" strokeWidth={isActive ? 2.5 : 2} />
+            <span className="relative z-10 flex-1 tracking-wide">Projets</span>
+          </div>
+          {/* Tooltip */}
+          <div className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 z-50
+                          opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+            <div className="whitespace-nowrap bg-[#0A1628] border border-[#e8a600]/30
+                            text-[11px] text-[#c8a230] px-2.5 py-1.5 rounded-md shadow-xl">
+              {tip}
+              <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-[#e8a600]/30" />
+            </div>
+          </div>
+        </>
+      )}
+    </NavLink>
+  )
+}
+
 export default function AppLayout() {
   const { pathname } = useLocation()
   const navigate = useNavigate()
@@ -107,11 +144,21 @@ export default function AppLayout() {
         <div className="mx-4 h-px" style={{ background: 'linear-gradient(90deg, #0070AD40, transparent)' }} />
 
         {/* Nav principale */}
-        <nav className="relative flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        <nav className="relative px-3 pt-4 pb-2 space-y-1">
           {NAV_MAIN.map(item => (
             <NavItem key={item.to} {...item} />
           ))}
         </nav>
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Section Projets — juste au-dessus de Réglages */}
+        <div className="mx-3 mb-2">
+          <div className="rounded-lg border border-[#e8a600]/20 bg-[#e8a600]/5 p-2">
+            <NavItemProject />
+          </div>
+        </div>
 
         {/* Séparateur */}
         <div className="mx-4 h-px bg-white/10" />

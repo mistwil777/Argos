@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #060D1A;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 40px;
+    gap: 64px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  h1 { color: #2A4A6A; font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; }
+  .row {
+    display: flex;
+    gap: 80px;
+    align-items: flex-start;
+    justify-content: center;
+  }
+  .card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 28px;
+  }
+  .sizes {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+  }
+  .on-light {
+    background: #F0F4F8;
+    border-radius: 12px;
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .label {
+    color: #3A6A8A;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    text-align: center;
+  }
+  .name {
+    color: #7AB0D0;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-align: center;
+    margin-bottom: 4px;
+  }
+  .desc {
+    color: #2A4A6A;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    text-align: center;
+    max-width: 140px;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+
+<h1>Argos — Logo concepts</h1>
+
+<div class="row">
+
+  <!-- CONCEPT A : Prisme brisé -->
+  <div class="card">
+    <div class="sizes">
+      <!-- 64px dark -->
+      <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="gA1" x1="8" y1="56" x2="56" y2="8" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#0070AD"/>
+            <stop offset="100%" stop-color="#00C8F0"/>
+          </linearGradient>
+          <linearGradient id="gA2" x1="32" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#00C8F0"/>
+            <stop offset="100%" stop-color="#0050AA"/>
+          </linearGradient>
+        </defs>
+        <!-- Triangle gauche (face sombre) -->
+        <path d="M32 10 L8 54 L32 42 Z" fill="url(#gA1)" opacity="0.9"/>
+        <!-- Triangle droit (face claire) -->
+        <path d="M32 10 L32 42 L56 54 Z" fill="url(#gA2)"/>
+        <!-- Base -->
+        <path d="M8 54 L32 42 L56 54 Z" fill="#0070AD" opacity="0.4"/>
+      </svg>
+
+      <!-- 32px dark -->
+      <svg width="32" height="32" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="gA3" x1="8" y1="56" x2="56" y2="8" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#0070AD"/>
+            <stop offset="100%" stop-color="#00C8F0"/>
+          </linearGradient>
+          <linearGradient id="gA4" x1="32" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#00C8F0"/>
+            <stop offset="100%" stop-color="#0050AA"/>
+          </linearGradient>
+        </defs>
+        <path d="M32 10 L8 54 L32 42 Z" fill="url(#gA3)" opacity="0.9"/>
+        <path d="M32 10 L32 42 L56 54 Z" fill="url(#gA4)"/>
+        <path d="M8 54 L32 42 L56 54 Z" fill="#0070AD" opacity="0.4"/>
+      </svg>
+
+      <!-- 20px dark -->
+      <svg width="20" height="20" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="gA5" x1="8" y1="56" x2="56" y2="8" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#0070AD"/>
+            <stop offset="100%" stop-color="#00C8F0"/>
+          </linearGradient>
+          <linearGradient id="gA6" x1="32" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#00C8F0"/>
+            <stop offset="100%" stop-color="#0050AA"/>
+          </linearGradient>
+        </defs>
+        <path d="M32 10 L8 54 L32 42 Z" fill="url(#gA5)" opacity="0.9"/>
+        <path d="M32 10 L32 42 L56 54 Z" fill="url(#gA6)"/>
+        <path d="M8 54 L32 42 L56 54 Z" fill="#0070AD" opacity="0.4"/>
+      </svg>
+
+      <!-- 64px fond clair -->
+      <div class="on-light">
+        <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="gA7" x1="8" y1="56" x2="56" y2="8" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#0070AD"/>
+              <stop offset="100%" stop-color="#00C8F0"/>
+            </linearGradient>
+            <linearGradient id="gA8" x1="32" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#00C8F0"/>
+              <stop offset="100%" stop-color="#0050AA"/>
+            </linearGradient>
+          </defs>
+          <path d="M32 10 L8 54 L32 42 Z" fill="url(#gA7)" opacity="0.9"/>
+          <path d="M32 10 L32 42 L56 54 Z" fill="url(#gA8)"/>
+          <path d="M8 54 L32 42 L56 54 Z" fill="#0070AD" opacity="0.4"/>
+        </svg>
+      </div>
+    </div>
+    <div>
+      <div class="name">A — Prisme</div>
+      <div class="desc">Forme 3D, deux faces, dégradé directionnel. Évoque la clarté, la réfraction de l'information.</div>
+    </div>
+  </div>
+
+  <!-- CONCEPT B : Signal oblique -->
+  <div class="card">
+    <div class="sizes">
+      <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="gB1" x1="6" y1="58" x2="58" y2="6" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#0055A0"/>
+            <stop offset="100%" stop-color="#00D4FF"/>
+          </linearGradient>
+        </defs>
+        <!-- Barre principale épaisse -->
+        <rect x="10" y="26" width="44" height="12" rx="6" fill="url(#gB1)" transform="rotate(-20 32 32)"/>
+        <!-- Barre fine parallèle haute -->
+        <rect x="18" y="14" width="30" height="5" rx="2.5" fill="url(#gB1)" opacity="0.5" transform="rotate(-20 32 32)"/>
+        <!-- Point terminal lumineux -->
+        <circle cx="47" cy="16" r="5" fill="#00D4FF"/>
+        <circle cx="47" cy="16" r="2.5" fill="white"/>
+      </svg>
+
+      <svg width="32" height="32" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="gB2" x1="6" y1="58" x2="58" y2="6" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#0055A0"/>
+            <stop offset="100%" stop-color="#00D4FF"/>
+          </linearGradient>
+        </defs>
+        <rect x="10" y="26" width="44" height="12" rx="6" fill="url(#gB2)" transform="rotate(-20 32 32)"/>
+        <rect x="18" y="14" width="30" height="5" rx="2.5" fill="url(#gB2)" opacity="0.5" transform="rotate(-20 32 32)"/>
+        <circle cx="47" cy="16" r="5" fill="#00D4FF"/>
+        <circle cx="47" cy="16" r="2.5" fill="white"/>
+      </svg>
+
+      <svg width="20" height="20" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="gB3" x1="6" y1="58" x2="58" y2="6" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#0055A0"/>
+            <stop offset="100%" stop-color="#00D4FF"/>
+          </linearGradient>
+        </defs>
+        <rect x="10" y="26" width="44" height="12" rx="6" fill="url(#gB3)" transform="rotate(-20 32 32)"/>
+        <rect x="18" y="14" width="30" height="5" rx="2.5" fill="url(#gB3)" opacity="0.5" transform="rotate(-20 32 32)"/>
+        <circle cx="47" cy="16" r="5" fill="#00D4FF"/>
+        <circle cx="47" cy="16" r="2.5" fill="white"/>
+      </svg>
+
+      <div class="on-light">
+        <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="gB4" x1="6" y1="58" x2="58" y2="6" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#0055A0"/>
+              <stop offset="100%" stop-color="#00D4FF"/>
+            </linearGradient>
+          </defs>
+          <rect x="10" y="26" width="44" height="12" rx="6" fill="url(#gB4)" transform="rotate(-20 32 32)"/>
+          <rect x="18" y="14" width="30" height="5" rx="2.5" fill="url(#gB4)" opacity="0.5" transform="rotate(-20 32 32)"/>
+          <circle cx="47" cy="16" r="5" fill="#00A8CC"/>
+          <circle cx="47" cy="16" r="2.5" fill="white"/>
+        </svg>
+      </div>
+    </div>
+    <div>
+      <div class="name">B — Signal</div>
+      <div class="desc">Dynamique, directionnel. Évoque la transmission, la détection, la vitesse.</div>
+    </div>
+  </div>
+
+  <!-- CONCEPT C : Diamant fragmenté -->
+  <div class="card">
+    <div class="sizes">
+      <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="gC1" x1="6" y1="6" x2="58" y2="58" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#00C8F0"/>
+            <stop offset="60%" stop-color="#0070AD"/>
+            <stop offset="100%" stop-color="#003D80"/>
+          </linearGradient>
+        </defs>
+        <!-- Fragment haut-gauche -->
+        <path d="M32 8 L14 28 L32 22 Z" fill="url(#gC1)" opacity="1"/>
+        <!-- Fragment haut-droit -->
+        <path d="M32 8 L32 22 L50 28 Z" fill="url(#gC1)" opacity="0.75"/>
+        <!-- Fragment bas-gauche -->
+        <path d="M14 28 L28 56 L32 22 Z" fill="url(#gC1)" opacity="0.85"/>
+        <!-- Fragment bas-droit -->
+        <path d="M32 22 L28 56 L50 28 Z" fill="url(#gC1)" opacity="0.55"/>
+        <!-- Ligne de fracture lumineuse -->
+        <line x1="32" y1="8" x2="28" y2="56" stroke="#00E5FF" stroke-width="1" opacity="0.6"/>
+      </svg>
+
+      <svg width="32" height="32" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="gC2" x1="6" y1="6" x2="58" y2="58" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#00C8F0"/>
+            <stop offset="60%" stop-color="#0070AD"/>
+            <stop offset="100%" stop-color="#003D80"/>
+          </linearGradient>
+        </defs>
+        <path d="M32 8 L14 28 L32 22 Z" fill="url(#gC2)" opacity="1"/>
+        <path d="M32 8 L32 22 L50 28 Z" fill="url(#gC2)" opacity="0.75"/>
+        <path d="M14 28 L28 56 L32 22 Z" fill="url(#gC2)" opacity="0.85"/>
+        <path d="M32 22 L28 56 L50 28 Z" fill="url(#gC2)" opacity="0.55"/>
+        <line x1="32" y1="8" x2="28" y2="56" stroke="#00E5FF" stroke-width="1" opacity="0.6"/>
+      </svg>
+
+      <svg width="20" height="20" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="gC3" x1="6" y1="6" x2="58" y2="58" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#00C8F0"/>
+            <stop offset="60%" stop-color="#0070AD"/>
+            <stop offset="100%" stop-color="#003D80"/>
+          </linearGradient>
+        </defs>
+        <path d="M32 8 L14 28 L32 22 Z" fill="url(#gC3)" opacity="1"/>
+        <path d="M32 8 L32 22 L50 28 Z" fill="url(#gC3)" opacity="0.75"/>
+        <path d="M14 28 L28 56 L32 22 Z" fill="url(#gC3)" opacity="0.85"/>
+        <path d="M32 22 L28 56 L50 28 Z" fill="url(#gC3)" opacity="0.55"/>
+        <line x1="32" y1="8" x2="28" y2="56" stroke="#00E5FF" stroke-width="1" opacity="0.6"/>
+      </svg>
+
+      <div class="on-light">
+        <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="gC4" x1="6" y1="6" x2="58" y2="58" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#00C8F0"/>
+              <stop offset="60%" stop-color="#0070AD"/>
+              <stop offset="100%" stop-color="#003D80"/>
+            </linearGradient>
+          </defs>
+          <path d="M32 8 L14 28 L32 22 Z" fill="url(#gC4)" opacity="1"/>
+          <path d="M32 8 L32 22 L50 28 Z" fill="url(#gC4)" opacity="0.75"/>
+          <path d="M14 28 L28 56 L32 22 Z" fill="url(#gC4)" opacity="0.85"/>
+          <path d="M32 22 L28 56 L50 28 Z" fill="url(#gC4)" opacity="0.55"/>
+          <line x1="32" y1="8" x2="28" y2="56" stroke="#0090C0" stroke-width="1" opacity="0.5"/>
+        </svg>
+      </div>
+    </div>
+    <div>
+      <div class="name">C — Diamant fracturé</div>
+      <div class="desc">Gemme brisée en fragments, ligne de fracture lumineuse. Premium, précision, profondeur.</div>
+    </div>
+  </div>
+
+</div>
+
+<h1>dark bg / 64px / 32px / 20px / light bg</h1>
+
+<!-- CONCEPT D : Constellation yeux de félins -->
+<div class="row">
+  <div class="card">
+    <div class="sizes">
+
+      <!-- Helper : œil félin = ellipse + fente verticale arrondie -->
+      <!-- cx cy rx ry = position + dimensions de l'ellipse -->
+
+      <!-- 64px dark -->
+      <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="gD1" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#00D4FF"/>
+            <stop offset="100%" stop-color="#0055A0"/>
+          </radialGradient>
+        </defs>
+        <!-- Liens -->
+        <line x1="32" y1="9"  x2="52" y2="22" stroke="#0070AD" stroke-width="1" opacity="0.45"/>
+        <line x1="32" y1="9"  x2="12" y2="26" stroke="#0070AD" stroke-width="1" opacity="0.45"/>
+        <line x1="52" y1="22" x2="56" y2="44" stroke="#0070AD" stroke-width="1" opacity="0.45"/>
+        <line x1="12" y1="26" x2="10" y2="48" stroke="#0070AD" stroke-width="1" opacity="0.45"/>
+        <line x1="56" y1="44" x2="36" y2="57" stroke="#0070AD" stroke-width="1" opacity="0.45"/>
+        <line x1="10" y1="48" x2="36" y2="57" stroke="#0070AD" stroke-width="1" opacity="0.45"/>
+        <line x1="32" y1="9"  x2="32" y2="32" stroke="#00B4E1" stroke-width="0.8" opacity="0.3"/>
+        <line x1="52" y1="22" x2="32" y2="32" stroke="#00B4E1" stroke-width="0.8" opacity="0.3"/>
+        <line x1="12" y1="26" x2="32" y2="32" stroke="#00B4E1" stroke-width="0.8" opacity="0.3"/>
+        <line x1="56" y1="44" x2="32" y2="32" stroke="#00B4E1" stroke-width="0.8" opacity="0.3"/>
+        <line x1="10" y1="48" x2="32" y2="32" stroke="#00B4E1" stroke-width="0.8" opacity="0.3"/>
+        <line x1="36" y1="57" x2="32" y2="32" stroke="#00B4E1" stroke-width="0.8" opacity="0.3"/>
+        <!-- Yeux félins périphériques : ellipse iris + fente pupille verticale -->
+        <!-- haut centre -->
+        <ellipse cx="32" cy="9" rx="5" ry="3.5" fill="#00C0E8"/>
+        <path d="M32 5.8 C33.2 5.8 33.2 12.2 32 12.2 C30.8 12.2 30.8 5.8 32 5.8Z" fill="#003A70"/>
+        <!-- haut droite -->
+        <ellipse cx="52" cy="22" rx="4" ry="2.8" fill="#0088C0"/>
+        <path d="M52 19.4 C53 19.4 53 24.6 52 24.6 C51 24.6 51 19.4 52 19.4Z" fill="#003A70"/>
+        <!-- haut gauche -->
+        <ellipse cx="12" cy="26" rx="3.5" ry="2.5" fill="#0088C0"/>
+        <path d="M12 23.7 C12.9 23.7 12.9 28.3 12 28.3 C11.1 28.3 11.1 23.7 12 23.7Z" fill="#003A70"/>
+        <!-- bas droite -->
+        <ellipse cx="56" cy="44" rx="3" ry="2.2" fill="#0070AD"/>
+        <path d="M56 41.9 C56.8 41.9 56.8 46.1 56 46.1 C55.2 46.1 55.2 41.9 56 41.9Z" fill="#003A70"/>
+        <!-- bas gauche -->
+        <ellipse cx="10" cy="48" rx="4" ry="2.8" fill="#0090C8"/>
+        <path d="M10 45.4 C11 45.4 11 50.6 10 50.6 C9 50.6 9 45.4 10 45.4Z" fill="#003A70"/>
+        <!-- bas centre -->
+        <ellipse cx="36" cy="57" rx="3.5" ry="2.5" fill="#0070AD"/>
+        <path d="M36 54.7 C36.9 54.7 36.9 59.3 36 59.3 C35.1 59.3 35.1 54.7 36 54.7Z" fill="#003A70"/>
+        <!-- Œil central grand lumineux -->
+        <ellipse cx="32" cy="32" rx="8" ry="5.5" fill="url(#gD1)"/>
+        <path d="M32 26.8 C34.2 26.8 34.2 37.2 32 37.2 C29.8 37.2 29.8 26.8 32 26.8Z" fill="#001830"/>
+        <circle cx="33.5" cy="29.5" r="1.2" fill="white" opacity="0.7"/>
+      </svg>
+
+      <!-- 32px dark -->
+      <svg width="32" height="32" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="gD2" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#00D4FF"/>
+            <stop offset="100%" stop-color="#0055A0"/>
+          </radialGradient>
+        </defs>
+        <line x1="32" y1="9"  x2="52" y2="22" stroke="#0070AD" stroke-width="1" opacity="0.45"/>
+        <line x1="32" y1="9"  x2="12" y2="26" stroke="#0070AD" stroke-width="1" opacity="0.45"/>
+        <line x1="52" y1="22" x2="56" y2="44" stroke="#0070AD" stroke-width="1" opacity="0.45"/>
+        <line x1="12" y1="26" x2="10" y2="48" stroke="#0070AD" stroke-width="1" opacity="0.45"/>
+        <line x1="56" y1="44" x2="36" y2="57" stroke="#0070AD" stroke-width="1" opacity="0.45"/>
+        <line x1="10" y1="48" x2="36" y2="57" stroke="#0070AD" stroke-width="1" opacity="0.45"/>
+        <line x1="32" y1="9"  x2="32" y2="32" stroke="#00B4E1" stroke-width="0.8" opacity="0.3"/>
+        <line x1="52" y1="22" x2="32" y2="32" stroke="#00B4E1" stroke-width="0.8" opacity="0.3"/>
+        <line x1="12" y1="26" x2="32" y2="32" stroke="#00B4E1" stroke-width="0.8" opacity="0.3"/>
+        <line x1="56" y1="44" x2="32" y2="32" stroke="#00B4E1" stroke-width="0.8" opacity="0.3"/>
+        <line x1="10" y1="48" x2="32" y2="32" stroke="#00B4E1" stroke-width="0.8" opacity="0.3"/>
+        <line x1="36" y1="57" x2="32" y2="32" stroke="#00B4E1" stroke-width="0.8" opacity="0.3"/>
+        <ellipse cx="32" cy="9" rx="5" ry="3.5" fill="#00C0E8"/>
+        <path d="M32 5.8 C33.2 5.8 33.2 12.2 32 12.2 C30.8 12.2 30.8 5.8 32 5.8Z" fill="#003A70"/>
+        <ellipse cx="52" cy="22" rx="4" ry="2.8" fill="#0088C0"/>
+        <path d="M52 19.4 C53 19.4 53 24.6 52 24.6 C51 24.6 51 19.4 52 19.4Z" fill="#003A70"/>
+        <ellipse cx="12" cy="26" rx="3.5" ry="2.5" fill="#0088C0"/>
+        <path d="M12 23.7 C12.9 23.7 12.9 28.3 12 28.3 C11.1 28.3 11.1 23.7 12 23.7Z" fill="#003A70"/>
+        <ellipse cx="56" cy="44" rx="3" ry="2.2" fill="#0070AD"/>
+        <path d="M56 41.9 C56.8 41.9 56.8 46.1 56 46.1 C55.2 46.1 55.2 41.9 56 46.1Z" fill="#003A70"/>
+        <ellipse cx="10" cy="48" rx="4" ry="2.8" fill="#0090C8"/>
+        <path d="M10 45.4 C11 45.4 11 50.6 10 50.6 C9 50.6 9 45.4 10 45.4Z" fill="#003A70"/>
+        <ellipse cx="36" cy="57" rx="3.5" ry="2.5" fill="#0070AD"/>
+        <path d="M36 54.7 C36.9 54.7 36.9 59.3 36 59.3 C35.1 59.3 35.1 54.7 36 54.7Z" fill="#003A70"/>
+        <ellipse cx="32" cy="32" rx="8" ry="5.5" fill="url(#gD2)"/>
+        <path d="M32 26.8 C34.2 26.8 34.2 37.2 32 37.2 C29.8 37.2 29.8 26.8 32 26.8Z" fill="#001830"/>
+        <circle cx="33.5" cy="29.5" r="1.2" fill="white" opacity="0.7"/>
+      </svg>
+
+      <!-- 20px dark -->
+      <svg width="20" height="20" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="gD3" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#00D4FF"/>
+            <stop offset="100%" stop-color="#0055A0"/>
+          </radialGradient>
+        </defs>
+        <line x1="32" y1="9"  x2="52" y2="22" stroke="#0070AD" stroke-width="1.5" opacity="0.45"/>
+        <line x1="32" y1="9"  x2="12" y2="26" stroke="#0070AD" stroke-width="1.5" opacity="0.45"/>
+        <line x1="52" y1="22" x2="56" y2="44" stroke="#0070AD" stroke-width="1.5" opacity="0.45"/>
+        <line x1="12" y1="26" x2="10" y2="48" stroke="#0070AD" stroke-width="1.5" opacity="0.45"/>
+        <line x1="56" y1="44" x2="36" y2="57" stroke="#0070AD" stroke-width="1.5" opacity="0.45"/>
+        <line x1="10" y1="48" x2="36" y2="57" stroke="#0070AD" stroke-width="1.5" opacity="0.45"/>
+        <ellipse cx="32" cy="9" rx="5" ry="3.5" fill="#00C0E8"/>
+        <path d="M32 5.8 C33.2 5.8 33.2 12.2 32 12.2 C30.8 12.2 30.8 5.8 32 5.8Z" fill="#003A70"/>
+        <ellipse cx="52" cy="22" rx="4" ry="2.8" fill="#0088C0"/>
+        <ellipse cx="12" cy="26" rx="3.5" ry="2.5" fill="#0088C0"/>
+        <ellipse cx="56" cy="44" rx="3" ry="2.2" fill="#0070AD"/>
+        <ellipse cx="10" cy="48" rx="4" ry="2.8" fill="#0090C8"/>
+        <ellipse cx="36" cy="57" rx="3.5" ry="2.5" fill="#0070AD"/>
+        <ellipse cx="32" cy="32" rx="8" ry="5.5" fill="url(#gD3)"/>
+        <path d="M32 26.8 C34.2 26.8 34.2 37.2 32 37.2 C29.8 37.2 29.8 26.8 32 26.8Z" fill="#001830"/>
+      </svg>
+
+      <!-- 64px fond clair -->
+      <div class="on-light">
+        <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="gD4" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#00B4E1"/>
+              <stop offset="100%" stop-color="#0055A0"/>
+            </radialGradient>
+          </defs>
+          <line x1="32" y1="9"  x2="52" y2="22" stroke="#0070AD" stroke-width="1" opacity="0.35"/>
+          <line x1="32" y1="9"  x2="12" y2="26" stroke="#0070AD" stroke-width="1" opacity="0.35"/>
+          <line x1="52" y1="22" x2="56" y2="44" stroke="#0070AD" stroke-width="1" opacity="0.35"/>
+          <line x1="12" y1="26" x2="10" y2="48" stroke="#0070AD" stroke-width="1" opacity="0.35"/>
+          <line x1="56" y1="44" x2="36" y2="57" stroke="#0070AD" stroke-width="1" opacity="0.35"/>
+          <line x1="10" y1="48" x2="36" y2="57" stroke="#0070AD" stroke-width="1" opacity="0.35"/>
+          <line x1="32" y1="9"  x2="32" y2="32" stroke="#0090C0" stroke-width="0.8" opacity="0.2"/>
+          <line x1="52" y1="22" x2="32" y2="32" stroke="#0090C0" stroke-width="0.8" opacity="0.2"/>
+          <line x1="12" y1="26" x2="32" y2="32" stroke="#0090C0" stroke-width="0.8" opacity="0.2"/>
+          <line x1="56" y1="44" x2="32" y2="32" stroke="#0090C0" stroke-width="0.8" opacity="0.2"/>
+          <line x1="10" y1="48" x2="32" y2="32" stroke="#0090C0" stroke-width="0.8" opacity="0.2"/>
+          <line x1="36" y1="57" x2="32" y2="32" stroke="#0090C0" stroke-width="0.8" opacity="0.2"/>
+          <ellipse cx="32" cy="9" rx="5" ry="3.5" fill="#00A0C8"/>
+          <path d="M32 5.8 C33.2 5.8 33.2 12.2 32 12.2 C30.8 12.2 30.8 5.8 32 5.8Z" fill="#003A70"/>
+          <ellipse cx="52" cy="22" rx="4" ry="2.8" fill="#0070A0"/>
+          <path d="M52 19.4 C53 19.4 53 24.6 52 24.6 C51 24.6 51 19.4 52 19.4Z" fill="#003A70"/>
+          <ellipse cx="12" cy="26" rx="3.5" ry="2.5" fill="#0070A0"/>
+          <path d="M12 23.7 C12.9 23.7 12.9 28.3 12 28.3 C11.1 28.3 11.1 23.7 12 23.7Z" fill="#003A70"/>
+          <ellipse cx="56" cy="44" rx="3" ry="2.2" fill="#005888"/>
+          <ellipse cx="10" cy="48" rx="4" ry="2.8" fill="#0078A8"/>
+          <path d="M10 45.4 C11 45.4 11 50.6 10 50.6 C9 50.6 9 45.4 10 45.4Z" fill="#003A70"/>
+          <ellipse cx="36" cy="57" rx="3.5" ry="2.5" fill="#005888"/>
+          <ellipse cx="32" cy="32" rx="8" ry="5.5" fill="url(#gD4)"/>
+          <path d="M32 26.8 C34.2 26.8 34.2 37.2 32 37.2 C29.8 37.2 29.8 26.8 32 26.8Z" fill="#001830"/>
+          <circle cx="33.5" cy="29.5" r="1.2" fill="white" opacity="0.7"/>
+        </svg>
+      </div>
+    </div>
+    <div>
+      <div class="name">D — Constellation féline</div>
+      <div class="desc">Yeux de félins (ellipse + fente verticale) reliés à un œil central lumineux. Argos Panoptès — omniscience, réseau, veille.</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

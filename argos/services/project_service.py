@@ -25,11 +25,10 @@ def _row_to_project(row) -> dict:
         "cdc_content": row[4],
         "cdc_analysis": row[5],
         "knowledge_profile": row[6],
-        "teams_webhook_url": row[7],
-        "owner_id": row[8],
-        "is_active": row[9],
-        "created_at": row[10].isoformat() if row[10] and hasattr(row[10], "isoformat") else row[10],
-        "updated_at": row[11].isoformat() if row[11] and hasattr(row[11], "isoformat") else row[11],
+        "owner_id": row[7],
+        "is_active": row[8],
+        "created_at": row[9].isoformat() if row[9] and hasattr(row[9], "isoformat") else row[9],
+        "updated_at": row[10].isoformat() if row[10] and hasattr(row[10], "isoformat") else row[10],
     }
 
 
@@ -84,7 +83,7 @@ class ProjectService:
     # ── CRUD ──────────────────────────────────────────────────────────────────
 
     def create_project(self, owner_id: int, name: str,
-                       description: str = None, teams_webhook_url: str = None) -> dict:
+                       description: str = None) -> dict:
         name = (name or "").strip()
         if not name:
             raise ValueError("Le nom du projet est obligatoire")
@@ -92,11 +91,11 @@ class ProjectService:
         with self.db.get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "INSERT INTO projects (name, slug, description, teams_webhook_url, owner_id) "
-                    "VALUES (%s, %s, %s, %s, %s) RETURNING id, name, slug, description, "
-                    "cdc_content, cdc_analysis, knowledge_profile, teams_webhook_url, "
+                    "INSERT INTO projects (name, slug, description, owner_id) "
+                    "VALUES (%s, %s, %s, %s) RETURNING id, name, slug, description, "
+                    "cdc_content, cdc_analysis, knowledge_profile, "
                     "owner_id, is_active, created_at, updated_at",
-                    (name, slug, description, teams_webhook_url, owner_id),
+                    (name, slug, description, owner_id),
                 )
                 row = cur.fetchone()
                 project = _row_to_project(row)
@@ -113,7 +112,7 @@ class ProjectService:
             with conn.cursor() as cur:
                 cur.execute(
                     "SELECT id, name, slug, description, cdc_content, cdc_analysis, "
-                    "knowledge_profile, teams_webhook_url, owner_id, is_active, "
+                    "knowledge_profile, owner_id, is_active, "
                     "created_at, updated_at FROM projects WHERE id = %s",
                     (project_id,),
                 )
@@ -130,7 +129,7 @@ class ProjectService:
             with conn.cursor() as cur:
                 cur.execute(
                     "SELECT p.id, p.name, p.slug, p.description, p.cdc_content, "
-                    "p.cdc_analysis, p.knowledge_profile, p.teams_webhook_url, "
+                    "p.cdc_analysis, p.knowledge_profile, "
                     "p.owner_id, p.is_active, p.created_at, p.updated_at "
                     "FROM projects p "
                     "JOIN project_members pm ON pm.project_id = p.id "
@@ -146,7 +145,7 @@ class ProjectService:
                 member = _get_member_role(cur, project_id, user_id)
                 if not member or member["role"] != "owner":
                     raise PermissionError("Seul le propriétaire peut modifier le projet")
-                allowed = {"name", "description", "teams_webhook_url", "cdc_content",
+                allowed = {"name", "description", "cdc_content",
                            "cdc_analysis", "knowledge_profile"}
                 fields = {k: v for k, v in kwargs.items() if k in allowed}
                 if not fields:
@@ -156,7 +155,7 @@ class ProjectService:
                 cur.execute(
                     f"UPDATE projects SET {sets}, updated_at = NOW() WHERE id = %s "
                     "RETURNING id, name, slug, description, cdc_content, cdc_analysis, "
-                    "knowledge_profile, teams_webhook_url, owner_id, is_active, "
+                    "knowledge_profile, owner_id, is_active, "
                     "created_at, updated_at",
                     values,
                 )

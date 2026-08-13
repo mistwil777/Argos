@@ -52,7 +52,7 @@ def _make_db(rows=None, rowcount=1):
 
 
 def _project_row(id=1, name="Projet Alpha", slug="projet-alpha", owner_id=10):
-    return (id, name, slug, "Description", None, None, None, None, owner_id, True,
+    return (id, name, slug, "Description", None, None, None, owner_id, True,
             "2026-08-13T00:00:00", "2026-08-13T00:00:00")
 
 
