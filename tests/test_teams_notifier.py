@@ -9,8 +9,10 @@ Couvre :
 - TeamsNotifier.notify_calibration_done : card avec liste des sujets créés
 - TeamsNotifier : échec HTTP → log warning, pas d'exception (fire-and-forget)
 - TeamsNotifier : timeout → log warning, pas d'exception
-- intégration ProjectService.add_member → notifier appelé si webhook présent
-- intégration ProjectService.add_member → notifier non appelé si pas de webhook
+- intégration route invite_member → notifier appelé si webhook présent
+- intégration route invite_member → notifier non appelé si pas de webhook
+- intégration route review_proposal_route → notify_proposal_reviewed_teams appelé si webhook
+- intégration route finalize_calibration → notify_calibration_done_teams appelé si webhook
 """
 
 import pytest
@@ -335,5 +337,181 @@ class TestProjectServiceTeamsIntegration:
                     return {"id": 10, "email": "owner@example.com"}.get(key, default)
 
             await invite_member(project_id=1, body=FakeBody(), current_user=FakeUser())
+
+        mock_notifier.assert_not_called()
+
+
+# ── Intégration route review_proposal_route ──────────────────────────────────
+
+class TestReviewProposalTeamsIntegration:
+    @pytest.mark.asyncio
+    async def test_notifier_called_on_review_with_webhook(self):
+        """review_proposal_route avec webhook → notify_proposal_reviewed_teams appelé."""
+        project_with_webhook = {
+            "id": 1, "name": "Argos Interne", "slug": "argos-interne",
+            "description": None, "cdc_content": None, "cdc_analysis": None,
+            "knowledge_profile": None, "teams_webhook_url": "https://teams.example.com/hook",
+            "owner_id": 10, "is_active": True,
+            "created_at": "2026-08-13T00:00:00", "updated_at": "2026-08-13T00:00:00",
+        }
+        proposal_result = {
+            "id": 5, "project_id": 1, "sujet_id": None,
+            "url": "https://openai.com/blog", "source_type": "website",
+            "name": "OpenAI Blog", "description": None, "proposed_by": 20,
+            "status": "approved", "reviewed_by": 10, "review_note": None,
+            "proposed_at": "2026-08-13T00:00:00", "reviewed_at": "2026-08-13T00:00:00",
+        }
+
+        mock_svc = MagicMock()
+        mock_svc.get_project.return_value = project_with_webhook
+        mock_proposal_svc = MagicMock()
+        mock_proposal_svc.review_proposal.return_value = proposal_result
+        mock_notifier = AsyncMock()
+
+        with patch("argos.api.projects._svc", return_value=mock_svc), \
+             patch("argos.api.projects._proposal_svc", return_value=mock_proposal_svc), \
+             patch("argos.api.projects.notify_proposal_reviewed_teams", mock_notifier):
+
+            from argos.api.projects import review_proposal_route
+
+            class FakeBody:
+                decision = "approved"
+                note = None
+
+            class FakeUser:
+                def __getitem__(self, key):
+                    return {"id": 10, "email": "owner@example.com"}[key]
+                def get(self, key, default=None):
+                    return {"id": 10, "email": "owner@example.com"}.get(key, default)
+
+            await review_proposal_route(
+                project_id=1, proposal_id=5,
+                body=FakeBody(), current_user=FakeUser(),
+            )
+
+        mock_notifier.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_notifier_not_called_on_review_without_webhook(self):
+        """review_proposal_route sans webhook → notify_proposal_reviewed_teams non appelé."""
+        project_no_webhook = {
+            "id": 1, "name": "Argos", "slug": "argos",
+            "description": None, "cdc_content": None, "cdc_analysis": None,
+            "knowledge_profile": None, "teams_webhook_url": None,
+            "owner_id": 10, "is_active": True,
+            "created_at": "2026-08-13T00:00:00", "updated_at": "2026-08-13T00:00:00",
+        }
+        mock_svc = MagicMock()
+        mock_svc.get_project.return_value = project_no_webhook
+        mock_proposal_svc = MagicMock()
+        mock_proposal_svc.review_proposal.return_value = {"id": 5, "url": "https://x.com", "status": "rejected"}
+        mock_notifier = AsyncMock()
+
+        with patch("argos.api.projects._svc", return_value=mock_svc), \
+             patch("argos.api.projects._proposal_svc", return_value=mock_proposal_svc), \
+             patch("argos.api.projects.notify_proposal_reviewed_teams", mock_notifier):
+
+            from argos.api.projects import review_proposal_route
+
+            class FakeBody:
+                decision = "rejected"
+                note = "Hors périmètre"
+
+            class FakeUser:
+                def __getitem__(self, key): return {"id": 10}[key]
+                def get(self, key, default=None): return {"id": 10}.get(key, default)
+
+            await review_proposal_route(
+                project_id=1, proposal_id=5,
+                body=FakeBody(), current_user=FakeUser(),
+            )
+
+        mock_notifier.assert_not_called()
+
+
+# ── Intégration route finalize_calibration ────────────────────────────────────
+
+class TestFinalizeCalibrationTeamsIntegration:
+    @pytest.mark.asyncio
+    async def test_notifier_called_on_finalize_with_webhook(self):
+        """finalize_calibration avec webhook → notify_calibration_done_teams appelé."""
+        project_with_webhook = {
+            "id": 1, "name": "Argos Interne", "slug": "argos-interne",
+            "description": None, "cdc_content": None, "cdc_analysis": None,
+            "knowledge_profile": None, "teams_webhook_url": "https://teams.example.com/hook",
+            "owner_id": 10, "is_active": True,
+            "created_at": "2026-08-13T00:00:00", "updated_at": "2026-08-13T00:00:00",
+        }
+        finalize_result = {
+            "subjects": [
+                {"id": 1, "name": "IA générative", "project_id": 1, "description": ""},
+                {"id": 2, "name": "MLOps", "project_id": 1, "description": ""},
+            ],
+            "knowledge_profile": {"bilan_md": "...", "learning_plan_md": "..."},
+            "source_candidates": [{"url": "https://openai.com/blog", "type": "rss", "name": "OpenAI"}],
+        }
+
+        mock_agent = MagicMock()
+        mock_agent.generate_subjects = AsyncMock(return_value=finalize_result)
+        mock_project_svc = MagicMock()
+        mock_project_svc.get_project.return_value = project_with_webhook
+        mock_notifier = AsyncMock()
+
+        with patch("argos.api.project_calibration._agent", return_value=mock_agent), \
+             patch("argos.api.project_calibration.ProjectService", return_value=mock_project_svc), \
+             patch("argos.api.project_calibration.notify_calibration_done_teams", mock_notifier):
+
+            from argos.api.project_calibration import finalize_calibration
+
+            class FakeBody:
+                project_name = "Argos Interne"
+                cdc_analysis = {"subjects": [], "gaps": [], "domains": [], "constraints": []}
+                qa_history = []
+
+            class FakeUser:
+                def __getitem__(self, key): return {"id": 10}[key]
+                def get(self, key, default=None): return {"id": 10}.get(key, default)
+
+            await finalize_calibration(
+                project_id=1, body=FakeBody(), current_user=FakeUser(),
+            )
+
+        mock_notifier.assert_called_once()
+        call_kwargs = mock_notifier.call_args
+        assert "IA générative" in str(call_kwargs)
+        assert "MLOps" in str(call_kwargs)
+
+    @pytest.mark.asyncio
+    async def test_notifier_not_called_on_finalize_without_webhook(self):
+        """finalize_calibration sans webhook → notify_calibration_done_teams non appelé."""
+        project_no_webhook = {
+            "id": 1, "name": "Argos", "slug": "argos",
+            "description": None, "cdc_content": None, "cdc_analysis": None,
+            "knowledge_profile": None, "teams_webhook_url": None,
+            "owner_id": 10, "is_active": True,
+            "created_at": "2026-08-13T00:00:00", "updated_at": "2026-08-13T00:00:00",
+        }
+        mock_agent = MagicMock()
+        mock_agent.generate_subjects = AsyncMock(return_value={"subjects": [], "knowledge_profile": {}, "source_candidates": []})
+        mock_project_svc = MagicMock()
+        mock_project_svc.get_project.return_value = project_no_webhook
+        mock_notifier = AsyncMock()
+
+        with patch("argos.api.project_calibration._agent", return_value=mock_agent), \
+             patch("argos.api.project_calibration.ProjectService", return_value=mock_project_svc), \
+             patch("argos.api.project_calibration.notify_calibration_done_teams", mock_notifier):
+
+            from argos.api.project_calibration import finalize_calibration
+
+            class FakeBody:
+                project_name = "Argos"
+                cdc_analysis = {"subjects": [], "gaps": [], "domains": [], "constraints": []}
+                qa_history = []
+
+            class FakeUser:
+                def __getitem__(self, key): return {"id": 10}[key]
+                def get(self, key, default=None): return {"id": 10}.get(key, default)
+
+            await finalize_calibration(project_id=1, body=FakeBody(), current_user=FakeUser())
 
         mock_notifier.assert_not_called()
