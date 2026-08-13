@@ -323,15 +323,23 @@ Réponds UNIQUEMENT avec ce JSON :
         knowledge_profile = result.get("knowledge_profile", {})
         source_candidates = result.get("source_candidates", [])
 
+        import re as _re
+        import time as _time
+
+        def _make_slug(name: str, suffix: int = 0) -> str:
+            base = _re.sub(r"[^a-z0-9]+", "-", name.lower().strip()).strip("-")[:80]
+            return f"{base}-{suffix}" if suffix else base
+
         created_subjects = []
         with self._db.get_connection() as conn:
             with conn.cursor() as cur:
                 # Créer les workspaces avec project_id
-                for s in subjects:
+                for i, s in enumerate(subjects):
+                    slug = _make_slug(s["name"], project_id * 100 + i)
                     cur.execute(
-                        "INSERT INTO workspaces (name, project_id) VALUES (%s, %s) "
+                        "INSERT INTO workspaces (name, slug, project_id) VALUES (%s, %s, %s) "
                         "RETURNING id, name, project_id",
-                        (s["name"], project_id),
+                        (s["name"], slug, project_id),
                     )
                     row = cur.fetchone()
                     if row:

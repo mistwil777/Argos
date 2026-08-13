@@ -15,6 +15,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     const err = await resp.json().catch(() => ({ detail: resp.statusText }))
     throw new Error(err.detail || `HTTP ${resp.status}`)
   }
+  if (resp.status === 204 || resp.headers.get('content-length') === '0') return null as T
   return resp.json()
 }
 

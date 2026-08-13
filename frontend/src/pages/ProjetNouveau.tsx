@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -36,11 +36,15 @@ export default function ProjetNouveau() {
   const [cdcAnalysis, setCdcAnalysis] = useState<any>(null)
 
   // Step 4 — questionnaire
-  const [qaHistory, setQaHistory]     = useState<{ q: string; a: string }[]>([])
-  const [currentQ, setCurrentQ]       = useState<any>(null)
+  const [qaHistory, setQaHistory]         = useState<{ q: string; a: string }[]>([])
+  const [currentQ, setCurrentQ]           = useState<any>(null)
+  const [interviewDone, setInterviewDone] = useState(false)
   const [currentAnswer, setCurrentAnswer] = useState('')
   const [selectedOptions, setSelectedOptions] = useState<string[]>([])
-  const [levelPair, setLevelPair]     = useState<{ current: string; target: string }>({ current: '', target: '' })
+  const [otherText, setOtherText]         = useState('')
+  const [showOther, setShowOther]         = useState(false)
+  const [levelPair, setLevelPair]         = useState<{ current: string; target: string }>({ current: '', target: '' })
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Step 5 — finalisation
   const [finalResult, setFinalResult] = useState<any>(null)
@@ -348,7 +352,7 @@ export default function ProjetNouveau() {
                       <textarea
                         value={currentAnswer} onChange={e => setCurrentAnswer(e.target.value)}
                         rows={4} placeholder="Votre réponse..."
-                        className="input w-full resize-none"
+                        className="w-full resize-none rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[14px] px-3 py-2.5 placeholder:text-[hsl(var(--text-3))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
                       />
                     )}
 

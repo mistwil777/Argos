@@ -69,15 +69,25 @@ export default function ItemReaderModal({ itemId, onClose, onSaved, onGenerateRe
         const pages = data.pages || []
         const fullText = pages.map((p: any) => p.content || '').join('\n\n').trim()
 
-        if (fullText.length > 100) {
+        const MIN_CONTENT = 150
+
+        if (fullText.length >= MIN_CONTENT) {
           setSource('raw')
           setParagraphs(formatRawContent(fullText))
           setMeta({ title: pages[0]?.title || data.title, url: data.url, item_id: data.item_id })
         } else {
           // Fallback to digest
           return fetch(`/api/v1/items/${itemId}/content`).then(r => r.json()).then(d => {
-            setSource('digest')
-            setParagraphs(formatRawContent(d.digest_markdown || d.summary || 'Aucun contenu disponible.'))
+            const digestText = (d.digest_markdown || d.summary || '').trim()
+            if (digestText.length >= MIN_CONTENT) {
+              setSource('digest')
+              setParagraphs(formatRawContent(digestText))
+            } else {
+              setSource('raw')
+              setParagraphs([
+                '_Contenu non disponible — cette page nécessite un rendu JavaScript ou pointe vers une page de catégorie sans article._\n\nOuvrez le lien source pour accéder à l\'article original.',
+              ])
+            }
             setMeta({ title: d.title, url: d.source_url, item_id: d.id, created_at: d.created_at })
           })
         }
