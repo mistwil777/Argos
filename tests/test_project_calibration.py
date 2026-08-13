@@ -255,44 +255,45 @@ class TestProjectCalibrationNextQuestion:
         assert "question" in result or result.get("done") is False
 
     @pytest.mark.asyncio
-    async def test_max_questions_forces_done(self):
-        """Au-delà de MAX_QUESTIONS, retourner done=True sans appel LLM."""
-        import json
-        from argos.services.project_calibration_agent import ProjectCalibrationAgent, MAX_QUESTIONS
-
-        agent = ProjectCalibrationAgent.__new__(ProjectCalibrationAgent)
-        agent._llm = MagicMock()
-
-        # Historique rempli jusqu'au plafond
-        qa_history = [{"q": f"Q{i}", "a": f"A{i}"} for i in range(MAX_QUESTIONS)]
-
-        result = await agent.next_question(
-            project_name="Argos Interne",
-            cdc_analysis={"subjects": [], "gaps": [], "domains": [], "constraints": []},
-            qa_history=qa_history,
-        )
-
-        assert result.get("done") is True
-        agent._llm.generate.assert_not_called()
-
-    @pytest.mark.asyncio
     async def test_llm_can_return_done_after_min_questions(self):
-        """Après MIN_QUESTIONS, le LLM peut retourner done=True."""
+        """Après MIN_QUESTIONS, le LLM peut retourner done=True quand toutes les lacunes sont couvertes."""
         import json
         from argos.services.project_calibration_agent import ProjectCalibrationAgent, MIN_QUESTIONS
 
-        llm_output = json.dumps({"done": True, "reason": "Informations suffisantes."})
+        llm_output = json.dumps({"done": True, "reason": "Toutes les lacunes sont couvertes."})
         agent = _make_agent_with_llm(llm_output)
 
         qa_history = [{"q": f"Q{i}", "a": f"A{i}"} for i in range(MIN_QUESTIONS + 1)]
 
         result = await agent.next_question(
             project_name="Argos Interne",
-            cdc_analysis={"subjects": [], "gaps": [], "domains": [], "constraints": []},
+            cdc_analysis={"subjects": [], "gaps": ["lacune 1"], "domains": [], "constraints": []},
             qa_history=qa_history,
         )
 
         assert result.get("done") is True
+
+    @pytest.mark.asyncio
+    async def test_llm_cannot_return_done_before_min_questions(self):
+        """Avant MIN_QUESTIONS, done=True LLM est ignoré — on force une nouvelle question."""
+        import json
+        from argos.services.project_calibration_agent import ProjectCalibrationAgent, MIN_QUESTIONS
+
+        llm_output = json.dumps({"done": True, "reason": "Trop tôt."})
+        agent = _make_agent_with_llm(llm_output)
+
+        # Historique trop court — 2 questions seulement
+        qa_history = [{"q": "Q1", "a": "A1"}, {"q": "Q2", "a": "A2"}]
+
+        result = await agent.next_question(
+            project_name="Argos Interne",
+            cdc_analysis={"subjects": [{"name": "IA", "sub_subjects": [], "priority": "high"}],
+                          "gaps": ["lacune 1", "lacune 2"], "domains": [], "constraints": []},
+            qa_history=qa_history,
+        )
+
+        # Le LLM a dit done mais on est sous MIN_QUESTIONS → on continue
+        assert "question" in result
 
 
 # ── ProjectCalibrationAgent.generate_subjects ────────────────────────────────

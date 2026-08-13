@@ -21,7 +21,6 @@ _VALIDATION_SIGNALS = (
 )
 
 MIN_QUESTIONS = 5
-MAX_QUESTIONS = 8
 
 
 # ── CdcAnalyzer ───────────────────────────────────────────────────────────────
@@ -162,10 +161,7 @@ class ProjectCalibrationAgent:
             return {"done": True, "reason": "Configuration validée par l'équipe projet."}
 
         n = len(qa_history)
-
-        # Plafond dur — au-delà de MAX_QUESTIONS, terminer sans appel LLM
-        if n >= MAX_QUESTIONS:
-            return {"done": True, "reason": "Nombre maximum de questions atteint."}
+        can_finalize = n >= MIN_QUESTIONS
 
         # Génération LLM de la prochaine question
         qa_text = "\n".join(
@@ -173,51 +169,69 @@ class ProjectCalibrationAgent:
             for i, qa in enumerate(qa_history)
         )
 
-        subjects_text = ", ".join(
-            s["name"] for s in cdc_analysis.get("subjects", [])
-        ) or "aucun sujet identifié"
-        gaps_text = "; ".join(cdc_analysis.get("gaps", [])) or "aucune lacune"
+        subjects_text = "\n".join(
+            f"  - {s['name']}" + (f" (priorité: {s.get('priority', '?')})" if s.get('priority') else "")
+            for s in cdc_analysis.get("subjects", [])
+        ) or "  - aucun sujet identifié"
 
-        can_finalize = n >= MIN_QUESTIONS
-        finalize_instruction = (
-            f'\n- Si tu estimes avoir assez d\'informations, tu PEUX retourner {{"done": true, "reason": "..."}} au lieu d\'une question.'
+        gaps = cdc_analysis.get("gaps", [])
+        gaps_text = "\n".join(f"  - {g}" for g in gaps) if gaps else "  - aucune lacune identifiée"
+
+        constraints = cdc_analysis.get("constraints", [])
+        constraints_text = "\n".join(f"  - {c}" for c in constraints) if constraints else "  - aucune"
+
+        finalize_note = (
+            "\nSi toutes les lacunes listées ci-dessus ont obtenu une réponse dans les échanges, "
+            f'retourne {{"done": true, "reason": "..."}} au lieu d\'une question.'
             if can_finalize else
-            f"\n- Minimum {MIN_QUESTIONS} questions avant de finaliser ({MIN_QUESTIONS - n} restantes)."
+            f"\nMinimum {MIN_QUESTIONS} questions requises avant de pouvoir terminer ({MIN_QUESTIONS - n} encore nécessaires)."
         )
 
-        format_instruction = (
-            '{{"done": true, "reason": "..."}} OU {{"question": {{"text": "...", "type": "open" | "multiselect" | "level_pair", "options": []}}}}'
+        format_note = (
+            '{"done": true, "reason": "..."} OU {"question": {"text": "...", "type": "open"|"multiselect"|"level_pair", "options": []}}'
             if can_finalize else
-            '{{"question": {{"text": "...", "type": "open" | "multiselect" | "level_pair", "options": []}}}}'
+            '{"question": {"text": "...", "type": "open"|"multiselect"|"level_pair", "options": []}}'
         )
 
         prompt = f"""Tu conduis un entretien de calibration pour le projet « {project_name} ».
 
-Sujets identifiés dans le CDC : {subjects_text}
-Lacunes à combler : {gaps_text}
-Questions posées jusqu'ici : {n}
+SUJETS DU PROJET :
+{subjects_text}
 
-Échanges :
+LACUNES À COMBLER (issues de l'analyse du CDC) :
+{gaps_text}
+
+CONTRAINTES CONNUES :
+{constraints_text}
+
+ÉCHANGES DÉJÀ RÉALISÉS ({n} questions) :
 {qa_text}
 
-Génère la prochaine question la plus utile pour :
-1. Combler les lacunes identifiées dans le CDC
-2. Préciser les niveaux actuels de l'équipe sur chaque sujet
-3. Identifier les contraintes ou exclusions de périmètre
+OBJECTIF DE LA PROCHAINE QUESTION :
+Analyse les échanges ci-dessus. Pour chaque lacune listée, détermine si elle a été adressée.
+Pose une question précise sur la lacune ou le sujet le moins bien couvert par les réponses existantes.
+Ne pose JAMAIS une question dont la réponse est déjà présente dans les échanges.
+Varie les angles : contexte organisationnel, niveaux techniques par sujet spécifique, contraintes opérationnelles, priorités, risques projet.
+{finalize_note}
 
-Règles absolues :
-- Une question = un seul angle précis
-- Propose des options concrètes quand elles sont listables (type multiselect, max 6)
-- Ne jamais redemander ce qui a déjà une réponse{finalize_instruction}
+FORMAT DE RÉPONSE (JSON uniquement) :
+{format_note}
 
-Réponds UNIQUEMENT avec ce JSON :
-{format_instruction}"""
+Types disponibles :
+- open : réponse libre
+- multiselect : choix multiples parmi des options (max 6)
+- level_pair : niveau actuel + niveau cible (pour une compétence précise)"""
 
         try:
             response, _ = await self._llm.generate(
                 prompt=prompt,
-                system_prompt="Tu conduis un entretien de calibration projet. Questions précises, directes, jamais de rappel de l'historique. JSON valide uniquement.",
-                temperature=0.5, max_tokens=600, top_p=0.9,
+                system_prompt=(
+                    "Tu es un expert en calibration de projets. "
+                    "Tu analyses les réponses précédentes pour identifier ce qui manque encore. "
+                    "Chaque question doit apporter une information nouvelle et non redondante. "
+                    "Réponds en JSON valide uniquement, sans texte autour."
+                ),
+                temperature=0.4, max_tokens=600, top_p=0.9,
             )
             raw = response.strip()
             start = raw.find("{")
@@ -230,9 +244,13 @@ Réponds UNIQUEMENT avec ce JSON :
 
             question = result.get("question", {})
 
-            # Garde-fou : si le LLM retourne finalize trop tôt, on force une question
-            if n < MIN_QUESTIONS and not question.get("text"):
-                question = {"text": "Quels sont les sujets que l'équipe doit absolument maîtriser en priorité ?", "type": "open", "options": []}
+            # Garde-fou : done trop tôt ou question vide → on force une question de secours
+            if not question.get("text"):
+                question = {
+                    "text": "Quels sont les principaux risques ou obstacles anticipés sur ce projet ?",
+                    "type": "open",
+                    "options": [],
+                }
 
             return {"question": question}
 
