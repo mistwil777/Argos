@@ -610,23 +610,36 @@
 <!-- ══════════════════════════ ÉTAT ══════════════════════════ -->
 <h2><span class="num">07</span> Ce qui est livré aujourd'hui</h2>
 
-<h4>En production</h4>
+<h4>Socle individuel</h4>
 <table class="status-table">
   <thead><tr><th>Fonctionnalité</th><th>Statut</th></tr></thead>
   <tbody>
-    <tr><td>Entretien de calibration — bilan, plan d'apprentissage, whitelist de sources</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Entretien de calibration — bilan, plan d'apprentissage chronologique, whitelist de sources</td><td class="done">✓ Livré</td></tr>
     <tr><td>Pipeline de collecte — RSS, sites web (avec rendu JS), GitHub, PDF/images</td><td class="done">✓ Livré</td></tr>
     <tr><td>Filtre de fiabilité automatique — agnostique, sans liste codée en dur</td><td class="done">✓ Livré</td></tr>
-    <tr><td>Classification et tagging veille / apprentissage par profil utilisateur</td><td class="done">✓ Livré</td></tr>
-    <tr><td>Apprentissage progressif — contenu servi chronologiquement selon le plan</td><td class="done">✓ Livré</td></tr>
-    <tr><td>Briefing journalier structuré — onglets Veille et Apprentissage</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Classification automatique veille / apprentissage par profil utilisateur</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Apprentissage progressif — contenu servi dans l'ordre du plan pédagogique</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Briefing journalier structuré — onglets Veille et Apprentissage distincts</td><td class="done">✓ Livré</td></tr>
     <tr><td>Base RAG hybride + Knowledge Graph interrogeables en langage naturel</td><td class="done">✓ Livré</td></tr>
-    <tr><td>Mise à jour hebdomadaire — comparaison RAG+KG vs nouvelles sources</td><td class="done">✓ Livré</td></tr>
     <tr><td>Contrôle humain explicite — Intégrer · Sauvegarder · Ignorer</td><td class="done">✓ Livré</td></tr>
-    <tr><td>Traduction à la volée — langue cible configurable</td><td class="done">✓ Livré</td></tr>
-    <tr><td>Espaces multi-utilisateurs — rôles, permissions, isolation des données</td><td class="done">✓ Livré</td></tr>
-    <tr><td>Serveur MCP — connexion aux IDE et assistants IA</td><td class="done">✓ Livré</td></tr>
-    <tr><td>Couverture de tests — 110 tests automatisés</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Traduction à la volée — langue cible configurable par sujet</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Serveur MCP — connexion aux IDE et assistants IA (7 outils exposés)</td><td class="done">✓ Livré</td></tr>
+  </tbody>
+</table>
+
+<h4>Espaces projet et équipe</h4>
+<table class="status-table">
+  <thead><tr><th>Fonctionnalité</th><th>Statut</th></tr></thead>
+  <tbody>
+    <tr><td>Création de projet — nom, description, webhook Teams optionnel</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Analyse LLM du CDC — extraction automatique des sujets, lacunes et contraintes</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Entretien projet conversationnel — comble les lacunes identifiées dans le CDC</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Génération automatique des sujets — arborescence créée en base depuis l'entretien</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Gestion des membres — invitation par email, rôles owner / éditeur / lecteur</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Propositions de sources — membres proposent, propriétaire valide ou rejette</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Notifications Teams — invitation, validation de source, calibration terminée</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Interface dédiée — /projets avec liste, flow création, dashboard 3 onglets</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Couverture de tests — 165 tests automatisés, 0 régression</td><td class="done">✓ Livré</td></tr>
   </tbody>
 </table>
 
@@ -634,16 +647,17 @@
 <table class="status-table">
   <thead><tr><th>Fonctionnalité</th><th>Objectif</th></tr></thead>
   <tbody>
-    <tr><td>Moteur de progression — mesure de l'avancement réel vs le plan</td><td class="next">Ajuster le rythme selon ce qui est effectivement assimilé</td></tr>
-    <tr><td>Mise à jour du bilan — détecter quand le profil a évolué</td><td class="next">Maintenir la pertinence dans le temps</td></tr>
+    <tr><td>Moteur de progression — mesure de l'avancement réel vs le plan pédagogique</td><td class="next">Ajuster le rythme selon ce qui est effectivement assimilé</td></tr>
+    <tr><td>Mise à jour du bilan — détecter quand le profil a évolué</td><td class="next">Maintenir la pertinence dans le temps sans repartir de zéro</td></tr>
     <tr><td>Rétention RAG intelligente — nettoyage temporel et par progression</td><td class="next">Base propre sans intervention manuelle</td></tr>
-    <tr><td>Espaces projets isolés — RAG, graphe et permissions dédiés par mission</td><td class="next">Isolation complète pour missions client</td></tr>
+    <tr><td>Intégration Microsoft Graph API — invitation Teams native (enterprise)</td><td class="next">Invitation directe depuis Teams sans webhook</td></tr>
+    <tr><td>Onglets Veille / Apprentissage dans la Librairie</td><td class="next">Navigation structurée par type de contenu archivé</td></tr>
   </tbody>
 </table>
 
 <!-- ══════════════════════════ FOOTER ══════════════════════════ -->
 <div class="footer">
-  <span>Argos — développé en autonomie dans le cadre d'une alternance M2 IA à Capgemini.</span>
+  <span>Argos — plateforme de veille et d'apprentissage agnostique, conçue et développée par Wilfried Leroulier.</span>
   <span>Wilfried Leroulier · Août 2026</span>
 </div>
 
