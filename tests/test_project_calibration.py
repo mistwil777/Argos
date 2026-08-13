@@ -274,26 +274,22 @@ class TestProjectCalibrationNextQuestion:
         assert result.get("done") is True
 
     @pytest.mark.asyncio
-    async def test_llm_cannot_return_done_before_min_questions(self):
-        """Avant MIN_QUESTIONS, done=True LLM est ignoré — on force une nouvelle question."""
+    async def test_llm_done_accepted_even_at_first_question(self):
+        """Sans lacune dans le CDC, le LLM peut terminer dès la première question."""
         import json
-        from argos.services.project_calibration_agent import ProjectCalibrationAgent, MIN_QUESTIONS
+        from argos.services.project_calibration_agent import ProjectCalibrationAgent
 
-        llm_output = json.dumps({"done": True, "reason": "Trop tôt."})
+        llm_output = json.dumps({"done": True, "reason": "Aucune lacune à combler."})
         agent = _make_agent_with_llm(llm_output)
-
-        # Historique trop court — 2 questions seulement
-        qa_history = [{"q": "Q1", "a": "A1"}, {"q": "Q2", "a": "A2"}]
 
         result = await agent.next_question(
             project_name="Argos Interne",
             cdc_analysis={"subjects": [{"name": "IA", "sub_subjects": [], "priority": "high"}],
-                          "gaps": ["lacune 1", "lacune 2"], "domains": [], "constraints": []},
-            qa_history=qa_history,
+                          "gaps": [], "domains": [], "constraints": []},
+            qa_history=[{"q": "Q1", "a": "CDC très complet, rien à préciser."}],
         )
 
-        # Le LLM a dit done mais on est sous MIN_QUESTIONS → on continue
-        assert "question" in result
+        assert result.get("done") is True
 
 
 # ── ProjectCalibrationAgent.generate_subjects ────────────────────────────────

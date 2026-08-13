@@ -20,7 +20,7 @@ _VALIDATION_SIGNALS = (
     "très bien", "allons-y",
 )
 
-MIN_QUESTIONS = 5
+MIN_QUESTIONS = 0
 
 
 # ── CdcAnalyzer ───────────────────────────────────────────────────────────────
@@ -161,7 +161,6 @@ class ProjectCalibrationAgent:
             return {"done": True, "reason": "Configuration validée par l'équipe projet."}
 
         n = len(qa_history)
-        can_finalize = n >= MIN_QUESTIONS
 
         # Génération LLM de la prochaine question
         qa_text = "\n".join(
@@ -181,16 +180,12 @@ class ProjectCalibrationAgent:
         constraints_text = "\n".join(f"  - {c}" for c in constraints) if constraints else "  - aucune"
 
         finalize_note = (
-            "\nSi toutes les lacunes listées ci-dessus ont obtenu une réponse dans les échanges, "
-            f'retourne {{"done": true, "reason": "..."}} au lieu d\'une question.'
-            if can_finalize else
-            f"\nMinimum {MIN_QUESTIONS} questions requises avant de pouvoir terminer ({MIN_QUESTIONS - n} encore nécessaires)."
+            "\nSi toutes les lacunes listées ci-dessus ont obtenu une réponse dans les échanges "
+            f'(ou s\'il n\'y a aucune lacune), retourne {{"done": true, "reason": "..."}} au lieu d\'une question.'
         )
 
         format_note = (
             '{"done": true, "reason": "..."} OU {"question": {"text": "...", "type": "open"|"multiselect"|"level_pair", "options": []}}'
-            if can_finalize else
-            '{"question": {"text": "...", "type": "open"|"multiselect"|"level_pair", "options": []}}'
         )
 
         prompt = f"""Tu conduis un entretien de calibration pour le projet « {project_name} ».
@@ -238,13 +233,11 @@ Types disponibles :
             end = raw.rfind("}") + 1
             result = json.loads(raw[start:end])
 
-            # Le LLM peut retourner done=True après MIN_QUESTIONS
-            if result.get("done") and can_finalize:
+            if result.get("done"):
                 return {"done": True, "reason": result.get("reason", "Calibration terminée.")}
 
             question = result.get("question", {})
 
-            # Garde-fou : done trop tôt ou question vide → on force une question de secours
             if not question.get("text"):
                 question = {
                     "text": "Quels sont les principaux risques ou obstacles anticipés sur ce projet ?",
