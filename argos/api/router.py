@@ -438,6 +438,7 @@ async def list_items(
     importance: str = Query(default="all", description="Filter by importance: all, critical, high, medium, low"),
     workspace_id: Optional[int] = Query(default=None, description="Filter by workspace ID"),
     sujet_id: Optional[int] = Query(default=None, description="Filter by sujet ID"),
+    content_tag: Optional[str] = Query(default=None, description="Filter by content tag: veille or apprentissage"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0)
 ):
@@ -468,6 +469,13 @@ async def list_items(
                 if sujet_id is not None:
                     where_conditions.append("sujet_id = %s")
                     params.append(sujet_id)
+
+                if content_tag == "veille":
+                    where_conditions.append("(content_tags->>'category' = %s OR content_tags->>'category' = %s)")
+                    params.extend(["veille", "mixed"])
+                elif content_tag == "apprentissage":
+                    where_conditions.append("(content_tags->>'category' = %s OR content_tags->>'category' = %s)")
+                    params.extend(["apprentissage", "mixed"])
 
                 where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
                 

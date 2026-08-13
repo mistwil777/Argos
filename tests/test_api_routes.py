@@ -3,6 +3,8 @@ Tests — API REST (routes HTTP)
 
 Couvre :
 - GET /items : content_tags présent dans la réponse
+- GET /items?content_tag=veille : filtre côté SQL sur category veille/mixed
+- GET /items?content_tag=apprentissage : filtre côté SQL sur category apprentissage/mixed
 - POST /items/{id}/translate : sans langue → 400
 - POST /items/{id}/translate : item inexistant → 404
 - POST /items/{id}/translate : langue fournie + LLM mocké → texte traduit
@@ -174,3 +176,79 @@ class TestBriefingToday:
         assert resp.status_code == 200
         data = resp.json()
         assert data["top_items"][0]["content_tags"]["category"] == "veille"
+
+
+# ─── GET /items — content_tags et filtrage ────────────────────────────────────
+
+def _make_items_db(rows, total=None):
+    """DB mock retournant rows pour fetchall et total pour fetchone (COUNT)."""
+    cur = MagicMock()
+    cur.__enter__ = MagicMock(return_value=cur)
+    cur.__exit__ = MagicMock(return_value=False)
+    cur.fetchall = MagicMock(return_value=rows)
+    cur.fetchone = MagicMock(return_value=(total if total is not None else len(rows),))
+    conn = MagicMock()
+    conn.__enter__ = MagicMock(return_value=conn)
+    conn.__exit__ = MagicMock(return_value=False)
+    conn.cursor = MagicMock(return_value=cur)
+    db = MagicMock()
+    db.get_connection = MagicMock(return_value=conn)
+    return db, cur
+
+
+def _item_row(item_id, category):
+    """Tuple de 17 colonnes correspondant au SELECT de list_items.
+    psycopg2 désérialise JSONB en dict — le mock retourne directement des dicts."""
+    import datetime
+    content_tags = {"category": category, "passages": []}
+    return (
+        item_id, f"Titre {item_id}", "Résumé", "https://example.com",
+        "rss", "https://source.com",
+        "article", "medium", "classified",
+        datetime.datetime(2026, 1, 1), datetime.datetime(2026, 1, 1),
+        1,
+        [], None, False, None,
+        content_tags,
+    )
+
+
+class TestListItemsContentTags:
+    def test_items_response_includes_content_tags(self, client):
+        c, mock_db = client
+        row = _item_row(1, "veille")
+        items_db, _ = _make_items_db([row])
+        mock_db.get_connection = items_db.get_connection
+
+        resp = c.get("/api/v1/items")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "content_tags" in data["items"][0]
+        assert data["items"][0]["content_tags"]["category"] == "veille"
+
+    def test_filter_content_tag_veille_adds_sql_condition(self, client):
+        c, mock_db = client
+        row = _item_row(1, "veille")
+        items_db, cur = _make_items_db([row])
+        mock_db.get_connection = items_db.get_connection
+
+        resp = c.get("/api/v1/items?content_tag=veille")
+        assert resp.status_code == 200
+        # La requête SQL exécutée doit contenir un filtre WHERE sur content_tags->>'category'
+        executed_query = cur.execute.call_args_list[0][0][0]
+        assert "content_tags" in executed_query.lower() and "where" in executed_query.lower()
+        # Le paramètre veille/mixed doit apparaître dans les params de la requête
+        executed_params = cur.execute.call_args_list[0][0][1]
+        assert any("veille" in str(p) or "mixed" in str(p) for p in executed_params)
+
+    def test_filter_content_tag_apprentissage_adds_sql_condition(self, client):
+        c, mock_db = client
+        row = _item_row(2, "apprentissage")
+        items_db, cur = _make_items_db([row])
+        mock_db.get_connection = items_db.get_connection
+
+        resp = c.get("/api/v1/items?content_tag=apprentissage")
+        assert resp.status_code == 200
+        executed_query = cur.execute.call_args_list[0][0][0]
+        assert "content_tags" in executed_query.lower() and "where" in executed_query.lower()
+        executed_params = cur.execute.call_args_list[0][0][1]
+        assert any("apprentissage" in str(p) or "mixed" in str(p) for p in executed_params)

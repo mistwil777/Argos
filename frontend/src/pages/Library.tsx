@@ -183,19 +183,19 @@ export default function Library() {
   const loadItems = useCallback(async (sujetId?: number) => {
     setItemsLoading(true)
     try {
-      const params: any = { limit: 100 }
+      const params: any = { limit: 100, content_tag: contentTab }
       if (sujetId != null) params.sujet_id = sujetId
       const d = await api.getItems(params)
       setItems(d.items || d.results || [])
     } finally { setItemsLoading(false) }
-  }, [])
+  }, [contentTab])
 
   useEffect(() => {
     if (level === 'docs' && activeSujet) {
       loadDocs(activeSujet.id)
       loadItems(activeSujet.id ?? undefined)
     }
-  }, [filterType, sortBy, level, activeSujet])
+  }, [filterType, sortBy, level, activeSujet, contentTab])
 
   // Auto-open generator modal
   useEffect(() => {
