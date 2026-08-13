@@ -18,6 +18,7 @@ from argos.config import settings
 from argos.api import api_router, veille_router, assistant_router
 from argos.api.auth import auth_router
 from argos.api.projects import router as projects_router
+from argos.api.project_calibration import router as project_calibration_router
 from argos.mcp_server import mcp
 
 
@@ -93,6 +94,7 @@ app.include_router(api_router)
 app.include_router(veille_router)
 app.include_router(assistant_router)
 app.include_router(projects_router, prefix="/api/v1")
+app.include_router(project_calibration_router, prefix="/api/v1")
 
 # ── MCP Server (Streamable HTTP) ──────────────────────────────────────────────
 # On ajoute directement la route /mcp en passant l'ASGI handler du session manager.
