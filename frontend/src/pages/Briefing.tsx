@@ -256,9 +256,6 @@ export default function Briefing() {
             <Newspaper className="w-5 h-5 text-[hsl(var(--accent))]" />
             Briefing Delta
           </h2>
-          <p className="text-[12px] font-mono text-[hsl(var(--text-3))] mt-1">
-            Ce qui a changé aujourd'hui · sources fiables uniquement
-          </p>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
@@ -355,8 +352,35 @@ export default function Briefing() {
         </motion.div>
       )}
 
+      {/* Pas de nouveauté */}
+      {!loading && displayBriefing && (displayBriefing.top_items?.length === 0) && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+          className="panel p-10 flex flex-col items-center gap-4 text-center">
+          <Newspaper className="w-10 h-10 text-[hsl(var(--text-3))] opacity-30" />
+          <div>
+            <p className="text-[15px] font-semibold text-[hsl(var(--text))]">Rien de nouveau aujourd'hui</p>
+            <p className="text-[12px] text-[hsl(var(--text-2))] mt-2 leading-relaxed">
+              Les sources surveillées n'ont rien publié de nouveau depuis le dernier briefing.
+            </p>
+            <p className="text-[11.5px] text-[hsl(var(--text-3))] mt-1">
+              Consultez l'historique ou parcourez vos articles collectés.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 mt-2">
+            <button onClick={() => navigate('/librairie')}
+              className="px-4 py-2 rounded border border-[hsl(var(--line))] text-[12px] font-mono text-[hsl(var(--text-2))] hover:border-[hsl(var(--accent-line))] hover:text-[hsl(var(--accent))] transition-colors">
+              Voir mes articles
+            </button>
+            <button onClick={() => setHistOpen(true)}
+              className="px-4 py-2 rounded border border-[hsl(var(--line))] text-[12px] font-mono text-[hsl(var(--text-2))] hover:border-[hsl(var(--accent-line))] hover:text-[hsl(var(--accent))] transition-colors">
+              Historique des briefings
+            </button>
+          </div>
+        </motion.div>
+      )}
+
       {/* Briefing actif */}
-      {!loading && displayBriefing && (
+      {!loading && displayBriefing && (displayBriefing.top_items?.length ?? 0) > 0 && (
         <div className="space-y-5">
 
           {/* Meta */}

@@ -496,6 +496,7 @@ async def generate_summary(sujet_id: int, data: dict):
         # Sauvegarder le bilan dans knowledge_profile
         summary_md = result.get("summary_md", "")
         bilan_title = result.get("bilan_title", "")
+        learning_plan_md = result.get("learning_plan_md", "")
         if summary_md:
             try:
                 with db.get_connection() as conn:
@@ -504,6 +505,8 @@ async def generate_summary(sujet_id: int, data: dict):
                         row = cur.fetchone()
                         existing = row[0] if row else {}
                         updated = {**(existing or {}), "bilan_md": summary_md, "bilan_title": bilan_title}
+                        if learning_plan_md:
+                            updated["learning_plan_md"] = learning_plan_md
                         cur.execute(
                             "UPDATE sujets SET knowledge_profile = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
                             (json.dumps(updated), sujet_id),

@@ -16,9 +16,9 @@ const NAV_MAIN = [
 ]
 
 const META: Record<string, { title: string; badge?: string; desc?: string }> = {
-  '/':           { title: 'Briefing',   desc: 'Ce qui a changé aujourd\'hui dans l\'écosystème surveillé' },
+  '/':           { title: 'Briefing',   desc: 'Ce qui a changé aujourd\'hui dans vos sources surveillées' },
   '/veille':     { title: 'Veille',     desc: 'Cadrez votre périmètre de veille et gérez vos dossiers' },
-  '/briefing':   { title: 'Briefing',   desc: 'Ce qui a changé aujourd\'hui dans l\'écosystème surveillé' },
+  '/briefing':   { title: 'Briefing',   desc: 'Ce qui a changé aujourd\'hui dans vos sources surveillées' },
   '/librairie':  { title: 'Librairie',  desc: 'Documents générés depuis votre base de connaissances' },
   '/reglages':   { title: 'Réglages',   desc: 'Général, connexions IDE, équipe et compte' },
 }

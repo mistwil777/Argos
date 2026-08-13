@@ -603,12 +603,26 @@ class CollectorService:
                         duplicates += 1
                         continue
 
+                    # Résoudre content_type depuis intention_type du sujet
+                    content_type = None
+                    if s_id:
+                        try:
+                            with self.db.get_connection() as conn:
+                                with conn.cursor() as cur:
+                                    cur.execute("SELECT intention_type FROM sujets WHERE id = %s", (s_id,))
+                                    r = cur.fetchone()
+                                    if r:
+                                        it = (r[0] or "").lower()
+                                        content_type = "apprentissage" if "apprendre" in it or "apprentissage" in it else "veille"
+                        except Exception:
+                            pass
+
                     insert_query = """
                         INSERT INTO items (
                             source_type, source_url, url, title, summary,
-                            author, published_at, workspace_id, sujet_id
+                            author, published_at, workspace_id, sujet_id, content_type
                         )
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         ON CONFLICT (url, COALESCE(sujet_id, -1)) DO NOTHING
                         RETURNING id
                     """
@@ -626,6 +640,7 @@ class CollectorService:
                                     item_copy.get("published_at"),
                                     ws_id,
                                     s_id,
+                                    content_type,
                                 )
                             )
                             row = cur.fetchone()

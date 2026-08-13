@@ -55,7 +55,8 @@ export default function Library() {
 
   // ── Onglet actif ──
   const [tab, setTab] = useState<'articles' | 'documents'>('articles')
-  const [ragFilter, setRagFilter] = useState<'all' | 'bruts' | 'rag'>('bruts')
+  const [ragFilter, setRagFilter] = useState<'bruts' | 'rag'>('bruts')
+  const [contentTab, setContentTab] = useState<'veille' | 'apprentissage'>('veille')
   const [docRagFilter, setDocRagFilter] = useState<'all' | 'rag'>('all')
 
   // ── Articles (items) ──
@@ -662,17 +663,25 @@ export default function Library() {
               {tab === 'articles' && (
                 <motion.div key="tab-articles" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                   className="flex-1 flex flex-col overflow-hidden">
-                  {/* Sous-filtres Bruts / Dans le RAG */}
-                  <div className="flex-shrink-0 px-8 py-2 bg-[hsl(var(--bg-2))] border-b border-[hsl(var(--line))] flex items-center gap-3">
-                    {(['all', 'bruts', 'rag'] as const).map(f => {
-                      const labels = { all: 'Tous', bruts: 'Bruts', rag: 'Dans le RAG' }
-                      return (
-                        <button key={f} onClick={() => setRagFilter(f)}
-                          className={`text-[11px] font-mono px-2.5 py-1 rounded transition-colors ${ragFilter === f ? 'bg-[hsl(var(--accent))] text-white' : 'text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))]'}`}>
-                          {labels[f]}
-                        </button>
-                      )
-                    })}
+                  {/* Onglets Veille / Apprentissage */}
+                  <div className="flex-shrink-0 px-8 pt-2 pb-0 bg-[hsl(var(--bg-2))] border-b border-[hsl(var(--line))] flex items-end gap-0">
+                    {(['veille', 'apprentissage'] as const).map(t => (
+                      <button key={t} onClick={() => setContentTab(t)}
+                        className={`px-4 py-2 text-[11.5px] font-mono border-b-2 transition-all -mb-px capitalize ${contentTab === t ? 'border-[hsl(var(--accent))] text-[hsl(var(--accent))]' : 'border-transparent text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))]'}`}>
+                        {t}
+                      </button>
+                    ))}
+                    <div className="ml-auto flex items-center gap-2 pb-2">
+                      {(['bruts', 'rag'] as const).map(f => {
+                        const labels = { bruts: 'Bruts', rag: 'Dans le RAG' }
+                        return (
+                          <button key={f} onClick={() => setRagFilter(f)}
+                            className={`text-[10.5px] font-mono px-2.5 py-1 rounded transition-colors ${ragFilter === f ? 'bg-[hsl(var(--accent))] text-white' : 'text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))]'}`}>
+                            {labels[f]}
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
                   {/* Barre batch articles */}
                   <AnimatePresence>
@@ -720,11 +729,14 @@ export default function Library() {
                       <div className="space-y-2">
                         {/* Tout sélectionner */}
                         {(() => {
-                          const filteredItems = items.filter((it: any) =>
-                            ragFilter === 'all' ? true :
-                            ragFilter === 'rag' ? it.rag_indexed :
-                            !it.rag_indexed
-                          )
+                          const filteredItems = items.filter((it: any) => {
+                            const cat = it.content_tags?.category
+                            const matchContent = contentTab === 'veille'
+                              ? (!cat || cat === 'veille' || cat === 'mixed')
+                              : (cat === 'apprentissage' || cat === 'mixed')
+                            const matchRag = ragFilter === 'rag' ? it.rag_indexed : !it.rag_indexed
+                            return matchContent && matchRag
+                          })
                           return (
                           <>
                           <div className="flex items-center gap-2 pb-1">
@@ -768,6 +780,9 @@ export default function Library() {
                                     <ExternalLink className="w-2.5 h-2.5 flex-shrink-0" />
                                     <span className="truncate">{item.source_url.replace(/^https?:\/\//, '').split('/')[0]}</span>
                                   </a>
+                                )}
+                                {item.content_tags?.category === 'mixed' && (
+                                  <span className="text-[9.5px] font-mono text-[hsl(var(--violet))] border border-[hsl(var(--violet)/.3)] bg-[hsl(var(--violet)/.08)] rounded px-1.5 py-0.5">mixed</span>
                                 )}
                                 {item.rag_indexed && (
                                   <span className="text-[9.5px] font-mono text-[hsl(var(--accent))] border border-[hsl(var(--accent-line))] bg-[hsl(var(--accent-dim))] rounded px-1.5 py-0.5 flex items-center gap-1">

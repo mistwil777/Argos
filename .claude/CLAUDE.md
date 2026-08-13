@@ -28,3 +28,10 @@ Quand tu expliques un comportement technique :
 - Introduis maximum 2 termes techniques par explication
 - Chaque terme technique introduit doit être défini en une phrase simple AVANT d'être utilisé
 - Jamais de jargon fullstack, DevOps ou infrastructure sans définition préalable
+
+**Règle absolue — parler résultat, pas code :**
+Quand tu expliques un comportement, un bug ou une décision : décris ce que l'utilisateur voit ou ressent, pas le nom de la fonction, du script ou de l'endpoint.
+Si un élément technique doit être mentionné, expliquer d'abord en une phrase ce qu'il fait concrètement.
+
+Exemple interdit : "le endpoint `ingest-preview` n'utilise pas `use_playwright=True`"
+Exemple correct : "le système récupère seulement le résumé, pas le contenu complet de la page"

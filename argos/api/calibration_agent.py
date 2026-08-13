@@ -662,7 +662,22 @@ Termes techniques précis pour le filtre.
 ## Suggestions — à considérer ?
 OBLIGATOIRE : 4 à 8 concepts, outils ou acteurs étroitement liés mais NON mentionnés. Pour chacun, une phrase expliquant pourquoi il pourrait être pertinent.
 
-Réponds UNIQUEMENT avec : {{"bilan_title": "...", "summary_md": "..."}}"""
+ÉTAPE 4 — Génère un plan d'apprentissage chronologique :
+
+Tu connais ce domaine en profondeur. Génère une progression pédagogique réaliste depuis le niveau actuel jusqu'au niveau cible exprimé dans l'entretien.
+
+Structure : 4 à 7 étapes ordonnées. Pour chaque étape :
+- **Titre** : ce que l'utilisateur sera capable de faire après cette étape
+- **Concepts** : liste des concepts/outils à maîtriser à cette étape (du plus fondamental au plus avancé)
+- **Pourquoi maintenant** : une phrase expliquant pourquoi cet ordre est logique
+- **Sources recommandées** : 2-4 sources spécifiques et réelles (URLs de documentation officielle, tutoriels de référence, pages stables) qui couvrent cette étape. Privilégier les docs officiels des outils concernés.
+
+Règles :
+- Ne jamais mettre une feature avancée d'un outil avant d'avoir une étape d'introduction à cet outil
+- Les sources recommandées doivent être des URLs réelles et stables (docs.mlflow.org, docs.anthropic.com, etc.), pas des articles de blog génériques
+- Tenir compte du hors périmètre : ne pas inclure de concepts ou sources exclus
+
+Réponds UNIQUEMENT avec : {{"bilan_title": "...", "summary_md": "...", "learning_plan_md": "..."}}"""
 
         try:
             response, _ = await self._llm.generate(

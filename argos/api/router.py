@@ -3155,6 +3155,84 @@ async def admin_tag_content(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@api_router.post("/admin/fetch-and-tag")
+async def admin_fetch_and_tag(
+    background_tasks: BackgroundTasks,
+    request: Dict[str, Any] = {},
+    x_admin_token: Optional[str] = Header(default=None),
+):
+    """
+    Récupère le contenu complet des articles sans texte, puis les classe veille/apprentissage.
+    Traitement en arrière-plan — répond immédiatement.
+    """
+    _check_admin(x_admin_token)
+    sujet_id = request.get("sujet_id")
+
+    with db.get_connection() as conn:
+        with conn.cursor() as cur:
+            q = """
+                SELECT id, url FROM items
+                WHERE cleaned_content IS NULL
+                  AND classification_status = 'classified'
+            """
+            params = []
+            if sujet_id:
+                q += " AND sujet_id = %s"
+                params.append(sujet_id)
+            q += " ORDER BY created_at DESC LIMIT 100"
+            cur.execute(q, params)
+            rows = cur.fetchall()
+
+    item_ids = [r[0] for r in rows]
+    if not item_ids:
+        return {"status": "nothing_to_do", "count": 0}
+
+    async def _run():
+        from argos.services.web_browser import browse_with_playwright, html_to_markdown
+        from argos.services.content_tagger import tag_items_batch
+
+        fetched = 0
+        for item_id, url in rows:
+            try:
+                result = await browse_with_playwright(url)
+                if not result or result.get("error"):
+                    continue
+                raw_html = result.get("html") or result.get("content") or ""
+                if not raw_html:
+                    continue
+                cleaned = html_to_markdown(raw_html)
+                if not cleaned or len(cleaned) < 200:
+                    continue
+                with db.get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "UPDATE items SET cleaned_content = %s WHERE id = %s",
+                            (cleaned, item_id)
+                        )
+                        conn.commit()
+                fetched += 1
+                logger.info(f"[FETCH-TAG] Item {item_id} — contenu récupéré ({len(cleaned)} chars)")
+            except Exception as e:
+                logger.warning(f"[FETCH-TAG] Item {item_id} — échec scraping : {e}")
+
+        logger.info(f"[FETCH-TAG] Scraping terminé — {fetched}/{len(rows)} articles récupérés")
+
+        if fetched:
+            llm = create_llm_provider(
+                provider_type=settings.llm_provider,
+                openai_api_key=settings.openai_api_key,
+                aws_access_key_id=settings.aws_access_key_id,
+                aws_secret_access_key=settings.aws_secret_access_key,
+                aws_region=settings.aws_region,
+                model=settings.default_classification_model,
+            )
+            stats = await tag_items_batch(item_ids, db, llm)
+            logger.info(f"[FETCH-TAG] Classification terminée — {stats}")
+
+    background_tasks.add_task(_run)
+    return {"status": "started", "count": len(item_ids)}
+
+
 # ===========================================
 # Web Tools Endpoints — REST wrappers for web.browse / web.search / web.digest
 # ===========================================
