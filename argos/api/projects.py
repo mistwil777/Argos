@@ -11,6 +11,7 @@ from argos.database import DatabaseManager
 from argos.config import settings
 from argos.api.auth import get_current_user
 from argos.services.project_service import ProjectService, SourceProposalService
+from argos.services.teams_notifier import notify_member_invited_teams, notify_proposal_reviewed_teams
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["projects"])
@@ -135,13 +136,28 @@ async def list_members(project_id: int, current_user=Depends(get_current_user)):
 async def invite_member(project_id: int, body: MemberInvite,
                         current_user=Depends(get_current_user)):
     try:
-        return _svc().add_member(
+        svc = _svc()
+        member = svc.add_member(
             project_id=project_id,
             inviter_id=current_user["id"],
             invited_email=body.email,
             role=body.role,
             sujet_access=body.sujet_access,
         )
+        # Notification Teams fire-and-forget
+        project = svc.get_project(project_id=project_id, user_id=current_user["id"])
+        if project and project.get("teams_webhook_url"):
+            try:
+                await notify_member_invited_teams(
+                    webhook_url=project["teams_webhook_url"],
+                    project_name=project["name"],
+                    invited_email=body.email,
+                    role=body.role,
+                    invited_by=current_user.get("email", str(current_user["id"])),
+                )
+            except Exception as e:
+                logger.warning(f"Teams invite notification failed: {e}")
+        return member
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
     except ValueError as e:
@@ -172,6 +188,39 @@ async def remove_member(project_id: int, user_id: int,
             owner_id=current_user["id"],
             member_user_id=user_id,
         )
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@router.patch("/projects/{project_id}/source-proposals/{proposal_id}/review")
+async def review_proposal_route(project_id: int, proposal_id: int,
+                                body: ProposalReview,
+                                current_user=Depends(get_current_user)):
+    try:
+        svc = _svc()
+        proposal = _proposal_svc().review_proposal(
+            project_id=project_id,
+            owner_id=current_user["id"],
+            proposal_id=proposal_id,
+            decision=body.decision,
+            note=body.note,
+        )
+        project = svc.get_project(project_id=project_id, user_id=current_user["id"])
+        if project and project.get("teams_webhook_url"):
+            try:
+                await notify_proposal_reviewed_teams(
+                    webhook_url=project["teams_webhook_url"],
+                    project_name=project["name"],
+                    source_url=proposal.get("url", ""),
+                    decision=body.decision,
+                    note=body.note,
+                    reviewed_by=current_user.get("email", str(current_user["id"])),
+                )
+            except Exception as e:
+                logger.warning(f"Teams proposal notification failed: {e}")
+        return proposal
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
     except ValueError as e:
@@ -210,19 +259,3 @@ async def propose_source(project_id: int, body: SourceProposalCreate,
         raise HTTPException(status_code=403, detail=str(e))
 
 
-@router.patch("/projects/{project_id}/source-proposals/{proposal_id}/review")
-async def review_proposal(project_id: int, proposal_id: int,
-                          body: ProposalReview,
-                          current_user=Depends(get_current_user)):
-    try:
-        return _proposal_svc().review_proposal(
-            project_id=project_id,
-            owner_id=current_user["id"],
-            proposal_id=proposal_id,
-            decision=body.decision,
-            note=body.note,
-        )
-    except PermissionError as e:
-        raise HTTPException(status_code=403, detail=str(e))
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
