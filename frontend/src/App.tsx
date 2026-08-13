@@ -11,6 +11,9 @@ import Veille from '@/pages/Veille'
 import Briefing from '@/pages/Briefing'
 import Librairie from '@/pages/Librairie'
 import Reglages from '@/pages/Reglages'
+import Projets from '@/pages/Projets'
+import ProjetNouveau from '@/pages/ProjetNouveau'
+import ProjetDetail from '@/pages/ProjetDetail'
 
 export default function App() {
   return (
@@ -32,6 +35,9 @@ export default function App() {
               <Route path="/briefing"  element={<Briefing />} />
               <Route path="/librairie" element={<Librairie />} />
               <Route path="/reglages"  element={<Reglages />} />
+              <Route path="/projets"         element={<Projets />} />
+              <Route path="/projets/nouveau" element={<ProjetNouveau />} />
+              <Route path="/projets/:id"     element={<ProjetDetail />} />
 
               {/* Redirects anciens chemins */}
               <Route path="/assistant"      element={<Navigate to="/briefing" replace />} />

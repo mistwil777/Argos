@@ -207,6 +207,27 @@ export const api = {
   rebuildRagIndex: () => request<any>('/api/v1/rag/index-all-items', { method: 'POST' }),
   rebuildRag: () => request<any>('/api/v1/rag/rebuild', { method: 'POST' }),
 
+  // Projets
+  listProjects: () => request<any[]>('/api/v1/projects'),
+  createProject: (data: any) => request<any>('/api/v1/projects', { method: 'POST', body: JSON.stringify(data) }),
+  getProject: (id: number) => request<any>(`/api/v1/projects/${id}`),
+  updateProject: (id: number, data: any) => request<any>(`/api/v1/projects/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteProject: (id: number) => request<any>(`/api/v1/projects/${id}`, { method: 'DELETE' }),
+  listProjectMembers: (id: number) => request<any[]>(`/api/v1/projects/${id}/members`),
+  inviteProjectMember: (id: number, data: any) => request<any>(`/api/v1/projects/${id}/members`, { method: 'POST', body: JSON.stringify(data) }),
+  listSourceProposals: (id: number, status?: string) =>
+    request<any[]>(`/api/v1/projects/${id}/source-proposals${status ? `?status=${status}` : ''}`),
+  proposeSource: (id: number, data: any) =>
+    request<any>(`/api/v1/projects/${id}/source-proposals`, { method: 'POST', body: JSON.stringify(data) }),
+  reviewProposal: (projectId: number, proposalId: number, data: any) =>
+    request<any>(`/api/v1/projects/${projectId}/source-proposals/${proposalId}/review`, { method: 'PATCH', body: JSON.stringify(data) }),
+  analyzeCdc: (id: number, cdc_text: string) =>
+    request<any>(`/api/v1/projects/${id}/calibration/analyze`, { method: 'POST', body: JSON.stringify({ cdc_text }) }),
+  projectCalibrationQuestion: (id: number, data: any) =>
+    request<any>(`/api/v1/projects/${id}/calibration/question`, { method: 'POST', body: JSON.stringify(data) }),
+  finalizeProjectCalibration: (id: number, data: any) =>
+    request<any>(`/api/v1/projects/${id}/calibration/finalize`, { method: 'POST', body: JSON.stringify(data) }),
+
   // Knowledge Graph
   getKgNodes: () => request<any>('/api/v1/kg/nodes'),
   getKgEdges: () => request<any>('/api/v1/kg/edges'),

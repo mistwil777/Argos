@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Eye, Newspaper, BookOpen, Settings, LogOut
+  Eye, Newspaper, BookOpen, Settings, LogOut, FolderKanban
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import VoiceIndicator from '@/components/voice/VoiceIndicator'
@@ -10,9 +10,10 @@ import { useAuth } from '@/context/AuthContext'
 import ProductTour from '@/components/tour/ProductTour'
 
 const NAV_MAIN = [
-  { to: '/veille',    icon: Eye,       label: 'Veille',    tip: 'Cadrer et gérer ce que vous surveillez' },
-  { to: '/briefing',  icon: Newspaper, label: 'Briefing',  tip: 'Résumé quotidien et assistant pour creuser' },
-  { to: '/librairie', icon: BookOpen,  label: 'Librairie', tip: 'Documents générés, fiches, synthèses et Knowledge Graph' },
+  { to: '/veille',    icon: Eye,           label: 'Veille',    tip: 'Cadrer et gérer ce que vous surveillez' },
+  { to: '/briefing',  icon: Newspaper,     label: 'Briefing',  tip: 'Résumé quotidien et assistant pour creuser' },
+  { to: '/librairie', icon: BookOpen,      label: 'Librairie', tip: 'Documents générés, fiches, synthèses et Knowledge Graph' },
+  { to: '/projets',   icon: FolderKanban,  label: 'Projets',   tip: 'Espaces projet partagés avec arborescence dédiée' },
 ]
 
 const META: Record<string, { title: string; badge?: string; desc?: string }> = {
@@ -21,6 +22,8 @@ const META: Record<string, { title: string; badge?: string; desc?: string }> = {
   '/briefing':   { title: 'Briefing',   desc: 'Ce qui a changé aujourd\'hui dans vos sources surveillées' },
   '/librairie':  { title: 'Librairie',  desc: 'Documents générés depuis votre base de connaissances' },
   '/reglages':   { title: 'Réglages',   desc: 'Général, connexions IDE, équipe et compte' },
+  '/projets':    { title: 'Projets',    desc: 'Espaces projet partagés avec arborescence de sujets dédiée' },
+  '/projets/nouveau': { title: 'Nouveau projet', desc: 'Création et calibration d\'un espace projet' },
 }
 
 function CapgeminiMark({ size = 18 }: { size?: number }) {
