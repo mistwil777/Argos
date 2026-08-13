@@ -21,6 +21,7 @@ _VALIDATION_SIGNALS = (
 )
 
 MIN_QUESTIONS = 5
+MAX_QUESTIONS = 8
 
 
 # ── CdcAnalyzer ───────────────────────────────────────────────────────────────
@@ -162,6 +163,10 @@ class ProjectCalibrationAgent:
 
         n = len(qa_history)
 
+        # Plafond dur — au-delà de MAX_QUESTIONS, terminer sans appel LLM
+        if n >= MAX_QUESTIONS:
+            return {"done": True, "reason": "Nombre maximum de questions atteint."}
+
         # Génération LLM de la prochaine question
         qa_text = "\n".join(
             f"Q{i+1}: {qa['q']}\nR{i+1}: {qa['a']}"
@@ -172,6 +177,19 @@ class ProjectCalibrationAgent:
             s["name"] for s in cdc_analysis.get("subjects", [])
         ) or "aucun sujet identifié"
         gaps_text = "; ".join(cdc_analysis.get("gaps", [])) or "aucune lacune"
+
+        can_finalize = n >= MIN_QUESTIONS
+        finalize_instruction = (
+            f'\n- Si tu estimes avoir assez d\'informations, tu PEUX retourner {{"done": true, "reason": "..."}} au lieu d\'une question.'
+            if can_finalize else
+            f"\n- Minimum {MIN_QUESTIONS} questions avant de finaliser ({MIN_QUESTIONS - n} restantes)."
+        )
+
+        format_instruction = (
+            '{{"done": true, "reason": "..."}} OU {{"question": {{"text": "...", "type": "open" | "multiselect" | "level_pair", "options": []}}}}'
+            if can_finalize else
+            '{{"question": {{"text": "...", "type": "open" | "multiselect" | "level_pair", "options": []}}}}'
+        )
 
         prompt = f"""Tu conduis un entretien de calibration pour le projet « {project_name} ».
 
@@ -190,11 +208,10 @@ Génère la prochaine question la plus utile pour :
 Règles absolues :
 - Une question = un seul angle précis
 - Propose des options concrètes quand elles sont listables (type multiselect, max 6)
-- Ne jamais redemander ce qui a déjà une réponse
-- Minimum {MIN_QUESTIONS} questions avant de pouvoir finaliser
+- Ne jamais redemander ce qui a déjà une réponse{finalize_instruction}
 
 Réponds UNIQUEMENT avec ce JSON :
-{{"question": {{"text": "...", "type": "open" | "multiselect" | "level_pair", "options": []}}}}"""
+{format_instruction}"""
 
         try:
             response, _ = await self._llm.generate(
@@ -206,10 +223,15 @@ Réponds UNIQUEMENT avec ce JSON :
             start = raw.find("{")
             end = raw.rfind("}") + 1
             result = json.loads(raw[start:end])
+
+            # Le LLM peut retourner done=True après MIN_QUESTIONS
+            if result.get("done") and can_finalize:
+                return {"done": True, "reason": result.get("reason", "Calibration terminée.")}
+
             question = result.get("question", {})
 
-            # Minimum de questions avant finalisation
-            if n < MIN_QUESTIONS and question.get("type") == "finalize":
+            # Garde-fou : si le LLM retourne finalize trop tôt, on force une question
+            if n < MIN_QUESTIONS and not question.get("text"):
                 question = {"text": "Quels sont les sujets que l'équipe doit absolument maîtriser en priorité ?", "type": "open", "options": []}
 
             return {"question": question}

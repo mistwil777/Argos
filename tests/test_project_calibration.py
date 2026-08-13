@@ -254,6 +254,46 @@ class TestProjectCalibrationNextQuestion:
         # Trop peu de questions : doit continuer à demander, pas finaliser
         assert "question" in result or result.get("done") is False
 
+    @pytest.mark.asyncio
+    async def test_max_questions_forces_done(self):
+        """Au-delà de MAX_QUESTIONS, retourner done=True sans appel LLM."""
+        import json
+        from argos.services.project_calibration_agent import ProjectCalibrationAgent, MAX_QUESTIONS
+
+        agent = ProjectCalibrationAgent.__new__(ProjectCalibrationAgent)
+        agent._llm = MagicMock()
+
+        # Historique rempli jusqu'au plafond
+        qa_history = [{"q": f"Q{i}", "a": f"A{i}"} for i in range(MAX_QUESTIONS)]
+
+        result = await agent.next_question(
+            project_name="Argos Interne",
+            cdc_analysis={"subjects": [], "gaps": [], "domains": [], "constraints": []},
+            qa_history=qa_history,
+        )
+
+        assert result.get("done") is True
+        agent._llm.generate.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_llm_can_return_done_after_min_questions(self):
+        """Après MIN_QUESTIONS, le LLM peut retourner done=True."""
+        import json
+        from argos.services.project_calibration_agent import ProjectCalibrationAgent, MIN_QUESTIONS
+
+        llm_output = json.dumps({"done": True, "reason": "Informations suffisantes."})
+        agent = _make_agent_with_llm(llm_output)
+
+        qa_history = [{"q": f"Q{i}", "a": f"A{i}"} for i in range(MIN_QUESTIONS + 1)]
+
+        result = await agent.next_question(
+            project_name="Argos Interne",
+            cdc_analysis={"subjects": [], "gaps": [], "domains": [], "constraints": []},
+            qa_history=qa_history,
+        )
+
+        assert result.get("done") is True
+
 
 # ── ProjectCalibrationAgent.generate_subjects ────────────────────────────────
 
