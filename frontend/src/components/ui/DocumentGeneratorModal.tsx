@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { api } from '@/services/api'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 function todayLabel() {
   return new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -230,7 +231,7 @@ export default function DocumentGeneratorModal({ itemIds, onClose, onSaved, init
               <div className="flex-1 overflow-auto p-6">
                 {activeTab === 'preview' ? (
                   <div className="prose-app max-w-none">
-                    <ReactMarkdown>{editedMarkdown}</ReactMarkdown>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{editedMarkdown}</ReactMarkdown>
                   </div>
                 ) : (
                   <textarea

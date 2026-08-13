@@ -10,6 +10,8 @@ import {
 import { api } from '@/services/api'
 import QuestionnaireModal from '@/components/ui/QuestionnaireModal'
 import SourceDiscoveryStream from '@/components/ui/SourceDiscoveryStream'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -24,6 +26,8 @@ interface Sujet {
   knowledge_profile: {
     official_domains: string[]; recognized_domains: string[]
     trusted_queries: string[]; keywords: string[]
+    bilan_md?: string; bilan_title?: string
+    learning_plan_md?: string
   }
   filter_config?: { must_match?: string[]; actors?: string[] }
   sources?: Source[]
@@ -54,6 +58,12 @@ export default function Dossiers() {
 
   // Dossiers dépliés (tree)
   const [expandedWs, setExpandedWs]   = useState<Set<number>>(new Set())
+
+  // Bilan & Plan
+  const [bilanTab, setBilanTab] = useState<'bilan' | 'plan'>('bilan')
+  const [editPlan, setEditPlan] = useState(false)
+  const [planDraft, setPlanDraft] = useState('')
+  const [savingPlan, setSavingPlan] = useState(false)
 
   // Édition profil de connaissance
   const [editProfile, setEditProfile] = useState(false)
@@ -681,6 +691,60 @@ export default function Dossiers() {
                           )}
                         </div>
                       </section>
+
+                      {/* Bilan & Plan — visible si bilan_md présent */}
+                      {activeSujet.knowledge_profile.bilan_md && (
+                        <section className="panel overflow-hidden">
+                          <div className="flex items-center gap-0 border-b border-[hsl(var(--line))] bg-[hsl(var(--bg-2))]">
+                            {(['bilan', 'plan'] as const).map(tab => (
+                              <button key={tab} onClick={() => setBilanTab(tab)}
+                                className={`px-4 py-2.5 text-[11px] font-mono transition-colors border-b-2 ${bilanTab === tab ? 'border-[hsl(var(--accent))] text-[hsl(var(--accent))]' : 'border-transparent text-[hsl(var(--text-3))] hover:text-[hsl(var(--text))]'}`}>
+                                {tab === 'bilan' ? 'Bilan' : 'Plan d\'apprentissage'}
+                              </button>
+                            ))}
+                            {bilanTab === 'plan' && activeSujet.knowledge_profile.learning_plan_md && (
+                              <button onClick={() => {
+                                if (editPlan) { setEditPlan(false) }
+                                else { setPlanDraft(activeSujet.knowledge_profile.learning_plan_md || ''); setEditPlan(true) }
+                              }} className="ml-auto mr-3 flex items-center gap-1 text-[10.5px] font-mono text-[hsl(var(--text-3))] hover:text-[hsl(var(--accent))] transition-colors">
+                                {editPlan ? <><X className="w-3 h-3" />Annuler</> : <><Pencil className="w-3 h-3" />Modifier</>}
+                              </button>
+                            )}
+                          </div>
+                          <div className="px-4 py-3 max-h-[400px] overflow-auto">
+                            {bilanTab === 'bilan' ? (
+                              <div className="prose-app text-[12.5px]">
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{activeSujet.knowledge_profile.bilan_md}</ReactMarkdown>
+                              </div>
+                            ) : activeSujet.knowledge_profile.learning_plan_md ? (
+                              editPlan ? (
+                                <div className="space-y-2">
+                                  <textarea value={planDraft} onChange={e => setPlanDraft(e.target.value)}
+                                    className="w-full bg-[hsl(var(--bg))] border border-[hsl(var(--line))] rounded px-3 py-2 text-[12px] font-mono text-[hsl(var(--text))] resize-y min-h-[300px] outline-none focus:border-[hsl(var(--accent-line))]" />
+                                  <button disabled={savingPlan} onClick={async () => {
+                                    setSavingPlan(true)
+                                    try {
+                                      const kp = { ...activeSujet.knowledge_profile, learning_plan_md: planDraft }
+                                      await api.updateSujet(activeSujet.id, { knowledge_profile: kp })
+                                      setActiveSujet(prev => prev ? { ...prev, knowledge_profile: kp } : null)
+                                      setEditPlan(false)
+                                    } finally { setSavingPlan(false) }
+                                  }} className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[hsl(var(--accent))] text-white text-[11px] font-mono disabled:opacity-40">
+                                    {savingPlan ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                                    Enregistrer
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="prose-app text-[12.5px]">
+                                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{activeSujet.knowledge_profile.learning_plan_md}</ReactMarkdown>
+                                </div>
+                              )
+                            ) : (
+                              <p className="text-[12px] text-[hsl(var(--text-3))] italic">Plan non encore généré — complétez le questionnaire.</p>
+                            )}
+                          </div>
+                        </section>
+                      )}
 
                       {/* Étape 2 — Activer la surveillance */}
                       <section className={`panel overflow-hidden transition-opacity ${!step1Done ? 'opacity-40 pointer-events-none' : ''}`}>

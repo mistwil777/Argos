@@ -14,6 +14,7 @@ import {
   Send, Bot, User, BookOpen, Terminal, List, Mic, Volume2,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import PageHint from '@/components/ui/PageHint'
 import SourcesPanel, { type DiscoveredSource } from '@/components/assistant/SourcesPanel'
 import { useVoice } from '@/context/VoiceContext'
@@ -291,7 +292,7 @@ export default function Assistant() {
                         )}
                         {msg.content && (
                           <div className="prose-app">
-                            <ReactMarkdown>{msg.content}</ReactMarkdown>
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                           </div>
                         )}
                         {msg.streaming && msg.content && (
