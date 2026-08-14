@@ -138,15 +138,16 @@ class ProjectCalibrationAgent:
         Retourne {"question": {"text": ..., "type": ..., "options": [...]}}
         ou {"done": True, "reason": "..."}.
         """
-        # Signal de validation explicite
-        last_a = qa_history[-1].get("a", "").lower().strip()
-        last_q = qa_history[-1].get("q", "").lower()
-        confirmation_question = any(w in last_q for w in (
-            "valider", "valide", "confirme", "confirmer", "finaliser",
-            "modifier", "configuration", "tout est bon",
-        ))
-        if confirmation_question and any(last_a == s or last_a.startswith(s) for s in _VALIDATION_SIGNALS):
-            return {"done": True, "reason": "Configuration validée par l'équipe projet."}
+        # Signal de validation explicite (seulement si historique non vide)
+        if qa_history:
+            last_a = qa_history[-1].get("a", "").lower().strip()
+            last_q = qa_history[-1].get("q", "").lower()
+            confirmation_question = any(w in last_q for w in (
+                "valider", "valide", "confirme", "confirmer", "finaliser",
+                "modifier", "configuration", "tout est bon",
+            ))
+            if confirmation_question and any(last_a == s or last_a.startswith(s) for s in _VALIDATION_SIGNALS):
+                return {"done": True, "reason": "Configuration validée par l'équipe projet."}
 
         n = len(qa_history)
 
