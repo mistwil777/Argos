@@ -138,18 +138,6 @@ class ProjectCalibrationAgent:
         Retourne {"question": {"text": ..., "type": ..., "options": [...]}}
         ou {"done": True, "reason": "..."}.
         """
-        # Première question — pas encore d'historique
-        if not qa_history:
-            gaps_text = ", ".join(cdc_analysis.get("gaps", [])) or "aucune lacune identifiée"
-            return {"question": {
-                "text": (
-                    f"Pour compléter l'analyse du projet « {project_name} », "
-                    f"décris le contexte de l'équipe : niveau global sur les sujets identifiés, "
-                    f"stack technique actuelle, objectif principal du projet."
-                ),
-                "type": "open",
-            }}
-
         # Signal de validation explicite
         last_a = qa_history[-1].get("a", "").lower().strip()
         last_q = qa_history[-1].get("q", "").lower()
@@ -166,7 +154,7 @@ class ProjectCalibrationAgent:
         qa_text = "\n".join(
             f"Q{i+1}: {qa['q']}\nR{i+1}: {qa['a']}"
             for i, qa in enumerate(qa_history)
-        )
+        ) if qa_history else "(aucun échange — c'est la première question)"
 
         subjects_text = "\n".join(
             f"  - {s['name']}" + (f" (priorité: {s.get('priority', '?')})" if s.get('priority') else "")
