@@ -69,6 +69,21 @@ class CalibrationFinalizeRequest(BaseModel):
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+@router.post("/calibration/analyze")
+async def analyze_cdc_standalone(
+    body: CdcAnalyzeRequest,
+    current_user=Depends(get_current_user),
+):
+    """Analyse un CDC sans project_id — utilisé avant la création du projet."""
+    try:
+        return await _analyzer().analyze_cdc(body.cdc_text)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.error(f"analyze_cdc_standalone error: {e}")
+        raise HTTPException(status_code=500, detail="Erreur lors de l'analyse du CDC")
+
+
 @router.post("/projects/{project_id}/calibration/analyze")
 async def analyze_cdc(
     project_id: int,

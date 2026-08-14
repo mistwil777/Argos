@@ -222,6 +222,8 @@ export const api = {
     request<any>(`/api/v1/projects/${id}/source-proposals`, { method: 'POST', body: JSON.stringify(data) }),
   reviewProposal: (projectId: number, proposalId: number, data: any) =>
     request<any>(`/api/v1/projects/${projectId}/source-proposals/${proposalId}/review`, { method: 'PATCH', body: JSON.stringify(data) }),
+  analyzeCdcStandalone: (cdc_text: string) =>
+    request<any>('/api/v1/calibration/analyze', { method: 'POST', body: JSON.stringify({ cdc_text }) }),
   analyzeCdc: (id: number, cdc_text: string) =>
     request<any>(`/api/v1/projects/${id}/calibration/analyze`, { method: 'POST', body: JSON.stringify({ cdc_text }) }),
   projectCalibrationQuestion: (id: number, data: any) =>

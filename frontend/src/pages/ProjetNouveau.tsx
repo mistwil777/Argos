@@ -23,11 +23,9 @@ export default function ProjetNouveau() {
   // Step tracking
   const [step, setStep] = useState<Step>('infos')
 
-  // Step 1 — infos
+  // Step 1 — infos (projet pas encore créé en base)
   const [name, setName]       = useState('')
   const [desc, setDesc]       = useState('')
-  // Created project
-  const [projectId, setProjectId] = useState<number | null>(null)
 
   // Step 2 — CDC
   const [cdcText, setCdcText]     = useState('')
@@ -56,23 +54,14 @@ export default function ProjetNouveau() {
   const LEVELS = ['novice', 'débutant', 'intermédiaire', 'avancé', 'expert']
   const stepIdx = STEPS.findIndex(s => s.id === step)
 
-  // ── Step 1 → créer le projet ──────────────────────────────────────────────
+  // ── Step 1 → mémoriser les infos, aller au CDC ───────────────────────────
 
-  async function handleCreateProject() {
+  function handleCreateProject() {
     if (!name.trim()) return
-    setLoading(true); setError(null)
-    try {
-      const p = await api.createProject({
-        name: name.trim(),
-        description: desc.trim() || undefined,
-      })
-      setProjectId(p.id)
-      setStep('cdc')
-    } catch (e: any) { setError(e.message) }
-    finally { setLoading(false) }
+    setStep('cdc')
   }
 
-  // ── Step 2 → skip CDC ou aller analyse ───────────────────────────────────
+  // ── Step 2 → analyse CDC (sans project_id) ───────────────────────────────
 
   function handleSkipCdc() { setStep('questionnaire'); loadFirstQuestion() }
 
@@ -83,7 +72,7 @@ export default function ProjetNouveau() {
     }
     setLoading(true); setError(null)
     try {
-      const result = await api.analyzeCdc(projectId!, cdcText)
+      const result = await api.analyzeCdcStandalone(cdcText)
       setCdcAnalysis(result)
       setStep('analyse')
     } catch (e: any) { setError(e.message) }
@@ -100,7 +89,7 @@ export default function ProjetNouveau() {
   async function loadFirstQuestion() {
     setLoading(true); setError(null)
     try {
-      const res = await api.projectCalibrationQuestion(projectId!, {
+      const res = await api.projectCalibrationQuestion(0, {
         project_name: name,
         cdc_analysis: cdcAnalysis || { subjects: [], gaps: [], domains: [], constraints: [] },
         qa_history: [],
@@ -129,7 +118,7 @@ export default function ProjetNouveau() {
     setQaHistory(newHistory)
     setLoading(true); setError(null)
     try {
-      const res = await api.projectCalibrationQuestion(projectId!, {
+      const res = await api.projectCalibrationQuestion(0, {
         project_name: name,
         cdc_analysis: cdcAnalysis || { subjects: [], gaps: [], domains: [], constraints: [] },
         qa_history: newHistory,
@@ -143,16 +132,22 @@ export default function ProjetNouveau() {
     finally { setLoading(false) }
   }
 
-  function handleSkipQuestion() {
-    if (qaHistory.length >= 5) handleFinalize(qaHistory)
-  }
-
-  // ── Step 5 → finaliser ───────────────────────────────────────────────────
+  // ── Step 5 → créer le projet + finaliser en une seule séquence ───────────
 
   async function handleFinalize(history: typeof qaHistory) {
     setLoading(true); setError(null)
     try {
-      const result = await api.finalizeProjectCalibration(projectId!, {
+      // 1. Créer le projet maintenant (première écriture en base)
+      const p = await api.createProject({
+        name: name.trim(),
+        description: desc.trim() || undefined,
+      })
+      // 2. Sauvegarder le CDC si présent
+      if (cdcText.trim()) {
+        await api.analyzeCdc(p.id, cdcText).catch(() => {})
+      }
+      // 3. Finaliser (crée les workspaces, sauvegarde le knowledge_profile)
+      const result = await api.finalizeProjectCalibration(p.id, {
         project_name: name,
         cdc_analysis: cdcAnalysis || { subjects: [], gaps: [], domains: [], constraints: [] },
         qa_history: history,
