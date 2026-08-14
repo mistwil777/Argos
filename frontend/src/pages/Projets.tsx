@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import { Plus, Folder, ChevronRight, Loader2, AlertCircle, Trash2, CheckSquare, Square } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Plus, Folder, ChevronRight, Loader2, AlertCircle, Trash2, CheckSquare, Square, AlertTriangle } from 'lucide-react'
 import { api } from '@/services/api'
 
 export default function Projets() {
@@ -10,6 +10,7 @@ export default function Projets() {
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [deleting, setDeleting] = useState<number | 'batch' | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<{ ids: number[]; label: string } | null>(null)
   const navigate = useNavigate()
 
   const allSelected = projects.length > 0 && selected.size === projects.length
@@ -26,26 +27,28 @@ export default function Projets() {
     setSelected(allSelected ? new Set() : new Set(projects.map(p => p.id)))
   }
 
-  async function handleDeleteOne(id: number) {
-    if (!window.confirm('Supprimer ce projet ? Cette action est irréversible.')) return
-    setDeleting(id)
+  async function executeDelete(ids: number[]) {
+    const isBatch = ids.length > 1
+    setDeleting(isBatch ? 'batch' : ids[0])
+    setConfirmDelete(null)
     try {
-      await api.deleteProject(id)
-      setProjects(prev => prev.filter(p => p.id !== id))
-      setSelected(prev => { const n = new Set(prev); n.delete(id); return n })
+      await Promise.all(ids.map(id => api.deleteProject(id)))
+      setProjects(prev => prev.filter(p => !ids.includes(p.id)))
+      setSelected(prev => { const n = new Set(prev); ids.forEach(id => n.delete(id)); return n })
     } catch (e: any) { setError(e.message) }
     finally { setDeleting(null) }
   }
 
-  async function handleDeleteSelected() {
-    if (!window.confirm(`Supprimer ${selected.size} projet${selected.size > 1 ? 's' : ''} ? Cette action est irréversible.`)) return
-    setDeleting('batch')
-    try {
-      await Promise.all([...selected].map(id => api.deleteProject(id)))
-      setProjects(prev => prev.filter(p => !selected.has(p.id)))
-      setSelected(new Set())
-    } catch (e: any) { setError(e.message) }
-    finally { setDeleting(null) }
+  function handleDeleteOne(id: number) {
+    const p = projects.find(p => p.id === id)
+    setConfirmDelete({ ids: [id], label: `Supprimer « ${p?.name} » ?` })
+  }
+
+  function handleDeleteSelected() {
+    setConfirmDelete({
+      ids: [...selected],
+      label: `Supprimer ${selected.size} projet${selected.size > 1 ? 's' : ''} ?`,
+    })
   }
 
   useEffect(() => {
@@ -203,6 +206,47 @@ export default function Projets() {
         )}
 
       </div>
+
+      {/* Modale de confirmation suppression */}
+      <AnimatePresence>
+        {confirmDelete && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+            onClick={() => setConfirmDelete(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              onClick={e => e.stopPropagation()}
+              className="w-full max-w-sm mx-4 rounded-xl border border-[hsl(var(--line))] bg-[hsl(var(--bg-1))] p-5 space-y-4 shadow-2xl"
+            >
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-[hsl(var(--red))] flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-[14px] font-semibold text-[hsl(var(--text))]">{confirmDelete.label}</p>
+                  <p className="text-[12px] text-[hsl(var(--text-3))] mt-1">Cette action est irréversible.</p>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setConfirmDelete(null)}
+                  className="px-4 py-2 rounded-lg text-[13px] border border-[hsl(var(--line))] text-[hsl(var(--text-2))] hover:text-[hsl(var(--text))] transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={() => executeDelete(confirmDelete.ids)}
+                  className="px-4 py-2 rounded-lg text-[13px] font-medium bg-[hsl(var(--red))] text-white hover:brightness-110 transition-all"
+                >
+                  Supprimer
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     </div>
   )
 }
