@@ -218,7 +218,7 @@ export default function ProjetNouveau() {
                   <input
                     value={name} onChange={e => setName(e.target.value)}
                     placeholder="Ex : Refonte portail clients"
-                    className="input w-full"
+                    className="w-full rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[14px] px-3 py-2.5 placeholder:text-[hsl(var(--text-3))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
                   />
                 </label>
                 <label className="block space-y-1.5">
@@ -226,7 +226,7 @@ export default function ProjetNouveau() {
                   <textarea
                     value={desc} onChange={e => setDesc(e.target.value)}
                     rows={3} placeholder="Quelques phrases sur le contexte..."
-                    className="input w-full resize-none"
+                    className="w-full resize-none rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[14px] px-3 py-2.5 placeholder:text-[hsl(var(--text-3))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
                   />
                 </label>
               </div>
@@ -259,7 +259,7 @@ export default function ProjetNouveau() {
                   value={cdcText} onChange={e => setCdcText(e.target.value)}
                   rows={12}
                   placeholder="Contexte du projet, objectifs, contraintes techniques, équipe, délais..."
-                  className="input w-full resize-none font-mono text-[12px]"
+                  className="w-full resize-none rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[12px] font-mono px-3 py-2.5 placeholder:text-[hsl(var(--text-3))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
                 />
               </div>
               <div className="flex items-center justify-between">

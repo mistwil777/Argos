@@ -247,12 +247,12 @@ export default function ProjetDetail() {
                   <input
                     value={inviteEmail} onChange={e => setInviteEmail(e.target.value)}
                     placeholder="email@exemple.com"
-                    className="input flex-1"
+                    className="flex-1 rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[13px] px-3 py-2 placeholder:text-[hsl(var(--text-3))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
                     onKeyDown={e => e.key === 'Enter' && handleInvite()}
                   />
                   <select
                     value={inviteRole} onChange={e => setInviteRole(e.target.value)}
-                    className="input w-28"
+                    className="w-28 rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[13px] px-3 py-2 focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
                   >
                     <option value="editor">Éditeur</option>
                     <option value="reader">Lecteur</option>
@@ -310,12 +310,12 @@ export default function ProjetDetail() {
                   <input
                     value={proposeUrl} onChange={e => setProposeUrl(e.target.value)}
                     placeholder="https://..."
-                    className="input flex-1 font-mono text-[12px]"
+                    className="flex-1 rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[12px] font-mono px-3 py-2 placeholder:text-[hsl(var(--text-3))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
                     onKeyDown={e => e.key === 'Enter' && handlePropose()}
                   />
                   <select
                     value={proposeType} onChange={e => setProposeType(e.target.value)}
-                    className="input w-28"
+                    className="w-28 rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[13px] px-3 py-2 focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
                   >
                     <option value="website">Site</option>
                     <option value="rss">RSS</option>
@@ -326,7 +326,7 @@ export default function ProjetDetail() {
                 <input
                   value={proposeName} onChange={e => setProposeName(e.target.value)}
                   placeholder="Nom lisible (optionnel)"
-                  className="input w-full"
+                  className="w-full rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[13px] px-3 py-2 placeholder:text-[hsl(var(--text-3))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
                 />
                 <button
                   onClick={handlePropose}
@@ -396,29 +396,29 @@ export default function ProjetDetail() {
                   <div className="space-y-1.5">
                     <label className="text-[12px] text-[hsl(var(--text-2))]">Nom du projet</label>
                     <input value={settings.name} onChange={e => setSettings((s: any) => ({ ...s, name: e.target.value }))}
-                      className="input w-full" />
+                      className="w-full rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[13px] px-3 py-2 placeholder:text-[hsl(var(--text-3))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors" />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-[12px] text-[hsl(var(--text-2))]">Client / organisation</label>
                     <input value={settings.client_name} onChange={e => setSettings((s: any) => ({ ...s, client_name: e.target.value }))}
-                      placeholder="Capgemini, SNCF…" className="input w-full" />
+                      placeholder="Capgemini, SNCF…" className="w-full rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[13px] px-3 py-2 placeholder:text-[hsl(var(--text-3))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors" />
                   </div>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[12px] text-[hsl(var(--text-2))]">Description</label>
                   <textarea value={settings.description} onChange={e => setSettings((s: any) => ({ ...s, description: e.target.value }))}
-                    rows={2} className="input w-full resize-none" />
+                    rows={2} className="w-full resize-none rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[13px] px-3 py-2 placeholder:text-[hsl(var(--text-3))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors" />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <label className="text-[12px] text-[hsl(var(--text-2))]">Deadline</label>
                     <input type="date" value={settings.deadline} onChange={e => setSettings((s: any) => ({ ...s, deadline: e.target.value }))}
-                      className="input w-full" />
+                      className="w-full rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[13px] px-3 py-2 placeholder:text-[hsl(var(--text-3))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors" />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-[12px] text-[hsl(var(--text-2))]">Visibilité</label>
                     <select value={settings.visibility} onChange={e => setSettings((s: any) => ({ ...s, visibility: e.target.value }))}
-                      className="input w-full">
+                      className="w-full rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[13px] px-3 py-2 placeholder:text-[hsl(var(--text-3))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors">
                       <option value="private">Privé (membres uniquement)</option>
                       <option value="org">Organisation</option>
                     </select>
@@ -433,7 +433,7 @@ export default function ProjetDetail() {
                   <div className="space-y-1.5">
                     <label className="text-[12px] text-[hsl(var(--text-2))]">Heure de génération</label>
                     <select value={settings.brief_hour} onChange={e => setSettings((s: any) => ({ ...s, brief_hour: e.target.value }))}
-                      className="input w-full">
+                      className="w-full rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[13px] px-3 py-2 placeholder:text-[hsl(var(--text-3))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors">
                       {[5,6,7,8,9,10].map(h => (
                         <option key={h} value={h}>{h}h00</option>
                       ))}
@@ -442,7 +442,7 @@ export default function ProjetDetail() {
                   <div className="space-y-1.5">
                     <label className="text-[12px] text-[hsl(var(--text-2))]">Fenêtre temporelle</label>
                     <select value={settings.brief_window_hours} onChange={e => setSettings((s: any) => ({ ...s, brief_window_hours: e.target.value }))}
-                      className="input w-full">
+                      className="w-full rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[13px] px-3 py-2 placeholder:text-[hsl(var(--text-3))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors">
                       <option value={24}>24h</option>
                       <option value={48}>48h</option>
                       <option value={168}>7 jours</option>
@@ -451,7 +451,7 @@ export default function ProjetDetail() {
                   <div className="space-y-1.5">
                     <label className="text-[12px] text-[hsl(var(--text-2))]">Langue de sortie</label>
                     <select value={settings.brief_language} onChange={e => setSettings((s: any) => ({ ...s, brief_language: e.target.value }))}
-                      className="input w-full">
+                      className="w-full rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[13px] px-3 py-2 placeholder:text-[hsl(var(--text-3))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors">
                       <option value="fr">Français</option>
                       <option value="en">English</option>
                     </select>
@@ -461,7 +461,7 @@ export default function ProjetDetail() {
                   <label className="text-[12px] text-[hsl(var(--text-2))]">Destinataires du brief (emails séparés par des virgules)</label>
                   <input value={settings.brief_recipients}
                     onChange={e => setSettings((s: any) => ({ ...s, brief_recipients: e.target.value }))}
-                    placeholder="alice@co.fr, bob@co.fr" className="input w-full font-mono text-[12px]" />
+                    placeholder="alice@co.fr, bob@co.fr" className="w-full rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[12px] font-mono px-3 py-2 placeholder:text-[hsl(var(--text-3))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors" />
                 </div>
               </div>
 
@@ -472,7 +472,7 @@ export default function ProjetDetail() {
                   <label className="text-[12px] text-[hsl(var(--text-2))]">Mots-clés d'alerte (séparés par des virgules)</label>
                   <input value={settings.alert_keywords}
                     onChange={e => setSettings((s: any) => ({ ...s, alert_keywords: e.target.value }))}
-                    placeholder="GPT-5, concurrent X, faille CVE…" className="input w-full font-mono text-[12px]" />
+                    placeholder="GPT-5, concurrent X, faille CVE…" className="w-full rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[12px] font-mono px-3 py-2 placeholder:text-[hsl(var(--text-3))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors" />
                   <p className="text-[11px] text-[hsl(var(--text-3))]">
                     Une notification est envoyée dès qu'un article contient l'un de ces termes.
                   </p>
