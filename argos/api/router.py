@@ -4732,6 +4732,41 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
         except Exception:
             pass
 
+    # ── Contexte projet (si le workspace appartient à un projet) ─────────────
+    # Remplace le sujet_context learning par un contexte veille pro orienté impact
+    _is_project_workspace = False
+    if workspace_id is not None:
+        try:
+            with db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """SELECT p.name, p.knowledge_profile, p.alert_keywords
+                           FROM projects p
+                           JOIN workspaces w ON w.project_id = p.id
+                           WHERE w.id = %s""",
+                        (workspace_id,)
+                    )
+                    proj_row = cur.fetchone()
+                    if proj_row:
+                        _is_project_workspace = True
+                        proj_name, proj_kp, alert_kw = proj_row
+                        proj_kp = proj_kp or {}
+                        alert_kw = alert_kw or []
+                        bilan = proj_kp.get("bilan_md", "")[:2000]
+                        watch_focus = proj_kp.get("watch_focus_md", "")[:1000]
+                        alerts_line = (
+                            f"Mots-clés d'alerte configurés : {', '.join(alert_kw)}\n"
+                            if alert_kw else ""
+                        )
+                        sujet_context = (
+                            f"\nCONTEXTE PROJET — {proj_name}\n"
+                            f"{bilan}\n"
+                            + (f"Axes de surveillance prioritaires :\n{watch_focus}\n" if watch_focus else "")
+                            + alerts_line
+                        )
+        except Exception:
+            pass
+
     # ── IDs déjà cités dans les briefings précédents (7 derniers jours) ─────
     already_cited_ids: set = set()
     with db.get_connection() as conn:
@@ -4772,7 +4807,7 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
             """)
             rows = cur.fetchall()
 
-    # Fallback 1 : élargir la fenêtre si aucun item récent
+    # Fallback 1 : élargir la fenêtre à 72h, mais toujours exclure les déjà cités
     if not rows:
         with db.get_connection() as conn:
             with conn.cursor() as cur:
@@ -4784,12 +4819,18 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
                     WHERE reliability_passed = TRUE
                       AND classification_status = 'classified'
                       AND (published_at IS NULL OR published_at > NOW() - INTERVAL '90 days')
+                      AND created_at > NOW() - INTERVAL '72 hours'
+                      {exclude_clause}
                       {ws_filter}
                       {sujet_filter}
-                    ORDER BY created_at DESC
+                    ORDER BY importance DESC, reliability_score DESC NULLS LAST, created_at DESC
                     LIMIT 20
                 """)
                 rows = cur.fetchall()
+
+    # Si même après 72h tout a déjà été cité → no_new_content
+    if not rows and already_cited_ids:
+        return {"no_new_content": True, "message": "Tous les items fiables récents ont déjà été couverts dans les briefings précédents."}
 
     # Fallback 2 : scorer à la volée les items classifiés non encore scorés
     # (items antérieurs à la migration reliability)
@@ -4805,6 +4846,7 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
                     FROM items
                     WHERE classification_status = 'classified'
                       AND reliability_passed IS NULL
+                      {exclude_clause}
                       {ws_filter}
                       {sujet_filter}
                     ORDER BY created_at DESC
@@ -4935,8 +4977,21 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
         model=settings.aws_bedrock_model,
     )
 
-    # ── Construire la section "Pour commencer" selon le profil ───────────────
-    if sujet_context:
+    # ── Construire la section "Pour commencer / Impact projet" selon le profil ─
+    if _is_project_workspace and sujet_context:
+        pour_commencer = f"""CONTEXTE DU PROJET :
+{sujet_context}
+
+INSTRUCTION — Impact sur le projet :
+Pour chaque nouveauté significative parmi les items ci-dessus, évalue si elle concerne directement ce projet.
+Si oui, inclus un bloc "⚡ Impact projet" avec :
+- Quel composant ou partie du stack est concerné
+- De quel type : dépréciation imminente / faille sécurité / opportunité (gain de temps, simplification, renforcement)
+- Si c'est actionnable maintenant ou à surveiller à moyen terme
+
+Format : titre en gras, impact en 1-2 phrases, lien → URL [READ:id]
+Limite-toi aux 2-3 items les plus pertinents pour le projet. Si aucun item n'a d'impact direct, omet cette section."""
+    elif sujet_context:
         pour_commencer = f"""PROFIL D'APPRENTISSAGE DE L'UTILISATEUR :
 {sujet_context}
 
@@ -4944,12 +4999,12 @@ INSTRUCTION : Parmi les items listés ci-dessus, sélectionne UNIQUEMENT 2-3 art
 1. L'article porte sur un outil ou concept EXPLICITEMENT prioritaire dans le profil (section "Sujets et niveaux" ou "Acteurs, outils, frameworks")
 2. L'article N'EST PAS dans la section "Hors périmètre" du profil
 3. Si une section "Hors périmètre" mentionne explicitement un thème (ex: vision, multimodal, hardware), tout article sur ce thème est EXCLU même s'il vient d'un acteur clé
-4. PRIORITÉ AUX ARTICLES INTRODUCTIFS : préférer un article qui explique CE QU'EST l'outil ou le concept (définition, cas d'usage, pourquoi ça existe) plutôt qu'un article sur une feature avancée. Un user novice doit d'abord comprendre l'outil avant d'en maîtriser les options avancées.
+4. PRIORITÉ AUX ARTICLES INTRODUCTIFS : préférer un article qui explique CE QU'EST l'outil ou le concept (définition, cas d'usage, pourquoi ça existe) plutôt qu'un article sur une feature avancée.
 5. Pour chaque article : vérifie que son titre et résumé suggèrent une introduction ou un cas d'usage concret, pas une configuration avancée.
 
 Pour chaque article retenu : titre en gras, 1 phrase expliquant CE QUE L'OUTIL FAIT et pourquoi c'est un bon point de départ, lien → URL [READ:id]"""
     else:
-        pour_commencer = "(Omettre cette section — aucun profil d'apprentissage disponible.)"
+        pour_commencer = "(Omettre cette section — aucun profil disponible.)"
 
     prompt = _BRIEFING_PROMPT.format(
         hours=hours,
@@ -5046,6 +5101,8 @@ async def generate_briefing(data: Dict[str, Any] = {}):
         result = await _generate_briefing_content(hours, workspace_id, sujet_id)
         if "error" in result:
             raise HTTPException(status_code=422, detail=result["message"])
+        if result.get("no_new_content"):
+            return {"no_new_content": True, "date": str(today), "message": result["message"]}
 
         with db.get_connection() as conn:
             with conn.cursor() as cur:
@@ -5162,7 +5219,27 @@ async def get_today_briefing(sujet_id: Optional[int] = Query(default=None)):
                     )
                 row = cur.fetchone()
         if not row:
-            return {"exists": False, "no_new_content": False, "date": str(today)}
+            # Diagnostic : pourquoi pas de brief aujourd'hui ?
+            diag = {}
+            with db.get_connection() as conn2:
+                with conn2.cursor() as cur2:
+                    cur2.execute("SELECT COUNT(*) FROM sources WHERE is_active = TRUE")
+                    diag["sources_actives"] = cur2.fetchone()[0]
+                    cur2.execute(
+                        "SELECT COUNT(*) FROM items WHERE collected_at::date = %s", (today,)
+                    )
+                    diag["items_collectes_today"] = cur2.fetchone()[0]
+                    cur2.execute(
+                        "SELECT COUNT(*) FROM items WHERE collected_at::date = %s AND reliability_score >= 0.5",
+                        (today,)
+                    )
+                    diag["items_fiables_today"] = cur2.fetchone()[0]
+                    cur2.execute(
+                        "SELECT MAX(generated_at) FROM daily_briefings"
+                    )
+                    last = cur2.fetchone()[0]
+                    diag["dernier_brief"] = last.isoformat() if last else None
+            return {"exists": False, "no_new_content": False, "date": str(today), "diagnostic": diag}
         return {
             "exists": True,
             "id": row[0], "date": str(row[1]),

@@ -45,6 +45,10 @@ class ProjectUpdate(BaseModel):
     alert_keywords: Optional[List[str]] = None
     brief_recipients: Optional[List[str]] = None
     visibility: Optional[str] = None
+    manager_name: Optional[str] = None
+    manager_email: Optional[str] = None
+    manager_phone: Optional[str] = None
+    manager_role: Optional[str] = None
 
 
 class MemberInvite(BaseModel):
@@ -55,6 +59,14 @@ class MemberInvite(BaseModel):
 
 class MemberAccessUpdate(BaseModel):
     sujet_access: Optional[list] = None
+
+
+class MemberRoleUpdate(BaseModel):
+    role: str  # editor | reader
+
+
+class TransferOwnership(BaseModel):
+    new_owner_member_id: int
 
 
 class SourceProposalCreate(BaseModel):
@@ -129,13 +141,24 @@ async def list_members(project_id: int, current_user=Depends(get_current_user)):
     with db.get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, project_id, user_id, invited_email, role, sujet_access, "
-                "status, invited_by, invited_at, joined_at "
-                "FROM project_members WHERE project_id = %s ORDER BY invited_at",
+                """SELECT pm.id, pm.project_id, pm.user_id,
+                          COALESCE(pm.invited_email, u.email) AS invited_email,
+                          pm.role, pm.sujet_access,
+                          pm.status, pm.invited_by, pm.invited_at, pm.joined_at,
+                          u.full_name
+                   FROM project_members pm
+                   LEFT JOIN users u ON u.id = pm.user_id
+                   WHERE pm.project_id = %s ORDER BY pm.invited_at""",
                 (project_id,),
             )
+            rows = cur.fetchall()
+            result = []
             from argos.services.project_service import _row_to_member
-            return [_row_to_member(r) for r in cur.fetchall()]
+            for r in rows:
+                m = _row_to_member(r)
+                m['full_name'] = r[10] if len(r) > 10 else None
+                result.append(m)
+            return result
 
 
 @router.post("/projects/{project_id}/members", status_code=201)
@@ -183,14 +206,107 @@ async def update_member_access(project_id: int, member_id: int,
         raise HTTPException(status_code=403, detail=str(e))
 
 
-@router.delete("/projects/{project_id}/members/{user_id}", status_code=204)
-async def remove_member(project_id: int, user_id: int,
-                        current_user=Depends(get_current_user)):
+@router.patch("/projects/{project_id}/members/{member_id}/role")
+async def update_member_role(project_id: int, member_id: int, body: MemberRoleUpdate,
+                             current_user=Depends(get_current_user)):
     try:
-        _svc().remove_member(
+        return _svc().update_member_role(
             project_id=project_id,
             owner_id=current_user["id"],
-            member_user_id=user_id,
+            member_id=member_id,
+            role=body.role,
+        )
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@router.delete("/projects/{project_id}/members/{member_id}", status_code=204)
+async def remove_member(project_id: int, member_id: int,
+                        current_user=Depends(get_current_user)):
+    try:
+        _svc().remove_member_by_id(
+            project_id=project_id,
+            owner_id=current_user["id"],
+            member_id=member_id,
+        )
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@router.post("/projects/{project_id}/suggest-sources")
+async def suggest_sources_for_project(project_id: int, current_user=Depends(get_current_user)):
+    """
+    Génère des suggestions de sources de veille adaptées au contexte du projet.
+    Utilise le knowledge_profile (watch_focus_md, alert_keywords, sujets) comme intent.
+    Aucune source créée — résultats retournés pour validation.
+    """
+    project = _svc().get_project(project_id=project_id, user_id=current_user["id"])
+    if not project:
+        raise HTTPException(status_code=404, detail="Projet introuvable ou accès refusé")
+
+    kp = project.get("knowledge_profile") or {}
+    watch_focus = kp.get("watch_focus_md", "")
+    bilan = kp.get("bilan_md", "")
+    alert_keywords = project.get("alert_keywords") or []
+    subjects = kp.get("subjects") or []
+    subject_names = [s.get("name", "") for s in subjects if isinstance(s, dict)]
+
+    if not watch_focus and not bilan and not alert_keywords:
+        raise HTTPException(
+            status_code=422,
+            detail="Le projet n'a pas encore de bilan calibré. Finalisez l'entretien de configuration d'abord."
+        )
+
+    # Construire l'intent texte à partir du contexte projet
+    intent_parts = []
+    if project.get("name"):
+        intent_parts.append(f"Projet : {project['name']}")
+    if subject_names:
+        intent_parts.append(f"Sujets de surveillance : {', '.join(subject_names)}")
+    if alert_keywords:
+        intent_parts.append(f"Mots-clés d'alerte : {', '.join(alert_keywords)}")
+    if watch_focus:
+        intent_parts.append(watch_focus[:800])
+    elif bilan:
+        intent_parts.append(bilan[:800])
+
+    intent_text = "\n".join(intent_parts)
+
+    try:
+        from argos.services.intent_discovery import IntentService, DiscoveryService
+        from argos.config import settings as cfg
+
+        intent_svc = IntentService(anthropic_api_key=cfg.anthropic_api_key)
+        intent_data = await intent_svc.decompose(intent_text)
+
+        # Pas d'apprentissage : on ne veut que de la veille tech/alerte
+        intent_data["source_types"] = ["blog", "documentation", "github", "news", "rss"]
+
+        discovery_svc = DiscoveryService(db_manager=db)
+        candidates = await discovery_svc.find_sources(intent_data=intent_data)
+
+        return {
+            "intent": intent_data,
+            "candidates": candidates,
+            "count": len(candidates),
+        }
+    except Exception as e:
+        logger.error(f"[PROJECT-SOURCES] {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/projects/{project_id}/transfer-ownership")
+async def transfer_ownership(project_id: int, body: TransferOwnership,
+                             current_user=Depends(get_current_user)):
+    try:
+        return _svc().transfer_ownership(
+            project_id=project_id,
+            current_owner_id=current_user["id"],
+            new_owner_member_id=body.new_owner_member_id,
         )
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))

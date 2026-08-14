@@ -37,6 +37,10 @@ def _row_to_project(row) -> dict:
         "alert_keywords": list(row[16]) if row[16] else [],
         "brief_recipients": list(row[17]) if row[17] else [],
         "visibility": row[18],
+        "manager_name": row[19] if len(row) > 19 else None,
+        "manager_email": row[20] if len(row) > 20 else None,
+        "manager_phone": row[21] if len(row) > 21 else None,
+        "manager_role": row[22] if len(row) > 22 else None,
     }
 
 
@@ -124,7 +128,8 @@ class ProjectService:
                     "SELECT id, name, slug, description, cdc_content, cdc_analysis, "
                     "knowledge_profile, owner_id, is_active, created_at, updated_at, "
                     "client_name, deadline, brief_hour, brief_window_hours, "
-                    "brief_language, alert_keywords, brief_recipients, visibility "
+                    "brief_language, alert_keywords, brief_recipients, visibility, "
+                    "manager_name, manager_email, manager_phone, manager_role "
                     "FROM projects WHERE id = %s",
                     (project_id,),
                 )
@@ -144,7 +149,8 @@ class ProjectService:
                     "p.cdc_analysis, p.knowledge_profile, "
                     "p.owner_id, p.is_active, p.created_at, p.updated_at, "
                     "p.client_name, p.deadline, p.brief_hour, p.brief_window_hours, "
-                    "p.brief_language, p.alert_keywords, p.brief_recipients, p.visibility "
+                    "p.brief_language, p.alert_keywords, p.brief_recipients, p.visibility, "
+                    "p.manager_name, p.manager_email, p.manager_phone, p.manager_role "
                     "FROM projects p "
                     "JOIN project_members pm ON pm.project_id = p.id "
                     "WHERE pm.user_id = %s AND pm.status = 'active' AND p.is_active = TRUE "
@@ -162,7 +168,8 @@ class ProjectService:
                 allowed = {"name", "description", "cdc_content", "cdc_analysis",
                            "knowledge_profile", "client_name", "deadline",
                            "brief_hour", "brief_window_hours", "brief_language",
-                           "alert_keywords", "brief_recipients", "visibility"}
+                           "alert_keywords", "brief_recipients", "visibility",
+                           "manager_name", "manager_email", "manager_phone", "manager_role"}
                 fields = {k: v for k, v in kwargs.items() if k in allowed}
                 if not fields:
                     pass
@@ -173,7 +180,8 @@ class ProjectService:
                     "RETURNING id, name, slug, description, cdc_content, cdc_analysis, "
                     "knowledge_profile, owner_id, is_active, created_at, updated_at, "
                     "client_name, deadline, brief_hour, brief_window_hours, "
-                    "brief_language, alert_keywords, brief_recipients, visibility",
+                    "brief_language, alert_keywords, brief_recipients, visibility, "
+                    "manager_name, manager_email, manager_phone, manager_role",
                     values,
                 )
                 row = cur.fetchone()
@@ -230,6 +238,95 @@ class ProjectService:
                     (sujet_access_json, member_id),
                 )
                 return _row_to_member(cur.fetchone())
+
+    def update_member_role(self, project_id: int, owner_id: int,
+                           member_id: int, role: str) -> dict:
+        if role not in ("editor", "reader"):
+            raise ValueError("Rôle invalide — valeurs acceptées : editor, reader")
+        with self.db.get_connection() as conn:
+            with conn.cursor() as cur:
+                owner = _get_member_role(cur, project_id, owner_id)
+                if not owner or owner["role"] != "owner":
+                    raise PermissionError("Seul le propriétaire peut modifier les rôles")
+                cur.execute(
+                    "UPDATE project_members SET role = %s WHERE id = %s AND project_id = %s "
+                    "RETURNING id, project_id, user_id, invited_email, role, sujet_access, "
+                    "status, invited_by, invited_at, joined_at",
+                    (role, member_id, project_id),
+                )
+                row = cur.fetchone()
+                if not row:
+                    raise ValueError("Membre introuvable")
+                return _row_to_member(row)
+
+    def remove_member_by_id(self, project_id: int, owner_id: int, member_id: int) -> None:
+        with self.db.get_connection() as conn:
+            with conn.cursor() as cur:
+                owner = _get_member_role(cur, project_id, owner_id)
+                if not owner or owner["role"] != "owner":
+                    raise PermissionError("Seul le propriétaire peut retirer des membres")
+                cur.execute(
+                    "SELECT user_id, role FROM project_members WHERE id = %s AND project_id = %s",
+                    (member_id, project_id),
+                )
+                row = cur.fetchone()
+                if not row:
+                    raise ValueError("Membre introuvable")
+                if row[1] == "owner":
+                    raise ValueError("Impossible de retirer le propriétaire")
+                cur.execute(
+                    "DELETE FROM project_members WHERE id = %s AND project_id = %s",
+                    (member_id, project_id),
+                )
+
+    def transfer_ownership(self, project_id: int, current_owner_id: int,
+                           new_owner_member_id: int) -> list:
+        with self.db.get_connection() as conn:
+            with conn.cursor() as cur:
+                owner = _get_member_role(cur, project_id, current_owner_id)
+                if not owner or owner["role"] != "owner":
+                    raise PermissionError("Seul le propriétaire peut transférer la propriété")
+                cur.execute(
+                    "SELECT id, user_id, status FROM project_members WHERE id = %s AND project_id = %s",
+                    (new_owner_member_id, project_id),
+                )
+                target = cur.fetchone()
+                if not target:
+                    raise ValueError("Membre introuvable")
+                if target[2] != "active":
+                    raise ValueError("Le nouveau propriétaire doit être un membre actif")
+                # Transaction atomique : ancien owner → editor, nouveau → owner
+                cur.execute(
+                    "UPDATE project_members SET role = 'editor' WHERE project_id = %s AND user_id = %s",
+                    (project_id, current_owner_id),
+                )
+                cur.execute(
+                    "UPDATE projects SET owner_id = %s WHERE id = %s",
+                    (target[1], project_id),
+                )
+                cur.execute(
+                    "UPDATE project_members SET role = 'owner' WHERE id = %s",
+                    (new_owner_member_id,),
+                )
+            # Retourner la liste membres mise à jour
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT pm.id, pm.project_id, pm.user_id,
+                              COALESCE(pm.invited_email, u.email) AS invited_email,
+                              pm.role, pm.sujet_access,
+                              pm.status, pm.invited_by, pm.invited_at, pm.joined_at,
+                              u.full_name
+                       FROM project_members pm
+                       LEFT JOIN users u ON u.id = pm.user_id
+                       WHERE pm.project_id = %s ORDER BY pm.invited_at""",
+                    (project_id,),
+                )
+                result = []
+                for r in cur.fetchall():
+                    m = _row_to_member(r)
+                    m['full_name'] = r[10] if len(r) > 10 else None
+                    result.append(m)
+                return result
 
     def remove_member(self, project_id: int, owner_id: int, member_user_id: int) -> None:
         with self.db.get_connection() as conn:

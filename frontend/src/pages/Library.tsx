@@ -665,12 +665,21 @@ export default function Library() {
                   className="flex-1 flex flex-col overflow-hidden">
                   {/* Onglets Veille / Apprentissage */}
                   <div className="flex-shrink-0 px-8 pt-2 pb-0 bg-[hsl(var(--bg-2))] border-b border-[hsl(var(--line))] flex items-end gap-0">
-                    {(['veille', 'apprentissage'] as const).map(t => (
-                      <button key={t} onClick={() => setContentTab(t)}
-                        className={`px-4 py-2 text-[11.5px] font-mono border-b-2 transition-all -mb-px capitalize ${contentTab === t ? 'border-[hsl(var(--accent))] text-[hsl(var(--accent))]' : 'border-transparent text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))]'}`}>
-                        {t}
-                      </button>
-                    ))}
+                    {(['veille', 'apprentissage'] as const).map(t => {
+                      const count = items.filter((it: any) => {
+                        const cat = it.content_tags?.category
+                        return t === 'veille'
+                          ? (!cat || cat === 'veille' || cat === 'mixed')
+                          : (cat === 'apprentissage' || cat === 'mixed')
+                      }).length
+                      return (
+                        <button key={t} onClick={() => setContentTab(t)}
+                          className={`flex items-center gap-1.5 px-4 py-2 text-[11.5px] font-mono border-b-2 transition-all -mb-px capitalize ${contentTab === t ? 'border-[hsl(var(--accent))] text-[hsl(var(--accent))]' : 'border-transparent text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))]'}`}>
+                          {t}
+                          <span className="text-[9.5px] font-mono px-1.5 py-0.5 rounded-full bg-[hsl(var(--bg-3))] border border-[hsl(var(--line))]">{count}</span>
+                        </button>
+                      )
+                    })}
                     <div className="ml-auto flex items-center gap-2 pb-2">
                       {(['bruts', 'rag'] as const).map(f => {
                         const labels = { bruts: 'Bruts', rag: 'Dans le RAG' }
@@ -781,9 +790,14 @@ export default function Library() {
                                     <span className="truncate">{item.source_url.replace(/^https?:\/\//, '').split('/')[0]}</span>
                                   </a>
                                 )}
-                                {item.content_tags?.category === 'mixed' && (
-                                  <span className="text-[9.5px] font-mono text-[hsl(var(--violet))] border border-[hsl(var(--violet)/.3)] bg-[hsl(var(--violet)/.08)] rounded px-1.5 py-0.5">mixed</span>
-                                )}
+                                {(() => {
+                                  const cat = item.content_tags?.category
+                                  if (!cat) return <span className="text-[9.5px] font-mono text-[hsl(var(--text-3))] border border-[hsl(var(--line))] rounded px-1.5 py-0.5">non classé</span>
+                                  if (cat === 'mixed') return <span className="text-[9.5px] font-mono text-[hsl(var(--violet))] border border-[hsl(var(--violet)/.3)] bg-[hsl(var(--violet)/.08)] rounded px-1.5 py-0.5">mixed</span>
+                                  if (cat === 'veille') return <span className="text-[9.5px] font-mono text-[hsl(var(--accent))] border border-[hsl(var(--accent-line))] bg-[hsl(var(--accent-dim))] rounded px-1.5 py-0.5">veille</span>
+                                  if (cat === 'apprentissage') return <span className="text-[9.5px] font-mono text-[hsl(var(--violet))] border border-[hsl(var(--violet)/.3)] bg-[hsl(var(--violet)/.08)] rounded px-1.5 py-0.5">apprentissage</span>
+                                  return null
+                                })()}
                                 {item.rag_indexed && (
                                   <span className="text-[9.5px] font-mono text-[hsl(var(--accent))] border border-[hsl(var(--accent-line))] bg-[hsl(var(--accent-dim))] rounded px-1.5 py-0.5 flex items-center gap-1">
                                     <DatabaseZap className="w-2.5 h-2.5" />RAG

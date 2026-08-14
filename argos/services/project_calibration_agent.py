@@ -168,21 +168,57 @@ class ProjectCalibrationAgent:
         constraints = cdc_analysis.get("constraints", [])
         constraints_text = "\n".join(f"  - {c}" for c in constraints) if constraints else "  - aucune"
 
-        finalize_note = (
-            "\nSi toutes les lacunes listées ci-dessus ont obtenu une réponse dans les échanges "
-            f'(ou s\'il n\'y a aucune lacune), retourne {{"done": true, "reason": "..."}} au lieu d\'une question.'
+        # Détecter les axes déjà couverts — dans le CDC ET dans l'historique Q/A
+        cdc_subjects_lower = " ".join(
+            s.get("name", "") + " " + " ".join(s.get("sub_subjects", []))
+            for s in cdc_analysis.get("subjects", [])
+        ).lower()
+        cdc_constraints_lower = " ".join(cdc_analysis.get("constraints", [])).lower()
+        cdc_all = (
+            cdc_subjects_lower + " " + cdc_constraints_lower + " " +
+            " ".join(cdc_analysis.get("domains", [])).lower() + " " +
+            " ".join(cdc_analysis.get("gaps", [])).lower()
         )
+        qa_lower = " ".join(f"{qa['q']} {qa['a']}" for qa in qa_history).lower()
+        corpus = cdc_all + " " + qa_lower
+
+        axes_covered = []
+        # stack_technique : couverte si le CDC mentionne des technos précises avec versions
+        cdc_has_stack = any(w in cdc_all for w in [
+            "react", "fastapi", "postgresql", "python", "typescript", "kubernetes", "terraform",
+            "azure aks", "azure ad", "helm", "pydantic", "node", "django", ".net"
+        ])
+        if cdc_has_stack or any(w in qa_lower for w in ["stack", "framework", "langage", "techno", "version"]):
+            axes_covered.append("stack_technique")
+
+        if any(w in corpus for w in ["risque", "critique", "dépendance", "vulnérab", "dépréciat", "fin de support"]):
+            axes_covered.append("composants_risque")
+
+        cdc_has_jalons = any(w in cdc_all for w in ["jalon", "date", "planning", "deadline", "livraison", "mise en prod", "q1", "q2", "q3", "q4", "2026", "2027"])
+        if cdc_has_jalons or any(w in qa_lower for w in ["jalon", "date", "délai", "livraison", "sprint", "démo"]):
+            axes_covered.append("jalons")
+
+        cdc_has_partners = any(w in cdc_all for w in ["sap", "microsoft", "cegedim", "partenaire", "fournisseur", "prestataire", "éditeur"])
+        if cdc_has_partners or any(w in qa_lower for w in ["partenaire", "fournisseur", "externe", "tiers"]):
+            axes_covered.append("partenaires_externes")
+
+        if any(w in corpus for w in ["sécurité", "conformité", "rgpd", "chiffrement", "audit", "iso", "nis2", "anssi", "hds"]):
+            axes_covered.append("securite_conformite")
+
+        axes_remaining = [a for a in [
+            "composants_risque", "jalons", "partenaires_externes", "securite_conformite", "stack_technique"
+        ] if a not in axes_covered]
 
         format_note = (
-            '{"done": true, "reason": "..."} OU {"question": {"text": "...", "type": "open"|"multiselect"|"level_pair", "options": []}}'
+            '{"done": true, "reason": "..."} OU {"question": {"text": "...", "type": "open"|"multiselect", "options": []}}'
         )
 
-        prompt = f"""Tu conduis un entretien de calibration pour le projet « {project_name} ».
+        prompt = f"""Tu conduis un entretien de calibration pour le projet professionnel « {project_name} ».
 
 SUJETS DU PROJET :
 {subjects_text}
 
-LACUNES À COMBLER (issues de l'analyse du CDC) :
+LACUNES DU CDC :
 {gaps_text}
 
 CONTRAINTES CONNUES :
@@ -191,28 +227,29 @@ CONTRAINTES CONNUES :
 ÉCHANGES DÉJÀ RÉALISÉS ({n} questions) :
 {qa_text}
 
-OBJECTIF DE LA PROCHAINE QUESTION :
-Analyse les échanges ci-dessus. Pour chaque lacune listée, détermine si elle a été adressée.
-Pose une question précise sur la lacune ou le sujet le moins bien couvert par les réponses existantes.
-Ne pose JAMAIS une question dont la réponse est déjà présente dans les échanges.
-{finalize_note}
+AXES DÉJÀ COUVERTS (ne pas y revenir) : {', '.join(axes_covered) or 'aucun'}
+AXES RESTANTS À COUVRIR : {', '.join(axes_remaining) or 'aucun — terminer'}
 
-RÈGLE SUR LE TYPE DE QUESTION :
-- Utilise "multiselect" en priorité chaque fois que la réponse peut être choisie parmi une liste finie (technologies, rôles, pratiques, risques, priorités). Génère 4 à 6 options pertinentes tirées du contexte du projet — jamais génériques. Les options doivent être cohérentes entre elles et non redondantes.
-- Utilise "level_pair" pour évaluer la maîtrise d'une technologie ou compétence précise identifiée dans le CDC.
-- Utilise "open" uniquement si la réponse attendue est vraiment libre et ne peut pas être structurée en options.
-- L'objectif : le répondant doit pouvoir cliquer plutôt que rédiger dans la majorité des cas.
+RÈGLES STRICTES :
+1. Si aucun axe restant : retourne {{"done": true, "reason": "..."}}.
+2. Pose UNE question sur le premier axe restant dans la liste ci-dessus.
+3. Les seuls axes autorisés sont : stack_technique, composants_risque, jalons, partenaires_externes, securite_conformite.
+4. INTERDIT : tests unitaires, CI/CD, monitoring interne, SLA de performance, outils de déploiement, méthodologie d'équipe, niveau de compétence. Ces sujets ne génèrent pas de veille utile.
+5. Ne pose jamais une question dont la réponse est déjà dans les échanges.
+6. Type "multiselect" en priorité avec 4-6 options contextualisées au projet. Type "open" uniquement si la réponse est vraiment libre.
 
-FORMAT DE RÉPONSE (JSON uniquement) :
+FORMAT (JSON uniquement) :
 {format_note}"""
 
         try:
             response, _ = await self._llm.generate(
                 prompt=prompt,
                 system_prompt=(
-                    "Tu es un expert en calibration de projets. "
-                    "Tu analyses les réponses précédentes pour identifier ce qui manque encore. "
-                    "Chaque question doit apporter une information nouvelle et non redondante. "
+                    "Tu es un expert en veille technologique pour projets professionnels. "
+                    "Tu identifies uniquement ce qui génère des alertes de veille externe utiles : "
+                    "stack en production, dépendances à risque, jalons, partenaires, conformité. "
+                    "Tu ignores tout ce qui est tooling interne (tests, CI/CD, monitoring, SLA). "
+                    "Chaque question couvre un axe différent. Un axe couvert ne revient jamais. "
                     "Réponds en JSON valide uniquement, sans texte autour."
                 ),
                 temperature=0.4, max_tokens=600, top_p=0.9,
@@ -261,7 +298,7 @@ FORMAT DE RÉPONSE (JSON uniquement) :
         domains = cdc_analysis.get("domains", [])
         constraints = cdc_analysis.get("constraints", [])
 
-        prompt = f"""Tu finalises la calibration du projet « {project_name} ».
+        prompt = f"""Tu finalises la calibration du projet professionnel « {project_name} ».
 
 Sujets identifiés dans le CDC : {json.dumps(subjects_from_cdc, ensure_ascii=False)}
 Domaines transverses : {', '.join(domains) or 'non précisés'}
@@ -272,16 +309,20 @@ Entretien de calibration :
 
 Génère en JSON :
 
-1. subjects : liste finale des sujets à créer pour ce projet.
-   Pour chaque sujet : name (court, en clair), description (1-2 phrases sur ce qui sera couvert).
+1. subjects : liste finale des sujets de veille à créer pour ce projet.
+   Pour chaque sujet : name (court, en clair), description (1-2 phrases sur ce qui sera surveillé).
    Entre 2 et 8 sujets maximum — regroupe ce qui peut l'être.
+   Exemple de bon sujet : "Sécurité API" ou "LLM orchestration" ou "Infra Kubernetes".
 
-2. knowledge_profile : bilan synthétique du projet.
-   - bilan_md : markdown, résumé des besoins, niveaux de l'équipe, angles prioritaires
-   - learning_plan_md : progression suggérée (si pertinent selon le contexte)
+2. knowledge_profile : radar technologique du projet.
+   - bilan_md : markdown décrivant la stack en production identifiée, les composants critiques ou à risque,
+     les jalons clés, les dépendances externes sensibles. C'est un contexte de veille, pas un bilan de compétences.
+   - watch_focus_md : 3-5 angles de surveillance prioritaires pour ce projet
+     (ex : "surveiller les dépréciations de FastAPI", "alertes sécurité sur les libs ML en prod").
 
-3. source_candidates : 3-8 sources suggérées pour ce projet.
+3. source_candidates : 3-8 sources de référence pour la veille de ce projet.
    Pour chaque source : url (complète avec https://), type (rss|website), name (lisible).
+   Préférer les changelogs officiels, blogs d'ingénierie, security advisories.
    JAMAIS medium.com, reddit.com, forums, agrégateurs.
 
 Réponds UNIQUEMENT avec ce JSON :
@@ -291,7 +332,7 @@ Réponds UNIQUEMENT avec ce JSON :
   ],
   "knowledge_profile": {{
     "bilan_md": "...",
-    "learning_plan_md": "..."
+    "watch_focus_md": "..."
   }},
   "source_candidates": [
     {{"url": "https://...", "type": "rss|website", "name": "..."}}
@@ -300,7 +341,7 @@ Réponds UNIQUEMENT avec ce JSON :
 
         response, _ = await self._llm.generate(
             prompt=prompt,
-            system_prompt="Tu es un expert en configuration de veille technologique pour équipes projet. Réponds uniquement avec du JSON valide.",
+            system_prompt="Tu es un expert en veille technologique pour équipes projet. Tu identifies les risques, dépréciations et opportunités qui impactent concrètement un projet en production. Réponds uniquement avec du JSON valide.",
             temperature=0.6, max_tokens=3000, top_p=0.9,
         )
         raw = response.strip()

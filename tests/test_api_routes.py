@@ -152,7 +152,7 @@ class TestBriefingToday:
         import datetime
         mock_db.get_connection.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value.fetchone.return_value = (
             1, datetime.date.today(), "Executive summary", [],
-            [], {}, 1000, 0.01, None, [], {}
+            [], {}, 1000, 0.01, None, [], {}, False
         )
 
         resp = c.get("/api/v1/briefing/today")
@@ -169,7 +169,7 @@ class TestBriefingToday:
         ]
         mock_db.get_connection.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value.fetchone.return_value = (
             1, datetime.date.today(), "Executive summary", top_items,
-            [], {}, 1000, 0.01, None, [], {}
+            [], {}, 1000, 0.01, None, [], {}, False
         )
 
         resp = c.get("/api/v1/briefing/today")

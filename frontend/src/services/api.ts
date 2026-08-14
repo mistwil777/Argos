@@ -216,6 +216,14 @@ export const api = {
   deleteProject: (id: number) => request<any>(`/api/v1/projects/${id}`, { method: 'DELETE' }),
   listProjectMembers: (id: number) => request<any[]>(`/api/v1/projects/${id}/members`),
   inviteProjectMember: (id: number, data: any) => request<any>(`/api/v1/projects/${id}/members`, { method: 'POST', body: JSON.stringify(data) }),
+  updateProjectMemberRole: (projectId: number, memberId: number, role: string) =>
+    request<any>(`/api/v1/projects/${projectId}/members/${memberId}/role`, { method: 'PATCH', body: JSON.stringify({ role }) }),
+  removeProjectMember: (projectId: number, memberId: number) =>
+    request<any>(`/api/v1/projects/${projectId}/members/${memberId}`, { method: 'DELETE' }),
+  transferProjectOwnership: (projectId: number, newOwnerMemberId: number) =>
+    request<any>(`/api/v1/projects/${projectId}/transfer-ownership`, { method: 'POST', body: JSON.stringify({ new_owner_member_id: newOwnerMemberId }) }),
+  suggestProjectSources: (projectId: number) =>
+    request<any>(`/api/v1/projects/${projectId}/suggest-sources`, { method: 'POST' }),
   listSourceProposals: (id: number, status?: string) =>
     request<any[]>(`/api/v1/projects/${id}/source-proposals${status ? `?status=${status}` : ''}`),
   proposeSource: (id: number, data: any) =>

@@ -90,10 +90,12 @@ export default function Briefing() {
     try {
       const r = await api.generateBriefing(hours, force, sujetFilter ?? undefined)
       if (r.already_exists && !force) {
-        // Load the existing one
         const existing = await api.getBriefing(r.id)
         setToday({ ...existing, exists: true })
         setSelected({ ...existing, exists: true })
+      } else if (r.no_new_content) {
+        setToday({ exists: false, no_new_content: true })
+        setSelected(null)
       } else {
         setToday({ ...r, exists: true })
         setSelected({ ...r, exists: true })
@@ -340,15 +342,37 @@ export default function Briefing() {
 
       {!loading && !displayBriefing?.exists && !generating && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-          className="panel p-10 flex flex-col items-center gap-4 text-center">
+          className="panel p-8 flex flex-col items-center gap-5 text-center">
           <Newspaper className="w-10 h-10 text-[hsl(var(--text-3))] opacity-40" />
           <div>
             <p className="text-[14px] font-semibold text-[hsl(var(--text))]">Brief non généré aujourd'hui</p>
-            <p className="text-[12px] text-[hsl(var(--text-3))] mt-1">
-              Le job automatique de 7h00 ne s'est pas encore lancé, ou aucun item fiable n'était disponible.
+          </div>
+          {today?.diagnostic && (() => {
+            const d = today.diagnostic
+            const reasons: string[] = []
+            if (d.sources_actives === 0)
+              reasons.push("Aucune source active — configure des sources dans Veille.")
+            else if (d.items_collectes_today === 0)
+              reasons.push(`${d.sources_actives} source(s) active(s) mais aucun item collecté aujourd'hui — le job de collecte ne s'est peut-être pas encore lancé.`)
+            else if (d.items_fiables_today === 0)
+              reasons.push(`${d.items_collectes_today} item(s) collecté(s) aujourd'hui mais aucun n'a un score de fiabilité suffisant (≥ 0.5).`)
+            else
+              reasons.push(`${d.items_fiables_today} item(s) fiable(s) disponibles — le brief n'a pas encore été généré (job à 7h00).`)
+            if (d.dernier_brief)
+              reasons.push(`Dernier brief généré : ${new Date(d.dernier_brief).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}.`)
+            return (
+              <div className="space-y-2 max-w-md">
+                {reasons.map((r, i) => (
+                  <p key={i} className="text-[12px] text-[hsl(var(--text-2))]">{r}</p>
+                ))}
+              </div>
+            )
+          })()}
+          {!today?.diagnostic && (
+            <p className="text-[12px] text-[hsl(var(--text-3))]">
               Cliquez sur "Générer le brief" pour lancer manuellement.
             </p>
-          </div>
+          )}
         </motion.div>
       )}
 

@@ -55,15 +55,6 @@ function NavItem({ to, icon: Icon, label, tip, end }: {
             <Icon className="w-4 h-4 flex-shrink-0 relative z-10" strokeWidth={isActive ? 2.5 : 2} />
             <span className="relative z-10 flex-1">{label}</span>
           </div>
-          {/* Tooltip */}
-          <div className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 z-50
-                          opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-            <div className="whitespace-nowrap bg-[#0A1628] border border-[#1E3A5F]
-                            text-[11px] text-[#A0C4DF] px-2.5 py-1.5 rounded-md shadow-xl">
-              {tip}
-              <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-[#1E3A5F]" />
-            </div>
-          </div>
         </>
       )}
     </NavLink>

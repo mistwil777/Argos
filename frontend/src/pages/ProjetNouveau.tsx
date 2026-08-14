@@ -1,9 +1,9 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, ArrowRight, Check, Loader2, FileText,
-  Sparkles, MessageSquare, ChevronRight, AlertCircle
+  Sparkles, MessageSquare, ChevronRight, AlertCircle, X
 } from 'lucide-react'
 import { api } from '@/services/api'
 
@@ -32,26 +32,52 @@ export default function ProjetNouveau() {
 
   // Step 3 — analyse
   const [cdcAnalysis, setCdcAnalysis] = useState<any>(null)
+  const [editableSubjects, setEditableSubjects] = useState<any[]>([])
+  const [newSubjectName, setNewSubjectName] = useState('')
 
   // Step 4 — questionnaire
   const [qaHistory, setQaHistory]         = useState<{ q: string; a: string }[]>([])
+  const [expandedQA, setExpandedQA]       = useState<number | null>(null)
   const [currentQ, setCurrentQ]           = useState<any>(null)
   const [interviewDone, setInterviewDone] = useState(false)
   const [currentAnswer, setCurrentAnswer] = useState('')
   const [selectedOptions, setSelectedOptions] = useState<string[]>([])
   const [otherText, setOtherText]         = useState('')
   const [showOther, setShowOther]         = useState(false)
-  const [levelPair, setLevelPair]         = useState<{ current: string; target: string }>({ current: '', target: '' })
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-
   // Step 5 — finalisation
   const [finalResult, setFinalResult] = useState<any>(null)
+  const [createdProjectId, setCreatedProjectId] = useState<number | null>(null)
 
   // UI state
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
 
-  const LEVELS = ['novice', 'débutant', 'intermédiaire', 'avancé', 'expert']
+  // localStorage — restauration au montage
+  useEffect(() => {
+    const saved = localStorage.getItem('argos_projet_nouveau')
+    if (!saved) return
+    try {
+      const d = JSON.parse(saved)
+      if (d.name) setName(d.name)
+      if (d.desc) setDesc(d.desc)
+      if (d.cdcText) setCdcText(d.cdcText)
+      if (d.cdcAnalysis) setCdcAnalysis(d.cdcAnalysis)
+      if (d.editableSubjects) setEditableSubjects(d.editableSubjects)
+      if (d.qaHistory) setQaHistory(d.qaHistory)
+      if (d.interviewDone) setInterviewDone(d.interviewDone)
+      if (d.step && d.step !== 'finalisation') setStep(d.step)
+    } catch {}
+  }, [])
+
+  // localStorage — sauvegarde sur chaque changement d'état clé
+  useEffect(() => {
+    if (step === 'infos' && !name) return
+    localStorage.setItem('argos_projet_nouveau', JSON.stringify({
+      step, name, desc, cdcText, cdcAnalysis, editableSubjects,
+      qaHistory, interviewDone,
+    }))
+  }, [step, name, desc, cdcText, cdcAnalysis, editableSubjects, qaHistory, interviewDone])
+
   const stepIdx = STEPS.findIndex(s => s.id === step)
 
   // ── Step 1 → mémoriser les infos, aller au CDC ───────────────────────────
@@ -74,6 +100,7 @@ export default function ProjetNouveau() {
     try {
       const result = await api.analyzeCdcStandalone(cdcText)
       setCdcAnalysis(result)
+      setEditableSubjects(result.subjects || [])
       setStep('analyse')
     } catch (e: any) { setError(e.message) }
     finally { setLoading(false) }
@@ -82,8 +109,15 @@ export default function ProjetNouveau() {
   // ── Step 3 → passer à l'entretien ────────────────────────────────────────
 
   async function handleStartQuestionnaire() {
+    const updatedAnalysis = { ...cdcAnalysis, subjects: editableSubjects }
+    setCdcAnalysis(updatedAnalysis)
     setStep('questionnaire')
     await loadFirstQuestion()
+  }
+
+  function normalizeQuestion(q: any) {
+    if (q?.type === 'level_pair') return { ...q, type: 'open', options: [] }
+    return q
   }
 
   async function loadFirstQuestion() {
@@ -95,10 +129,9 @@ export default function ProjetNouveau() {
         qa_history: [],
       })
       if (res.done) { setInterviewDone(true); return }
-      setCurrentQ(res.question)
+      setCurrentQ(normalizeQuestion(res.question))
       setCurrentAnswer('')
       setSelectedOptions([])
-      setLevelPair({ current: '', target: '' })
     } catch (e: any) { setError(e.message) }
     finally { setLoading(false) }
   }
@@ -107,7 +140,7 @@ export default function ProjetNouveau() {
 
   function buildAnswer(): string {
     if (currentQ?.type === 'multiselect') return selectedOptions.join(', ')
-    if (currentQ?.type === 'level_pair')  return `Niveau actuel : ${levelPair.current} — Niveau cible : ${levelPair.target}`
+    if (currentQ?.type === 'level_pair')  return currentAnswer
     return currentAnswer
   }
 
@@ -124,10 +157,9 @@ export default function ProjetNouveau() {
         qa_history: newHistory,
       })
       if (res.done) { setInterviewDone(true); return }
-      setCurrentQ(res.question)
+      setCurrentQ(normalizeQuestion(res.question))
       setCurrentAnswer('')
       setSelectedOptions([])
-      setLevelPair({ current: '', target: '' })
     } catch (e: any) { setError(e.message) }
     finally { setLoading(false) }
   }
@@ -153,7 +185,9 @@ export default function ProjetNouveau() {
         qa_history: history,
       })
       setFinalResult(result)
+      setCreatedProjectId(p.id)
       setStep('finalisation')
+      localStorage.removeItem('argos_projet_nouveau')
     } catch (e: any) { setError(e.message) }
     finally { setLoading(false) }
   }
@@ -281,26 +315,44 @@ export default function ProjetNouveau() {
             <motion.div key="analyse" {...fadeSlide} className="space-y-4">
               <div className="card space-y-4">
                 <p className="text-[13px] font-medium text-[hsl(var(--text))]">
-                  {cdcAnalysis.subjects?.length} sujets identifiés
+                  {editableSubjects.length} sujets identifiés
                 </p>
                 <div className="space-y-2">
-                  {cdcAnalysis.subjects?.map((s: any, i: number) => (
-                    <div key={i} className="flex items-start gap-3 px-3 py-2 rounded-lg bg-[hsl(var(--bg))]">
+                  {editableSubjects.map((s: any, i: number) => (
+                    <div key={i} className="flex items-start gap-3 px-3 py-2 rounded-lg bg-[hsl(var(--bg))] group">
                       <span className={`mt-0.5 flex-shrink-0 w-2 h-2 rounded-full ${
                         s.priority === 'high' ? 'bg-[hsl(var(--accent))]' :
                         s.priority === 'medium' ? 'bg-[hsl(var(--yellow))]' :
                         'bg-[hsl(var(--text-3))]'
                       }`} />
-                      <div>
+                      <div className="flex-1 min-w-0">
                         <p className="text-[13px] font-medium text-[hsl(var(--text))]">{s.name}</p>
                         {s.sub_subjects?.length > 0 && (
-                          <p className="text-[11px] text-[hsl(var(--text-3))] mt-0.5">
-                            {s.sub_subjects.join(' · ')}
-                          </p>
+                          <p className="text-[11px] text-[hsl(var(--text-3))] mt-0.5">{s.sub_subjects.join(' · ')}</p>
                         )}
                       </div>
+                      <button
+                        onClick={() => setEditableSubjects(prev => prev.filter((_, j) => j !== i))}
+                        className="opacity-0 group-hover:opacity-100 flex-shrink-0 text-[hsl(var(--text-3))] hover:text-[hsl(var(--red))] transition-all"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   ))}
+                </div>
+                <div className="flex gap-2 mt-2">
+                  <input
+                    value={newSubjectName}
+                    onChange={e => setNewSubjectName(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && newSubjectName.trim()) {
+                        setEditableSubjects(prev => [...prev, { name: newSubjectName.trim(), priority: 'medium', sub_subjects: [] }])
+                        setNewSubjectName('')
+                      }
+                    }}
+                    placeholder="Ajouter un sujet… (Entrée)"
+                    className="flex-1 rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[13px] px-3 py-2 placeholder:text-[hsl(var(--text-3))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
+                  />
                 </div>
                 {cdcAnalysis.gaps?.length > 0 && (
                   <div className="px-3 py-2 rounded-lg border border-[hsl(var(--yellow)/.3)] bg-[hsl(var(--yellow)/.06)]">
@@ -359,12 +411,27 @@ export default function ProjetNouveau() {
                 <>
                   {/* Historique Q/A */}
                   {qaHistory.length > 0 && (
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                       {qaHistory.map((qa, i) => (
-                        <div key={i} className="rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] px-4 py-3 space-y-1">
-                          <p className="text-[11px] font-mono text-[hsl(var(--text-3))]">Q{i + 1} — {qa.q}</p>
-                          <p className="text-[13px] text-[hsl(var(--text-2))]">{qa.a}</p>
-                        </div>
+                        <button
+                          key={i}
+                          onClick={() => setExpandedQA(expandedQA === i ? null : i)}
+                          className="w-full text-left rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] px-3 py-2 transition-all hover:border-[hsl(var(--accent-line))]"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-[11px] font-mono text-[hsl(var(--text-3))] truncate">
+                              Q{i + 1} — {qa.q}
+                            </p>
+                            <span className="text-[10px] font-mono text-[hsl(var(--text-3))] flex-shrink-0">
+                              {expandedQA === i ? '▲' : '▼'}
+                            </span>
+                          </div>
+                          {expandedQA === i && (
+                            <p className="text-[12px] text-[hsl(var(--text-2))] mt-1.5 pt-1.5 border-t border-[hsl(var(--line))]">
+                              {qa.a || '(pas de réponse)'}
+                            </p>
+                          )}
+                        </button>
                       ))}
                     </div>
                   )}
@@ -389,6 +456,14 @@ export default function ProjetNouveau() {
                     {/* Multiselect */}
                     {currentQ.type === 'multiselect' && currentQ.options?.length > 0 && (
                       <div className="space-y-2">
+                        <button
+                          onClick={() => setSelectedOptions(
+                            selectedOptions.length === currentQ.options.length ? [] : [...currentQ.options]
+                          )}
+                          className="text-[11px] font-mono text-[hsl(var(--accent))] hover:underline mb-1"
+                        >
+                          {selectedOptions.length === currentQ.options.length ? 'Aucun' : 'Tout'}
+                        </button>
                         <div className="flex flex-wrap gap-2">
                           {currentQ.options.map((opt: string) => (
                             <button
@@ -435,33 +510,6 @@ export default function ProjetNouveau() {
                       </div>
                     )}
 
-                    {/* Level pair */}
-                    {currentQ.type === 'level_pair' && (
-                      <div className="space-y-3">
-                        {(['current', 'target'] as const).map(k => (
-                          <div key={k} className="space-y-1.5">
-                            <p className="text-[11px] font-mono text-[hsl(var(--text-3))]">
-                              {k === 'current' ? 'Niveau actuel' : 'Niveau cible'}
-                            </p>
-                            <div className="flex gap-2">
-                              {LEVELS.map(l => (
-                                <button
-                                  key={l}
-                                  onClick={() => setLevelPair(prev => ({ ...prev, [k]: l }))}
-                                  className={`flex-1 py-1.5 rounded-lg text-[11px] border transition-all ${
-                                    levelPair[k] === l
-                                      ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent)/.12)] text-[hsl(var(--accent))]'
-                                      : 'border-[hsl(var(--line))] text-[hsl(var(--text-3))] hover:border-[hsl(var(--accent)/.4)]'
-                                  }`}
-                                >
-                                  {l}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
                   </div>
 
                   <div className="flex items-center justify-between">
@@ -474,7 +522,6 @@ export default function ProjetNouveau() {
                           setCurrentQ({ text: prev.q, type: 'open', options: [] })
                           setCurrentAnswer(prev.a)
                           setSelectedOptions([])
-                          setLevelPair({ current: '', target: '' })
                         }}
                         className="flex items-center gap-1.5 text-[13px] text-[hsl(var(--text-3))] hover:text-[hsl(var(--text))] transition-colors"
                       >
@@ -487,11 +534,7 @@ export default function ProjetNouveau() {
 
                     <button
                       onClick={handleNextQuestion}
-                      disabled={loading || (
-                        currentQ.type === 'open' ? !currentAnswer.trim() :
-                        currentQ.type === 'multiselect' ? selectedOptions.length === 0 :
-                        !levelPair.current || !levelPair.target
-                      )}
+                      disabled={loading}
                       className="btn-primary flex items-center gap-2"
                     >
                       {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
@@ -553,7 +596,7 @@ export default function ProjetNouveau() {
 
               <div className="flex justify-end">
                 <button
-                  onClick={() => navigate(`/projets/${projectId}`)}
+                  onClick={() => navigate(`/projets/${createdProjectId}`)}
                   className="btn-primary flex items-center gap-2"
                 >
                   <ArrowRight className="w-4 h-4" />
