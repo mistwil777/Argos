@@ -3,11 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   ArrowLeft, Loader2, AlertCircle, Folder, Users,
-  FileText, Plus, Check, X, ChevronRight, Sparkles
+  FileText, Plus, Check, X, ChevronRight, Sparkles, Settings, Save
 } from 'lucide-react'
 import { api } from '@/services/api'
 
-type Tab = 'sujets' | 'membres' | 'propositions'
+type Tab = 'sujets' | 'membres' | 'propositions' | 'reglages'
 
 export default function ProjetDetail() {
   const { id } = useParams<{ id: string }>()
@@ -27,6 +27,11 @@ export default function ProjetDetail() {
   const [inviting, setInviting]       = useState(false)
   const [inviteError, setInviteError] = useState<string | null>(null)
 
+  // Settings form
+  const [settings, setSettings] = useState<any>(null)
+  const [savingSettings, setSavingSettings] = useState(false)
+  const [settingsSaved, setSettingsSaved] = useState(false)
+
   // Propose source form
   const [proposeUrl, setProposeUrl]     = useState('')
   const [proposeType, setProposeType]   = useState('website')
@@ -40,7 +45,21 @@ export default function ProjetDetail() {
       api.listProjectMembers(projectId),
       api.listSourceProposals(projectId),
     ])
-      .then(([p, m, props]) => { setProject(p); setMembers(m); setProposals(props) })
+      .then(([p, m, props]) => {
+        setProject(p); setMembers(m); setProposals(props)
+        setSettings({
+          name: p.name || '',
+          description: p.description || '',
+          client_name: p.client_name || '',
+          deadline: p.deadline || '',
+          brief_hour: p.brief_hour ?? 7,
+          brief_window_hours: p.brief_window_hours ?? 24,
+          brief_language: p.brief_language || 'fr',
+          alert_keywords: (p.alert_keywords || []).join(', '),
+          brief_recipients: (p.brief_recipients || []).join(', '),
+          visibility: p.visibility || 'private',
+        })
+      })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
   }, [projectId])
@@ -67,6 +86,30 @@ export default function ProjetDetail() {
       setProposeUrl(''); setProposeName('')
     } catch (e: any) { setProposeError(e.message) }
     finally { setProposing(false) }
+  }
+
+  async function handleSaveSettings() {
+    if (!settings) return
+    setSavingSettings(true)
+    try {
+      const payload: any = {
+        name: settings.name || undefined,
+        description: settings.description || undefined,
+        client_name: settings.client_name || undefined,
+        deadline: settings.deadline || undefined,
+        brief_hour: Number(settings.brief_hour),
+        brief_window_hours: Number(settings.brief_window_hours),
+        brief_language: settings.brief_language,
+        alert_keywords: settings.alert_keywords.split(',').map((s: string) => s.trim()).filter(Boolean),
+        brief_recipients: settings.brief_recipients.split(',').map((s: string) => s.trim()).filter(Boolean),
+        visibility: settings.visibility,
+      }
+      const updated = await api.updateProject(projectId, payload)
+      setProject(updated)
+      setSettingsSaved(true)
+      setTimeout(() => setSettingsSaved(false), 2000)
+    } catch (e: any) { setError(e.message) }
+    finally { setSavingSettings(false) }
   }
 
   async function handleReview(proposalId: number, decision: 'approved' | 'rejected') {
@@ -135,6 +178,7 @@ export default function ProjetDetail() {
             { id: 'sujets' as Tab, icon: Folder, label: 'Sujets' },
             { id: 'membres' as Tab, icon: Users, label: `Membres (${members.length})` },
             { id: 'propositions' as Tab, icon: FileText, label: `Propositions (${proposals.filter(p => p.status === 'pending').length})` },
+            { id: 'reglages' as Tab, icon: Settings, label: 'Réglages' },
           ]).map(t => (
             <button
               key={t.id}
@@ -341,6 +385,113 @@ export default function ProjetDetail() {
               </div>
             </div>
           )}
+          {/* ── Réglages ────────────────────────────────────────────────── */}
+          {tab === 'reglages' && settings && (
+            <div className="space-y-6">
+
+              {/* Identité */}
+              <div className="card space-y-4">
+                <p className="text-[11px] font-mono text-[hsl(var(--text-3))] uppercase tracking-wider">Identité</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-[12px] text-[hsl(var(--text-2))]">Nom du projet</label>
+                    <input value={settings.name} onChange={e => setSettings((s: any) => ({ ...s, name: e.target.value }))}
+                      className="input w-full" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[12px] text-[hsl(var(--text-2))]">Client / organisation</label>
+                    <input value={settings.client_name} onChange={e => setSettings((s: any) => ({ ...s, client_name: e.target.value }))}
+                      placeholder="Capgemini, SNCF…" className="input w-full" />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[12px] text-[hsl(var(--text-2))]">Description</label>
+                  <textarea value={settings.description} onChange={e => setSettings((s: any) => ({ ...s, description: e.target.value }))}
+                    rows={2} className="input w-full resize-none" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-[12px] text-[hsl(var(--text-2))]">Deadline</label>
+                    <input type="date" value={settings.deadline} onChange={e => setSettings((s: any) => ({ ...s, deadline: e.target.value }))}
+                      className="input w-full" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[12px] text-[hsl(var(--text-2))]">Visibilité</label>
+                    <select value={settings.visibility} onChange={e => setSettings((s: any) => ({ ...s, visibility: e.target.value }))}
+                      className="input w-full">
+                      <option value="private">Privé (membres uniquement)</option>
+                      <option value="org">Organisation</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Brief automatique */}
+              <div className="card space-y-4">
+                <p className="text-[11px] font-mono text-[hsl(var(--text-3))] uppercase tracking-wider">Brief automatique</p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-[12px] text-[hsl(var(--text-2))]">Heure de génération</label>
+                    <select value={settings.brief_hour} onChange={e => setSettings((s: any) => ({ ...s, brief_hour: e.target.value }))}
+                      className="input w-full">
+                      {[5,6,7,8,9,10].map(h => (
+                        <option key={h} value={h}>{h}h00</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[12px] text-[hsl(var(--text-2))]">Fenêtre temporelle</label>
+                    <select value={settings.brief_window_hours} onChange={e => setSettings((s: any) => ({ ...s, brief_window_hours: e.target.value }))}
+                      className="input w-full">
+                      <option value={24}>24h</option>
+                      <option value={48}>48h</option>
+                      <option value={168}>7 jours</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[12px] text-[hsl(var(--text-2))]">Langue de sortie</label>
+                    <select value={settings.brief_language} onChange={e => setSettings((s: any) => ({ ...s, brief_language: e.target.value }))}
+                      className="input w-full">
+                      <option value="fr">Français</option>
+                      <option value="en">English</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[12px] text-[hsl(var(--text-2))]">Destinataires du brief (emails séparés par des virgules)</label>
+                  <input value={settings.brief_recipients}
+                    onChange={e => setSettings((s: any) => ({ ...s, brief_recipients: e.target.value }))}
+                    placeholder="alice@co.fr, bob@co.fr" className="input w-full font-mono text-[12px]" />
+                </div>
+              </div>
+
+              {/* Alertes */}
+              <div className="card space-y-4">
+                <p className="text-[11px] font-mono text-[hsl(var(--text-3))] uppercase tracking-wider">Alertes</p>
+                <div className="space-y-1.5">
+                  <label className="text-[12px] text-[hsl(var(--text-2))]">Mots-clés d'alerte (séparés par des virgules)</label>
+                  <input value={settings.alert_keywords}
+                    onChange={e => setSettings((s: any) => ({ ...s, alert_keywords: e.target.value }))}
+                    placeholder="GPT-5, concurrent X, faille CVE…" className="input w-full font-mono text-[12px]" />
+                  <p className="text-[11px] text-[hsl(var(--text-3))]">
+                    Une notification est envoyée dès qu'un article contient l'un de ces termes.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  onClick={handleSaveSettings}
+                  disabled={savingSettings}
+                  className="btn-primary flex items-center gap-2"
+                >
+                  {savingSettings ? <Loader2 className="w-4 h-4 animate-spin" /> : settingsSaved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+                  {settingsSaved ? 'Sauvegardé' : 'Sauvegarder'}
+                </button>
+              </div>
+            </div>
+          )}
+
         </motion.div>
       </div>
     </div>

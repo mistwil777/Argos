@@ -343,10 +343,23 @@ export default function Briefing() {
           className="panel p-10 flex flex-col items-center gap-4 text-center">
           <Newspaper className="w-10 h-10 text-[hsl(var(--text-3))] opacity-40" />
           <div>
-            <p className="text-[14px] font-semibold text-[hsl(var(--text))]">Aucun briefing pour aujourd'hui</p>
+            <p className="text-[14px] font-semibold text-[hsl(var(--text))]">Brief non généré aujourd'hui</p>
             <p className="text-[12px] text-[hsl(var(--text-3))] mt-1">
-              Cliquez sur "Générer le brief" pour créer le résumé des dernières {hours}h.
-              Le briefing se génère automatiquement chaque matin à 7h00.
+              Le job automatique de 7h00 ne s'est pas encore lancé, ou aucun item fiable n'était disponible.
+              Cliquez sur "Générer le brief" pour lancer manuellement.
+            </p>
+          </div>
+        </motion.div>
+      )}
+
+      {!loading && today?.exists && today?.no_new_content && !displayBriefing?.top_items?.length && !generating && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+          className="panel p-10 flex flex-col items-center gap-4 text-center">
+          <Newspaper className="w-10 h-10 text-[hsl(var(--text-3))] opacity-30" />
+          <div>
+            <p className="text-[14px] font-semibold text-[hsl(var(--text))]">Brief généré — rien de nouveau</p>
+            <p className="text-[12px] text-[hsl(var(--text-3))] mt-1">
+              Le job de 7h00 s'est exécuté mais les sources n'ont rien publié de nouveau depuis le dernier briefing.
             </p>
           </div>
         </motion.div>

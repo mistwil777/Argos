@@ -105,7 +105,7 @@ export default function ProjetNouveau() {
         cdc_analysis: cdcAnalysis || { subjects: [], gaps: [], domains: [], constraints: [] },
         qa_history: [],
       })
-      if (res.done) { await handleFinalize([]); return }
+      if (res.done) { setInterviewDone(true); return }
       setCurrentQ(res.question)
       setCurrentAnswer('')
       setSelectedOptions([])
@@ -134,7 +134,7 @@ export default function ProjetNouveau() {
         cdc_analysis: cdcAnalysis || { subjects: [], gaps: [], domains: [], constraints: [] },
         qa_history: newHistory,
       })
-      if (res.done) { await handleFinalize(newHistory); return }
+      if (res.done) { setInterviewDone(true); return }
       setCurrentQ(res.question)
       setCurrentAnswer('')
       setSelectedOptions([])
@@ -334,12 +334,47 @@ export default function ProjetNouveau() {
           {/* ── Step 4 : Questionnaire ───────────────────────────────────── */}
           {step === 'questionnaire' && (
             <motion.div key="questionnaire" {...fadeSlide} className="space-y-4">
-              {loading && !currentQ ? (
+
+              {/* État "Entretien terminé" */}
+              {interviewDone ? (
+                <div className="card space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Check className="w-5 h-5 text-[hsl(var(--aqua))]" />
+                    <p className="text-[14px] font-semibold text-[hsl(var(--text))]">Entretien terminé</p>
+                  </div>
+                  <p className="text-[13px] text-[hsl(var(--text-2))]">
+                    Toutes les informations nécessaires ont été collectées. Vous pouvez finaliser la configuration du projet.
+                  </p>
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => handleFinalize(qaHistory)}
+                      disabled={loading}
+                      className="btn-primary flex items-center gap-2"
+                    >
+                      {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                      Finaliser le projet
+                    </button>
+                  </div>
+                </div>
+              ) : loading && !currentQ ? (
                 <div className="flex items-center justify-center py-16">
                   <Loader2 className="w-6 h-6 animate-spin text-[hsl(var(--text-3))]" />
                 </div>
               ) : currentQ ? (
                 <>
+                  {/* Historique Q/A */}
+                  {qaHistory.length > 0 && (
+                    <div className="space-y-2">
+                      {qaHistory.map((qa, i) => (
+                        <div key={i} className="rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] px-4 py-3 space-y-1">
+                          <p className="text-[11px] font-mono text-[hsl(var(--text-3))]">Q{i + 1} — {qa.q}</p>
+                          <p className="text-[13px] text-[hsl(var(--text-2))]">{qa.a}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Question courante */}
                   <div className="card space-y-4">
                     <div className="flex items-center gap-2 text-[11px] font-mono text-[hsl(var(--text-3))]">
                       <MessageSquare className="w-3.5 h-3.5" />
@@ -358,22 +393,50 @@ export default function ProjetNouveau() {
 
                     {/* Multiselect */}
                     {currentQ.type === 'multiselect' && currentQ.options?.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {currentQ.options.map((opt: string) => (
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap gap-2">
+                          {currentQ.options.map((opt: string) => (
+                            <button
+                              key={opt}
+                              onClick={() => setSelectedOptions(prev =>
+                                prev.includes(opt) ? prev.filter(o => o !== opt) : [...prev, opt]
+                              )}
+                              className={`px-3 py-1.5 rounded-lg text-[13px] border transition-all ${
+                                selectedOptions.includes(opt)
+                                  ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent)/.12)] text-[hsl(var(--accent))]'
+                                  : 'border-[hsl(var(--line))] text-[hsl(var(--text-2))] hover:border-[hsl(var(--accent)/.5)]'
+                              }`}
+                            >
+                              {opt}
+                            </button>
+                          ))}
+                          {/* Chip "Autre…" */}
                           <button
-                            key={opt}
-                            onClick={() => setSelectedOptions(prev =>
-                              prev.includes(opt) ? prev.filter(o => o !== opt) : [...prev, opt]
-                            )}
-                            className={`px-3 py-1.5 rounded-lg text-[13px] border transition-all ${
-                              selectedOptions.includes(opt)
-                                ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent)/.12)] text-[hsl(var(--accent))]'
-                                : 'border-[hsl(var(--line))] text-[hsl(var(--text-2))] hover:border-[hsl(var(--accent)/.5)]'
+                            onClick={() => setShowOther(v => !v)}
+                            className={`px-3 py-1.5 rounded-lg text-[13px] border border-dashed transition-all ${
+                              showOther
+                                ? 'border-[hsl(var(--accent))] text-[hsl(var(--accent))]'
+                                : 'border-[hsl(var(--line))] text-[hsl(var(--text-3))] hover:border-[hsl(var(--accent)/.5)]'
                             }`}
                           >
-                            {opt}
+                            Autre…
                           </button>
-                        ))}
+                        </div>
+                        {showOther && (
+                          <input
+                            value={otherText}
+                            onChange={e => setOtherText(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter' && otherText.trim()) {
+                                setSelectedOptions(prev => [...prev, otherText.trim()])
+                                setOtherText('')
+                                setShowOther(false)
+                              }
+                            }}
+                            placeholder="Précisez… (Entrée pour valider)"
+                            className="w-full rounded-lg border border-[hsl(var(--accent)/.4)] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[13px] px-3 py-2 placeholder:text-[hsl(var(--text-3))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
+                          />
+                        )}
                       </div>
                     )}
 
@@ -407,19 +470,26 @@ export default function ProjetNouveau() {
                   </div>
 
                   <div className="flex items-center justify-between">
-                    {qaHistory.length >= 5 ? (
+                    {/* ← Retour */}
+                    {qaHistory.length > 0 ? (
                       <button
-                        onClick={() => handleFinalize(qaHistory)}
-                        disabled={loading}
-                        className="text-[13px] text-[hsl(var(--text-3))] hover:text-[hsl(var(--text))] transition-colors"
+                        onClick={() => {
+                          const prev = qaHistory[qaHistory.length - 1]
+                          setQaHistory(h => h.slice(0, -1))
+                          setCurrentQ({ text: prev.q, type: 'open', options: [] })
+                          setCurrentAnswer(prev.a)
+                          setSelectedOptions([])
+                          setLevelPair({ current: '', target: '' })
+                        }}
+                        className="flex items-center gap-1.5 text-[13px] text-[hsl(var(--text-3))] hover:text-[hsl(var(--text))] transition-colors"
                       >
-                        Finaliser maintenant →
+                        <ArrowLeft className="w-3.5 h-3.5" />
+                        Retour
                       </button>
                     ) : (
-                      <span className="text-[12px] font-mono text-[hsl(var(--text-3))]">
-                        {Math.max(0, 5 - qaHistory.length)} question{5 - qaHistory.length > 1 ? 's' : ''} minimum restante{5 - qaHistory.length > 1 ? 's' : ''}
-                      </span>
+                      <span />
                     )}
+
                     <button
                       onClick={handleNextQuestion}
                       disabled={loading || (

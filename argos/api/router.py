@@ -5060,12 +5060,14 @@ async def generate_briefing(data: Dict[str, Any] = {}):
                         "DELETE FROM daily_briefings WHERE briefing_date = %s AND sujet_id IS NULL",
                         (today,)
                     )
+                _no_new = len(result.get("top_items", [])) == 0
                 cur.execute(
                     """INSERT INTO daily_briefings
                        (briefing_date, executive_summary, top_items, trends, stats,
-                        workspace_id, sujet_id, tokens_used, cost_usd, cited_sources, groups)
+                        workspace_id, sujet_id, tokens_used, cost_usd, cited_sources, groups,
+                        no_new_content)
                        VALUES (%s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s, %s, %s,
-                               %s::jsonb, %s::jsonb)
+                               %s::jsonb, %s::jsonb, %s)
                        RETURNING id""",
                     (
                         today,
@@ -5079,6 +5081,7 @@ async def generate_briefing(data: Dict[str, Any] = {}):
                         result["cost_usd"],
                         _json.dumps(result.get("cited_sources", [])),
                         _json.dumps(result.get("groups", {})),
+                        _no_new,
                     )
                 )
                 briefing_id = cur.fetchone()[0]
@@ -5145,7 +5148,7 @@ async def get_today_briefing(sujet_id: Optional[int] = Query(default=None)):
                     cur.execute(
                         """SELECT id, briefing_date, executive_summary, top_items, trends, stats,
                                   tokens_used, cost_usd, generated_at,
-                                  cited_sources, groups
+                                  cited_sources, groups, no_new_content
                            FROM daily_briefings WHERE briefing_date = %s AND sujet_id = %s""",
                         (today, sujet_id)
                     )
@@ -5153,13 +5156,13 @@ async def get_today_briefing(sujet_id: Optional[int] = Query(default=None)):
                     cur.execute(
                         """SELECT id, briefing_date, executive_summary, top_items, trends, stats,
                                   tokens_used, cost_usd, generated_at,
-                                  cited_sources, groups
+                                  cited_sources, groups, no_new_content
                            FROM daily_briefings WHERE briefing_date = %s AND sujet_id IS NULL""",
                         (today,)
                     )
                 row = cur.fetchone()
         if not row:
-            return {"exists": False, "date": str(today)}
+            return {"exists": False, "no_new_content": False, "date": str(today)}
         return {
             "exists": True,
             "id": row[0], "date": str(row[1]),
@@ -5169,6 +5172,7 @@ async def get_today_briefing(sujet_id: Optional[int] = Query(default=None)):
             "generated_at": row[8].isoformat() if row[8] else None,
             "cited_sources": row[9] or [],
             "groups": row[10] or {},
+            "no_new_content": bool(row[11]),
         }
     except Exception as e:
         logger.error(f"Error fetching today briefing: {e}")

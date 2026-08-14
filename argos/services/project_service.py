@@ -29,6 +29,14 @@ def _row_to_project(row) -> dict:
         "is_active": row[8],
         "created_at": row[9].isoformat() if row[9] and hasattr(row[9], "isoformat") else row[9],
         "updated_at": row[10].isoformat() if row[10] and hasattr(row[10], "isoformat") else row[10],
+        "client_name": row[11],
+        "deadline": row[12].isoformat() if row[12] and hasattr(row[12], "isoformat") else row[12],
+        "brief_hour": row[13],
+        "brief_window_hours": row[14],
+        "brief_language": row[15],
+        "alert_keywords": list(row[16]) if row[16] else [],
+        "brief_recipients": list(row[17]) if row[17] else [],
+        "visibility": row[18],
     }
 
 
@@ -94,7 +102,9 @@ class ProjectService:
                     "INSERT INTO projects (name, slug, description, owner_id) "
                     "VALUES (%s, %s, %s, %s) RETURNING id, name, slug, description, "
                     "cdc_content, cdc_analysis, knowledge_profile, "
-                    "owner_id, is_active, created_at, updated_at",
+                    "owner_id, is_active, created_at, updated_at, "
+                    "client_name, deadline, brief_hour, brief_window_hours, "
+                    "brief_language, alert_keywords, brief_recipients, visibility",
                     (name, slug, description, owner_id),
                 )
                 row = cur.fetchone()
@@ -112,8 +122,10 @@ class ProjectService:
             with conn.cursor() as cur:
                 cur.execute(
                     "SELECT id, name, slug, description, cdc_content, cdc_analysis, "
-                    "knowledge_profile, owner_id, is_active, "
-                    "created_at, updated_at FROM projects WHERE id = %s",
+                    "knowledge_profile, owner_id, is_active, created_at, updated_at, "
+                    "client_name, deadline, brief_hour, brief_window_hours, "
+                    "brief_language, alert_keywords, brief_recipients, visibility "
+                    "FROM projects WHERE id = %s",
                     (project_id,),
                 )
                 row = cur.fetchone()
@@ -130,7 +142,9 @@ class ProjectService:
                 cur.execute(
                     "SELECT p.id, p.name, p.slug, p.description, p.cdc_content, "
                     "p.cdc_analysis, p.knowledge_profile, "
-                    "p.owner_id, p.is_active, p.created_at, p.updated_at "
+                    "p.owner_id, p.is_active, p.created_at, p.updated_at, "
+                    "p.client_name, p.deadline, p.brief_hour, p.brief_window_hours, "
+                    "p.brief_language, p.alert_keywords, p.brief_recipients, p.visibility "
                     "FROM projects p "
                     "JOIN project_members pm ON pm.project_id = p.id "
                     "WHERE pm.user_id = %s AND pm.status = 'active' AND p.is_active = TRUE "
@@ -145,8 +159,10 @@ class ProjectService:
                 member = _get_member_role(cur, project_id, user_id)
                 if not member or member["role"] != "owner":
                     raise PermissionError("Seul le propriétaire peut modifier le projet")
-                allowed = {"name", "description", "cdc_content",
-                           "cdc_analysis", "knowledge_profile"}
+                allowed = {"name", "description", "cdc_content", "cdc_analysis",
+                           "knowledge_profile", "client_name", "deadline",
+                           "brief_hour", "brief_window_hours", "brief_language",
+                           "alert_keywords", "brief_recipients", "visibility"}
                 fields = {k: v for k, v in kwargs.items() if k in allowed}
                 if not fields:
                     pass
@@ -155,8 +171,9 @@ class ProjectService:
                 cur.execute(
                     f"UPDATE projects SET {sets}, updated_at = NOW() WHERE id = %s "
                     "RETURNING id, name, slug, description, cdc_content, cdc_analysis, "
-                    "knowledge_profile, owner_id, is_active, "
-                    "created_at, updated_at",
+                    "knowledge_profile, owner_id, is_active, created_at, updated_at, "
+                    "client_name, deadline, brief_hour, brief_window_hours, "
+                    "brief_language, alert_keywords, brief_recipients, visibility",
                     values,
                 )
                 row = cur.fetchone()

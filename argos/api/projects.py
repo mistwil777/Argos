@@ -2,7 +2,8 @@
 API Projets — CRUD, membres, propositions de sources.
 """
 import logging
-from typing import Optional
+from typing import Optional, List
+from datetime import date
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -36,6 +37,14 @@ class ProjectCreate(BaseModel):
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    client_name: Optional[str] = None
+    deadline: Optional[date] = None
+    brief_hour: Optional[int] = None
+    brief_window_hours: Optional[int] = None
+    brief_language: Optional[str] = None
+    alert_keywords: Optional[List[str]] = None
+    brief_recipients: Optional[List[str]] = None
+    visibility: Optional[str] = None
 
 
 class MemberInvite(BaseModel):
