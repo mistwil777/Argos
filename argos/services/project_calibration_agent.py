@@ -194,16 +194,16 @@ OBJECTIF DE LA PROCHAINE QUESTION :
 Analyse les échanges ci-dessus. Pour chaque lacune listée, détermine si elle a été adressée.
 Pose une question précise sur la lacune ou le sujet le moins bien couvert par les réponses existantes.
 Ne pose JAMAIS une question dont la réponse est déjà présente dans les échanges.
-Varie les angles : contexte organisationnel, niveaux techniques par sujet spécifique, contraintes opérationnelles, priorités, risques projet.
 {finalize_note}
 
-FORMAT DE RÉPONSE (JSON uniquement) :
-{format_note}
+RÈGLE SUR LE TYPE DE QUESTION :
+- Utilise "multiselect" en priorité chaque fois que la réponse peut être choisie parmi une liste finie (technologies, rôles, pratiques, risques, priorités). Génère 4 à 6 options pertinentes tirées du contexte du projet — jamais génériques. Les options doivent être cohérentes entre elles et non redondantes.
+- Utilise "level_pair" pour évaluer la maîtrise d'une technologie ou compétence précise identifiée dans le CDC.
+- Utilise "open" uniquement si la réponse attendue est vraiment libre et ne peut pas être structurée en options.
+- L'objectif : le répondant doit pouvoir cliquer plutôt que rédiger dans la majorité des cas.
 
-Types disponibles :
-- open : réponse libre
-- multiselect : choix multiples parmi des options (max 6)
-- level_pair : niveau actuel + niveau cible (pour une compétence précise)"""
+FORMAT DE RÉPONSE (JSON uniquement) :
+{format_note}"""
 
         try:
             response, _ = await self._llm.generate(
