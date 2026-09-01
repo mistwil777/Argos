@@ -110,31 +110,38 @@ SEARXNG_TRUSTED_DOMAINS = [
 # ----------------------------------------------------------------
 # Prompt de décomposition d'intent
 # ----------------------------------------------------------------
-_INTENT_SYSTEM = """Tu es un expert en veille technologique.
-Tu reçois une intention de veille exprimée en langage naturel et tu la décomposes
-en axes de recherche structurés pour trouver les meilleures sources d'information.
+_INTENT_SYSTEM = """Tu es un expert en veille technologique et en sourcing d'information.
+Tu reçois une intention de veille et tu identifies directement les meilleures sources autoritaires.
+Tu utilises ta connaissance des domaines pour proposer des URLs réelles et vérifiables.
 
 Réponds UNIQUEMENT avec un objet JSON valide, sans markdown, sans explication."""
 
-_INTENT_PROMPT = """Intention de veille : "{intent}"
+_INTENT_PROMPT = """Intention de veille : "__INTENT__"
 
-Décompose cette intention en :
-- entities : liste des entités nommées clés (entreprises, produits, technologies, personnes)
-- themes : liste des thèmes et sujets à surveiller (5 max)
-- source_types : types de sources les plus pertinents parmi ["rss", "github", "arxiv", "website", "blog", "docs", "news"]
-- search_queries : liste de 5 requêtes de recherche web optimisées pour trouver des sources (pas des articles)
-- keywords : mots-clés de filtrage pour la classification (10 max)
-- source_rationale : explication courte en français (1-2 phrases) expliquant POURQUOI ces types de sources ont été choisis pour cette intention
+Analyse cette intention et retourne :
+- entities : entités nommées clés (entreprises, produits, technologies, organisations)
+- themes : thèmes à surveiller (5 max)
+- keywords : mots-clés de filtrage (10 max)
+- suggested_sources : liste de 8 à 12 sources autoritaires réelles pour cette intention.
+  Pour chaque source : URL exacte et accessible, nom, type, et justification courte.
+  Privilégie : sites officiels, organismes de certification, institutions académiques, consortiums industriels,
+  publications techniques de référence, dépôts GitHub officiels, flux RSS de qualité.
+  N'invente aucune URL — n'inclus que des sources dont tu es certain qu'elles existent.
 
 Format JSON attendu :
-{{
+{
   "entities": ["..."],
   "themes": ["..."],
-  "source_types": ["..."],
-  "search_queries": ["site:github.com ...", "...feed RSS...", "..."],
   "keywords": ["..."],
-  "source_rationale": "..."
-}}"""
+  "suggested_sources": [
+    {
+      "url": "https://...",
+      "name": "Nom lisible",
+      "type": "website|github|arxiv|rss|docs|blog|news",
+      "rationale": "Pourquoi cette source est pertinente pour l'intention"
+    }
+  ]
+}"""
 
 
 # ----------------------------------------------------------------
@@ -159,33 +166,94 @@ class IntentService:
 
         message = await client.messages.create(
             model="claude-opus-4-5",
-            max_tokens=1024,
+            max_tokens=3000,
             system=_INTENT_SYSTEM,
-            messages=[{
-                "role": "user",
-                "content": _INTENT_PROMPT.format(intent=intent),
-            }],
+            messages=[
+                {"role": "user", "content": _INTENT_PROMPT.replace("__INTENT__", intent)},
+                {"role": "assistant", "content": "{"},
+            ],
         )
 
-        raw = message.content[0].text.strip()
+        raw = "{" + message.content[0].text.strip()
+
+        def _clean_json(s: str) -> str:
+            import re
+            # Supprimer les code fences markdown
+            s = re.sub(r"^```(?:json)?\s*", "", s, flags=re.MULTILINE)
+            s = re.sub(r"```\s*$", "", s, flags=re.MULTILINE)
+            # Supprimer les virgules de fin avant } ou ]
+            s = re.sub(r",(\s*[}\]])", r"\1", s)
+            return s.strip()
 
         try:
             result = json.loads(raw)
         except json.JSONDecodeError:
-            # Tentative de récupération si le LLM a ajouté du markdown
             import re
-            match = re.search(r"\{.*\}", raw, re.DOTALL)
-            if match:
-                result = json.loads(match.group())
-            else:
-                logger.error(f"Intent decomposition : JSON invalide\n{raw}")
-                raise ValueError("Réponse LLM non parseable")
+            cleaned = _clean_json(raw)
+            try:
+                result = json.loads(cleaned)
+            except json.JSONDecodeError:
+                match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+                if match:
+                    result = json.loads(match.group())
+                else:
+                    logger.error(f"Intent decomposition : JSON invalide\n{raw}")
+                    raise ValueError("Réponse LLM non parseable")
 
         logger.info(
             f"[INTENT] Décomposé : {len(result.get('entities',[]))} entités, "
             f"{len(result.get('themes',[]))} thèmes, "
-            f"{len(result.get('search_queries',[]))} requêtes"
+            f"{len(result.get('suggested_sources',[]))} sources suggérées"
         )
+        return result
+
+    async def decompose_for_search(self, intent: str, subjects: list[str] | None = None) -> dict:
+        """
+        Génère des requêtes SearXNG ciblées pour découvrir des sources émergentes.
+        Différent de decompose() : pas d'URLs directes, mais des requêtes précises
+        restreintes à des domaines de confiance selon le contexte du projet.
+        """
+        import json
+        import anthropic
+
+        subjects_hint = ""
+        if subjects:
+            subjects_hint = f"\nSujets du projet : {', '.join(subjects)}"
+
+        prompt = f"""Intention de veille : "{intent}"{subjects_hint}
+
+Génère des requêtes de recherche web précises pour trouver des sources récentes et émergentes sur ce sujet.
+Chaque requête doit être ciblée : utilise des opérateurs site: pour restreindre aux domaines pertinents
+(github.com, arxiv.org, sites officiels d'organismes, publications académiques, consortiums industriels).
+Évite les requêtes génériques — chaque requête doit cibler un type de source précis.
+
+Format JSON :
+{{
+  "entities": ["..."],
+  "themes": ["..."],
+  "keywords": ["..."],
+  "search_queries": [
+    "terme spécifique site:domain.org OR site:domain2.com",
+    "..."]
+}}
+5 requêtes maximum."""
+
+        client = anthropic.AsyncAnthropic(api_key=self._api_key)
+        message = await client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=512,
+            system="Tu es un expert en recherche documentaire. Réponds uniquement avec du JSON valide.",
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = message.content[0].text.strip()
+        try:
+            result = json.loads(raw)
+        except json.JSONDecodeError:
+            import re
+            match = re.search(r"\{.*\}", raw, re.DOTALL)
+            result = json.loads(match.group()) if match else {"search_queries": [], "entities": [], "themes": [], "keywords": []}
+
+        logger.info(f"[INTENT-SEARCH] {len(result.get('search_queries', []))} requêtes SearXNG générées")
         return result
 
 
@@ -202,22 +270,29 @@ class DiscoveryService:
         self._db = db_manager
         self._searxng_url = searxng_url or os.getenv("SEARXNG_URL", "http://searxng:8080")
 
-    async def find_sources(self, intent_data: dict, workspace_id: Optional[int] = None) -> list[dict]:
+    async def find_sources(
+        self,
+        intent_data: dict,
+        workspace_id: Optional[int] = None,
+        use_searxng: bool = False,
+    ) -> list[dict]:
         """
-        Trouve des sources autoritaires pour un intent donné.
+        Trouve des sources pour un intent donné.
 
         Priorité 1 — Registre d'autorité : sources officielles connues pour les entités
-        Priorité 2 — SearXNG restreint aux domaines reconnus
+        Priorité 2 — Sources suggérées par le LLM (domain knowledge), validées par HTTP
+                     OU SearXNG avec requêtes ciblées si use_searxng=True
         Priorité 3 — Découverte RSS sur les domaines officiels trouvés
 
         Toutes les sources passent par reliability_scorer avant d'être retournées.
         """
+        import httpx
         from argos.services.reliability_scorer import score_domain, ReliabilityResult
 
-        entities      = intent_data.get("entities", [])
-        themes        = intent_data.get("themes", [])
-        search_queries = intent_data.get("search_queries", [])
-        source_rationale = intent_data.get("source_rationale", "")
+        entities          = intent_data.get("entities", [])
+        themes            = intent_data.get("themes", [])
+        suggested_sources = intent_data.get("suggested_sources", [])
+        search_queries    = intent_data.get("search_queries", [])
 
         candidates: list[dict] = []
         seen_urls: set[str] = set()
@@ -241,19 +316,49 @@ class DiscoveryService:
                     authority_hits.add(_extract_domain(src["url"]))
                 logger.info(f"[DISCOVERY] Autorité '{key}' → {len(sources)} source(s) officielles")
 
-        # ── Priorité 2 : SearXNG restreint ──────────────────────────
-        # Construire des requêtes restreintes aux domaines de confiance
-        restricted_queries = _build_restricted_queries(search_queries, themes, entities)
+        # ── Priorité 2 : sources suggérées par le LLM ───────────────
+        if use_searxng:
+            # ── Priorité 2 (SearXNG) : requêtes ciblées pour sources émergentes ──
+            restricted_queries = _build_restricted_queries(search_queries, themes, entities)
+            for query in restricted_queries[:6]:
+                try:
+                    results = await self._search_searxng(query)
+                    for r in results:
+                        domain_result = score_domain(r.get("url", ""))
+                        if domain_result.passed:
+                            _add(r, tier=domain_result.domain_tier)
+                except Exception as e:
+                    logger.warning(f"[DISCOVERY] SearXNG '{query[:50]}' : {e}")
+        else:
+            # ── Priorité 2 (LLM) : URLs autoritaires validées par HTTP ──────────
+            async def _validate_url(url: str) -> bool:
+                try:
+                    async with httpx.AsyncClient(timeout=8, verify=False, follow_redirects=True) as client:
+                        resp = await client.head(url)
+                        return resp.status_code < 400
+                except Exception:
+                    return False
 
-        for query in restricted_queries[:6]:
-            try:
-                results = await self._search_searxng(query)
-                for r in results:
-                    domain_result = score_domain(r.get("url", ""))
-                    if domain_result.passed:
-                        _add(r, tier=domain_result.domain_tier)
-            except Exception as e:
-                logger.warning(f"[DISCOVERY] SearXNG '{query[:50]}' : {e}")
+            import asyncio
+            validation_tasks = [(s, asyncio.create_task(_validate_url(s["url"]))) for s in suggested_sources if s.get("url")]
+            for src, task in validation_tasks:
+                try:
+                    ok = await task
+                    if ok:
+                        domain_result = score_domain(src["url"])
+                        tier = domain_result.domain_tier if domain_result.passed else "community"
+                        _add({
+                            "url": src["url"],
+                            "name": src.get("name", src["url"]),
+                            "type": src.get("type", "website"),
+                            "reason": src.get("rationale", ""),
+                            "subject": src.get("subject", ""),
+                        }, tier=tier)
+                        logger.info(f"[DISCOVERY] LLM source validée : {src['url']}")
+                    else:
+                        logger.warning(f"[DISCOVERY] LLM source inaccessible : {src['url']}")
+                except Exception as e:
+                    logger.warning(f"[DISCOVERY] Validation '{src.get('url','')}' : {e}")
 
         # ── Priorité 3 : RSS sur les domaines officiels ──────────────
         rss_domains_checked: set[str] = set()
@@ -290,7 +395,7 @@ class DiscoveryService:
             if c.get("authority"):
                 score = 1.0
             c["relevance_score"] = round(score, 3)
-            c["reason"] = _build_source_reason(c, entities, source_rationale)
+            c["reason"] = c.get("reason") or _build_source_reason(c, entities, "")
             scored.append(c)
 
         scored.sort(key=lambda x: (-x["relevance_score"], x.get("_tier", "z")))

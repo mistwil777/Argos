@@ -386,8 +386,80 @@ Réponds UNIQUEMENT avec ce JSON :
                     (json.dumps(knowledge_profile), project_id),
                 )
 
+        # ── Auto-suggest sources via LLM domain knowledge ───────────────
+        import asyncio as _asyncio
+        _asyncio.create_task(
+            self._auto_suggest_sources(project_id, created_subjects, knowledge_profile)
+        )
+
         return {
             "subjects": created_subjects,
             "knowledge_profile": knowledge_profile,
             "source_candidates": source_candidates,
         }
+
+    async def _auto_suggest_sources(
+        self,
+        project_id: int,
+        created_subjects: list,
+        knowledge_profile: dict,
+    ) -> None:
+        """Fire-and-forget : génère des sources LLM et les sauvegarde comme proposals pending."""
+        try:
+            import os
+            from argos.services.intent_discovery import IntentService, DiscoveryService
+
+            api_key = os.getenv("ANTHROPIC_API_KEY")
+            if not api_key:
+                return
+
+            # Construire l'intent depuis le knowledge_profile
+            subject_names = [s["name"] for s in created_subjects]
+            watch_focus = knowledge_profile.get("watch_focus_md", "")
+            intent_parts = [
+                f"Sujets : {', '.join(subject_names)}",
+                f"\nPour chaque source suggérée, ajoute un champ 'subject' avec le nom exact du sujet parmi : {', '.join(subject_names)}",
+            ]
+            if watch_focus:
+                intent_parts.insert(0, watch_focus[:600])
+
+            intent_svc = IntentService(anthropic_api_key=api_key)
+            intent_data = await intent_svc.decompose("\n".join(intent_parts))
+
+            discovery_svc = DiscoveryService(db_manager=self._db)
+            candidates = await discovery_svc.find_sources(intent_data=intent_data)
+
+            ws_by_name = {s["name"].lower(): s["id"] for s in created_subjects}
+
+            def _match_ws(c: dict) -> int | None:
+                hint = (c.get("subject") or c.get("reason") or "").lower()
+                for name, wid in ws_by_name.items():
+                    if any(w in hint for w in name.lower().split() if len(w) > 3):
+                        return wid
+                return created_subjects[0]["id"] if created_subjects else None
+
+            with self._db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    for c in candidates:
+                        url = (c.get("url") or "").strip()
+                        if not url:
+                            continue
+                        cur.execute(
+                            "SELECT id FROM source_proposals WHERE project_id = %s AND url = %s",
+                            (project_id, url),
+                        )
+                        if cur.fetchone():
+                            continue
+                        cur.execute(
+                            """INSERT INTO source_proposals
+                               (project_id, sujet_id, url, source_type, name, description, status)
+                               VALUES (%s, %s, %s, %s, %s, %s, 'approved')""",
+                            (project_id, _match_ws(c), url,
+                             c.get("type", "website"),
+                             (c.get("name") or url)[:255],
+                             (c.get("reason") or "")[:500]),
+                        )
+                conn.commit()
+            logger.info(f"[AUTO-SUGGEST] {len(candidates)} sources proposées pour projet {project_id}")
+        except Exception as e:
+            logger.warning(f"[AUTO-SUGGEST] Échec pour projet {project_id} : {e}")

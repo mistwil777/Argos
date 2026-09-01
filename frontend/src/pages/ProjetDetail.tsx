@@ -1,13 +1,21 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Loader2, AlertCircle, Folder, Users,
-  FileText, Plus, Check, X, Sparkles, Settings, Save
+  FileText, Plus, Check, X, Sparkles, Settings, Save,
+  Key, Copy, Trash2, Terminal, BarChart3, Play, Newspaper, RefreshCw, ChevronDown
 } from 'lucide-react'
+import {
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+} from 'recharts'
 import { api } from '@/services/api'
+import { timeAgo } from '@/lib/utils'
+import BriefingPanel from '@/components/BriefingPanel'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
-type Tab = 'sujets' | 'membres' | 'propositions' | 'reglages'
+type Tab = 'sujets' | 'membres' | 'propositions' | 'briefing' | 'ide' | 'metriques' | 'reglages'
 
 export default function ProjetDetail() {
   const { id } = useParams<{ id: string }>()
@@ -45,11 +53,37 @@ export default function ProjetDetail() {
   const [proposing, setProposing]       = useState(false)
   const [proposeError, setProposeError] = useState<string | null>(null)
 
+  // Pipeline
+  const [pipelineRunning, setPipelineRunning] = useState(false)
+  const [pipelineResult, setPipelineResult]   = useState<{launched: number; message?: string} | null>(null)
+
+  // Source proposals grouped by subject
+  const [subjectProposals, setSubjectProposals] = useState<any[]>([])  // [{id, name, proposals:[]}]
+  const [expandedSubject, setExpandedSubject]   = useState<number | null>(null)
+  const [selectedProposals, setSelectedProposals] = useState<Set<number>>(new Set())
+
   // Source suggestions
+  // ── API Keys IDE ──────────────────────────────────────────────────────────
+  const [apiKeys, setApiKeys]               = useState<any[]>([])
+  const [generatingKey, setGeneratingKey]   = useState(false)
+  const [newKey, setNewKey]                 = useState<string | null>(null)
+  const [copiedKey, setCopiedKey]           = useState(false)
+  const [copiedConfig, setCopiedConfig]     = useState<string | null>(null)
+
   const [suggesting, setSuggesting]           = useState(false)
   const [suggestions, setSuggestions]         = useState<any[]>([])
   const [suggestError, setSuggestError]       = useState<string | null>(null)
   const [selectedSuggestions, setSelectedSuggestions] = useState<Set<number>>(new Set())
+
+  useEffect(() => {
+    api.listProjectApiKeys(projectId).then(setApiKeys).catch(() => {})
+  }, [projectId])
+
+  function loadSubjectProposals() {
+    api.getSourceProposalsBySubject(projectId)
+      .then(res => setSubjectProposals(res.subjects || []))
+      .catch(() => {})
+  }
 
   useEffect(() => {
     Promise.all([
@@ -78,6 +112,7 @@ export default function ProjetDetail() {
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
+    loadSubjectProposals()
   }, [projectId])
 
   async function handleInvite() {
@@ -120,9 +155,10 @@ export default function ProjetDetail() {
   async function handleSuggestSources() {
     setSuggesting(true); setSuggestError(null); setSuggestions([])
     try {
-      const res = await api.suggestProjectSources(projectId)
-      setSuggestions(res.candidates || [])
-      setSelectedSuggestions(new Set(res.candidates?.map((_: any, i: number) => i) || []))
+      await api.suggestProjectSources(projectId)
+      loadSubjectProposals()
+      // Recharger les proposals flat aussi
+      api.listSourceProposals(projectId).then(setProposals).catch(() => {})
     } catch (e: any) { setSuggestError(e.message) }
     finally { setSuggesting(false) }
   }
@@ -182,11 +218,46 @@ export default function ProjetDetail() {
     finally { setSavingSettings(false) }
   }
 
+  async function handleRunPipeline(proposalIds?: number[]) {
+    setPipelineRunning(true); setPipelineResult(null)
+    try {
+      const res = await api.runProjectPipeline(projectId, proposalIds)
+      setPipelineResult(res)
+      setSelectedProposals(new Set())
+      // Redirect to briefing after launch
+      setTimeout(() => setTab('briefing'), 800)
+    } catch (e: any) { setError(e.message) }
+    finally { setPipelineRunning(false) }
+  }
+
   async function handleReview(proposalId: number, decision: 'approved' | 'rejected') {
     try {
       const updated = await api.reviewProposal(projectId, proposalId, { decision })
       setProposals(prev => prev.map(p => p.id === proposalId ? updated : p))
     } catch (e: any) { setError(e.message) }
+  }
+
+  async function handleGenerateKey() {
+    setGeneratingKey(true)
+    try {
+      const result = await api.createProjectApiKey(projectId)
+      setNewKey(result.key)
+      setApiKeys(prev => [...prev, { id: result.id, key_prefix: result.key_prefix, created_at: result.created_at, last_used_at: null, is_active: true }])
+    } catch (e: any) { setError(e.message) }
+    finally { setGeneratingKey(false) }
+  }
+
+  async function handleRevokeKey(keyId: number) {
+    try {
+      await api.revokeProjectApiKey(projectId, keyId)
+      setApiKeys(prev => prev.filter(k => k.id !== keyId))
+    } catch (e: any) { setError(e.message) }
+  }
+
+  function copyToClipboard(text: string, label: string) {
+    navigator.clipboard.writeText(text)
+    if (label === 'key') { setCopiedKey(true); setTimeout(() => setCopiedKey(false), 2000) }
+    else { setCopiedConfig(label); setTimeout(() => setCopiedConfig(null), 2000) }
   }
 
   if (loading) return (
@@ -247,6 +318,9 @@ export default function ProjetDetail() {
             { id: 'sujets' as Tab, icon: Folder, label: 'Sujets' },
             { id: 'membres' as Tab, icon: Users, label: `Membres (${members.length})` },
             { id: 'propositions' as Tab, icon: FileText, label: `Propositions (${proposals.filter(p => p.status === 'pending').length})` },
+            { id: 'briefing' as Tab, icon: Newspaper, label: 'Briefing' },
+            { id: 'ide' as Tab, icon: Terminal, label: 'Connexion IDE' },
+            { id: 'metriques' as Tab, icon: BarChart3, label: 'Métriques' },
             { id: 'reglages' as Tab, icon: Settings, label: 'Réglages' },
           ]).map(t => (
             <button
@@ -264,50 +338,155 @@ export default function ProjetDetail() {
           ))}
         </div>
 
-        {/* Tab content */}
-        <motion.div key={tab} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.15 }}>
+        {/* Tab content — tous les onglets restent montés (traitements non interrompus, état préservé) */}
+        <div>
 
           {/* ── Sujets ──────────────────────────────────────────────────── */}
-          {tab === 'sujets' && (
+          <div hidden={tab !== 'sujets'}>
             <div className="space-y-3">
               {cdcSubjects.length === 0 && !project.cdc_analysis && (
                 <div className="text-center py-12 space-y-3">
                   <Folder className="w-8 h-8 mx-auto text-[hsl(var(--text-3))]" />
                   <p className="text-[14px] text-[hsl(var(--text-2))]">Aucun sujet pour l'instant</p>
-                  <p className="text-[12px] text-[hsl(var(--text-3))]">
-                    Calibrez le projet pour générer automatiquement l'arborescence de sujets.
-                  </p>
+                  <p className="text-[12px] text-[hsl(var(--text-3))]">Calibrez le projet pour générer automatiquement l'arborescence de sujets.</p>
                 </div>
               )}
-              {cdcSubjects.map((s: any, i: number) => (
-                <div key={i}
-                  className="flex items-center gap-4 px-4 py-3 rounded-xl border border-[hsl(var(--line))] bg-[hsl(var(--bg-1))]">
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                       style={{ background: 'hsl(var(--accent)/.12)' }}>
-                    <Folder className="w-4 h-4 text-[hsl(var(--accent))]" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-medium text-[hsl(var(--text))]">{s.name}</p>
-                    {s.sub_subjects?.length > 0 && (
-                      <p className="text-[11px] text-[hsl(var(--text-3))] mt-0.5">{s.sub_subjects.join(' · ')}</p>
+
+              {/* Barre d'action si sélection active */}
+              {selectedProposals.size > 0 && (
+                <div className="flex items-center justify-between px-4 py-3 rounded-xl border border-[hsl(var(--accent)/.4)] bg-[hsl(var(--accent)/.06)]">
+                  <p className="text-[13px] text-[hsl(var(--text))]">
+                    <span className="font-semibold">{selectedProposals.size}</span> source{selectedProposals.size > 1 ? 's' : ''} sélectionnée{selectedProposals.size > 1 ? 's' : ''}
+                  </p>
+                  <button
+                    onClick={() => handleRunPipeline([...selectedProposals])}
+                    disabled={pipelineRunning}
+                    className="px-3 py-1.5 rounded-lg bg-[hsl(var(--accent))] text-white text-[12px] font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center gap-1.5 whitespace-nowrap"
+                  >
+                    {pipelineRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+                    {pipelineRunning ? 'En cours…' : 'Collecter et briefer'}
+                  </button>
+                </div>
+              )}
+
+              {/* Liste des sujets avec leurs sources — source de vérité = workspaces */}
+              {(subjectProposals.length > 0 ? subjectProposals : cdcSubjects.map((s: any) => ({ name: s.name, proposals: [] }))).map((ws: any, i: number) => {
+                // Enrichissement optionnel depuis cdc_analysis (priorité, sub_subjects) par matching partiel
+                const cdcMatch = cdcSubjects.find((c: any) => {
+                  const a = c.name.toLowerCase(), b = ws.name.toLowerCase()
+                  return a === b || a.includes(b.split(' ')[0]) || b.includes(a.split(' ')[0])
+                })
+                const s = { ...ws, priority: cdcMatch?.priority, sub_subjects: cdcMatch?.sub_subjects }
+                const wsProposals: any[] = ws.proposals || []
+                // Sources sélectionnables = approved + pending (rejected exclus)
+                const selectableProposals = wsProposals.filter((p: any) => p.status !== 'rejected')
+                const isExpanded = expandedSubject === i
+                const allSelected = selectableProposals.length > 0 && selectableProposals.every((p: any) => selectedProposals.has(p.id))
+
+                return (
+                  <div key={i} className="rounded-xl border border-[hsl(var(--line))] bg-[hsl(var(--bg-1))] overflow-hidden">
+                    {/* En-tête du sujet */}
+                    <div className="flex items-center gap-3 px-4 py-3">
+                      {/* Checkbox sujet — sélectionne toutes les sources non-rejetées */}
+                      <button
+                        onClick={() => {
+                          if (selectableProposals.length === 0) return
+                          const next = new Set(selectedProposals)
+                          if (allSelected) selectableProposals.forEach((p: any) => next.delete(p.id))
+                          else selectableProposals.forEach((p: any) => next.add(p.id))
+                          setSelectedProposals(next)
+                        }}
+                        className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-all ${
+                          selectableProposals.length === 0 ? 'border-[hsl(var(--line))] opacity-30 cursor-default'
+                          : allSelected ? 'bg-[hsl(var(--accent))] border-[hsl(var(--accent))]'
+                          : 'border-[hsl(var(--line))] hover:border-[hsl(var(--accent))]'
+                        }`}
+                      >
+                        {allSelected && <Check className="w-2.5 h-2.5 text-white" />}
+                      </button>
+
+                      <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                           style={{ background: 'hsl(var(--accent)/.12)' }}>
+                        <Folder className="w-3.5 h-3.5 text-[hsl(var(--accent))]" />
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-medium text-[hsl(var(--text))]">{s.name}</p>
+                        {s.sub_subjects?.length > 0 && (
+                          <p className="text-[11px] text-[hsl(var(--text-3))] mt-0.5">{s.sub_subjects.join(' · ')}</p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
+                          (s.priority ?? 'low') === 'high' ? 'bg-[hsl(var(--accent)/.1)] text-[hsl(var(--accent))] border-[hsl(var(--accent)/.3)]'
+                          : (s.priority ?? 'low') === 'medium' ? 'bg-[hsl(var(--yellow)/.1)] text-[hsl(var(--yellow))] border-[hsl(var(--yellow)/.3)]'
+                          : 'bg-[hsl(var(--line))] text-[hsl(var(--text-2))] border-[hsl(var(--line))]'
+                        }`}>{s.priority ?? 'low'}</span>
+                        {wsProposals.length > 0 && (
+                          <button
+                            onClick={() => setExpandedSubject(isExpanded ? null : i)}
+                            className="flex items-center gap-1 text-[11px] font-mono text-[hsl(var(--text-3))] hover:text-[hsl(var(--accent))] transition-colors"
+                          >
+                            <span>{wsProposals.length} source{wsProposals.length > 1 ? 's' : ''}</span>
+                            <span className={`transition-transform text-[10px] ${isExpanded ? 'rotate-90' : ''}`}>›</span>
+                          </button>
+                        )}
+                        {wsProposals.length === 0 && (
+                          <span className="text-[11px] font-mono text-[hsl(var(--text-3))] opacity-50">aucune source</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Sources expandées */}
+                    {isExpanded && wsProposals.length > 0 && (
+                      <div className="border-t border-[hsl(var(--line))] bg-[hsl(var(--bg))] px-4 py-3 space-y-2">
+                        {wsProposals.map((p: any) => {
+                          const isRejected = p.status === 'rejected'
+                          const isSelected = selectedProposals.has(p.id)
+                          return (
+                            <div key={p.id} className={`flex items-center gap-3 p-2.5 rounded-lg border transition-colors ${
+                              isSelected ? 'border-[hsl(var(--accent)/.4)] bg-[hsl(var(--accent)/.05)]'
+                              : isRejected ? 'opacity-40 border-[hsl(var(--line)/.5)] bg-[hsl(var(--bg-1))]'
+                              : 'border-[hsl(var(--line)/.5)] bg-[hsl(var(--bg-1))]'
+                            }`}>
+                              <button
+                                onClick={() => {
+                                  if (isRejected) return
+                                  const next = new Set(selectedProposals)
+                                  isSelected ? next.delete(p.id) : next.add(p.id)
+                                  setSelectedProposals(next)
+                                }}
+                                className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-all ${
+                                  isRejected ? 'border-[hsl(var(--line))] opacity-30 cursor-default'
+                                  : isSelected ? 'bg-[hsl(var(--accent))] border-[hsl(var(--accent))]'
+                                  : 'border-[hsl(var(--line))] hover:border-[hsl(var(--accent))]'
+                                }`}
+                              >
+                                {isSelected && <Check className="w-2.5 h-2.5 text-white" />}
+                              </button>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[12px] font-medium text-[hsl(var(--text))] truncate">{p.name || p.url}</p>
+                                <p className="text-[10px] font-mono text-[hsl(var(--text-3))] truncate">{p.url}</p>
+                              </div>
+                              <span className={`flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-mono border ${
+                                p.status === 'approved' ? 'bg-[hsl(var(--aqua)/.1)] text-[hsl(var(--aqua))] border-[hsl(var(--aqua)/.3)]'
+                                : p.status === 'rejected' ? 'bg-[hsl(var(--red)/.1)] text-[hsl(var(--red))] border-[hsl(var(--red)/.3)]'
+                                : 'bg-[hsl(var(--yellow)/.1)] text-[hsl(var(--yellow))] border-[hsl(var(--yellow)/.3)]'
+                              }`}>{p.status}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
                     )}
                   </div>
-                  <span className={`flex-shrink-0 px-2 py-0.5 rounded text-[10px] font-mono border ${
-                    s.priority === 'high'
-                      ? 'bg-[hsl(var(--accent)/.1)] text-[hsl(var(--accent))] border-[hsl(var(--accent)/.3)]'
-                      : s.priority === 'medium'
-                      ? 'bg-[hsl(var(--yellow)/.1)] text-[hsl(var(--yellow))] border-[hsl(var(--yellow)/.3)]'
-                      : 'bg-[hsl(var(--line))] text-[hsl(var(--text-3))] border-[hsl(var(--line))]'
-                  }`}>
-                    {s.priority}
-                  </span>
-                </div>
-              ))}
+                )
+              })}
             </div>
-          )}
+          </div>
 
           {/* ── Membres ─────────────────────────────────────────────────── */}
-          {tab === 'membres' && (
+          <div hidden={tab !== 'membres'}>
             <div className="space-y-4">
               {/* Invite form */}
               <div className="card space-y-3">
@@ -329,7 +508,7 @@ export default function ProjetDetail() {
                   <button
                     onClick={handleInvite}
                     disabled={!inviteEmail.trim() || inviting}
-                    className="btn-primary flex items-center gap-1.5 whitespace-nowrap"
+                    className="px-3 py-1.5 rounded-lg bg-[hsl(var(--accent))] text-white text-[12px] font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center gap-1.5 whitespace-nowrap"
                   >
                     {inviting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
                     Inviter
@@ -411,7 +590,7 @@ export default function ProjetDetail() {
                                       ))}
                                     </select>
                                     <button onClick={handleTransferOwnership} disabled={!transferTarget || transferring}
-                                      className="btn-primary text-[12px] whitespace-nowrap">
+                                      className="px-3 py-1.5 rounded-lg bg-[hsl(var(--accent))] text-white text-[12px] font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity text-[12px] whitespace-nowrap">
                                       {transferring ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Transférer'}
                                     </button>
                                   </div>
@@ -488,69 +667,67 @@ export default function ProjetDetail() {
               </div>
 
             </div>
-          )}
+          </div>
 
           {/* ── Propositions ────────────────────────────────────────────── */}
-          {tab === 'propositions' && (
-            <div className="space-y-4">
+          <div hidden={tab !== 'propositions'}>
+            <div className="space-y-5">
 
-              {/* Suggestions automatiques */}
+              {/* Section 1 — Suggestions LLM en attente de validation */}
               <div className="card space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-[13px] font-medium text-[hsl(var(--text))]">Découverte automatique</p>
-                    <p className="text-[12px] text-[hsl(var(--text-3))] mt-0.5">Argos analyse le bilan du projet et propose des sources de veille adaptées.</p>
+                    <p className="text-[13px] font-medium text-[hsl(var(--text))]">Suggestions automatiques</p>
+                    <p className="text-[12px] text-[hsl(var(--text-3))] mt-0.5">
+                      Sources proposées par Argos — validez ou rejetez chacune avant de les collecter.
+                    </p>
                   </div>
                   <button onClick={handleSuggestSources} disabled={suggesting}
-                    className="btn-primary flex items-center gap-1.5 whitespace-nowrap">
+                    className="px-3 py-1.5 rounded-lg bg-[hsl(var(--accent))] text-white text-[12px] font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center gap-1.5 whitespace-nowrap">
                     {suggesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                    {suggesting ? 'Recherche…' : 'Suggérer des sources'}
+                    {suggesting ? 'Analyse…' : 'Générer des suggestions'}
                   </button>
                 </div>
                 {suggestError && <p className="text-[12px] text-[hsl(var(--red))]">{suggestError}</p>}
-                {suggestions.length > 0 && (
-                  <div className="space-y-2 pt-1">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[12px] text-[hsl(var(--text-2))]">{suggestions.length} source(s) suggérée(s) — sélectionne celles à ajouter</p>
-                      <div className="flex gap-2">
-                        <button onClick={() => setSelectedSuggestions(new Set(suggestions.map((_: any, i: number) => i)))}
-                          className="text-[11px] text-[hsl(var(--accent))] hover:underline">Tout</button>
-                        <button onClick={() => setSelectedSuggestions(new Set())}
-                          className="text-[11px] text-[hsl(var(--text-3))] hover:underline">Aucun</button>
+
+                {proposals.filter(p => p.status === 'pending').length === 0 && (
+                  <p className="text-[12px] text-[hsl(var(--text-3))] italic">
+                    Aucune suggestion en attente — cliquez "Générer des suggestions" pour démarrer.
+                  </p>
+                )}
+
+                <div className="space-y-2">
+                  {proposals.filter(p => p.status === 'pending').map(p => (
+                    <div key={p.id}
+                      className="flex items-start gap-3 px-3 py-3 rounded-lg border border-[hsl(var(--yellow)/.3)] bg-[hsl(var(--yellow)/.04)]">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-medium text-[hsl(var(--text))] truncate">{p.name || p.url}</p>
+                        <p className="text-[10px] font-mono text-[hsl(var(--text-3))] truncate">{p.url}</p>
+                        {p.description && (
+                          <p className="text-[11px] text-[hsl(var(--text-2))] mt-1 line-clamp-2">{p.description}</p>
+                        )}
+                      </div>
+                      <div className="flex gap-1 flex-shrink-0">
+                        <button onClick={() => handleReview(p.id, 'approved')}
+                          className="w-7 h-7 rounded flex items-center justify-center bg-[hsl(var(--aqua)/.12)] text-[hsl(var(--aqua))] hover:bg-[hsl(var(--aqua)/.25)] transition-colors"
+                          title="Valider">
+                          <Check className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => handleReview(p.id, 'rejected')}
+                          className="w-7 h-7 rounded flex items-center justify-center bg-[hsl(var(--red)/.12)] text-[hsl(var(--red))] hover:bg-[hsl(var(--red)/.25)] transition-colors"
+                          title="Rejeter">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
-                    {suggestions.map((s: any, i: number) => (
-                      <label key={i} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                        selectedSuggestions.has(i)
-                          ? 'border-[hsl(var(--accent)/.4)] bg-[hsl(var(--accent)/.05)]'
-                          : 'border-[hsl(var(--line))] bg-[hsl(var(--bg))]'
-                      }`}>
-                        <input type="checkbox" checked={selectedSuggestions.has(i)}
-                          onChange={e => {
-                            const next = new Set(selectedSuggestions)
-                            e.target.checked ? next.add(i) : next.delete(i)
-                            setSelectedSuggestions(next)
-                          }}
-                          className="mt-0.5 flex-shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-[13px] font-medium text-[hsl(var(--text))] truncate">{s.name || s.title || s.url}</p>
-                          <p className="text-[11px] font-mono text-[hsl(var(--text-3))] truncate">{s.url}</p>
-                          {s.description && <p className="text-[12px] text-[hsl(var(--text-2))] mt-1 line-clamp-2">{s.description}</p>}
-                          {s.source_type && <span className="inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] font-mono border border-[hsl(var(--line))] text-[hsl(var(--text-3))]">{s.source_type}</span>}
-                        </div>
-                      </label>
-                    ))}
-                    <button onClick={handleAddSuggestions} disabled={selectedSuggestions.size === 0}
-                      className="btn-primary w-full">
-                      Ajouter {selectedSuggestions.size} source(s) aux propositions
-                    </button>
-                  </div>
-                )}
+                  ))}
+                </div>
               </div>
 
-              {/* Propose form */}
+              {/* Section 2 — Ajout manuel */}
               <div className="card space-y-3">
-                <p className="text-[12px] font-mono text-[hsl(var(--text-3))]">Proposer une source manuellement</p>
+                <p className="text-[13px] font-medium text-[hsl(var(--text))]">Ajout manuel</p>
+                <p className="text-[12px] text-[hsl(var(--text-3))]">Proposez une URL directement — elle sera soumise à validation.</p>
                 <div className="flex gap-2">
                   <input
                     value={proposeUrl} onChange={e => setProposeUrl(e.target.value)}
@@ -558,80 +735,154 @@ export default function ProjetDetail() {
                     className="flex-1 rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[12px] font-mono px-3 py-2 placeholder:text-[hsl(var(--text-3))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
                     onKeyDown={e => e.key === 'Enter' && handlePropose()}
                   />
-                  <select
-                    value={proposeType} onChange={e => setProposeType(e.target.value)}
-                    className="w-28 rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[13px] px-3 py-2 focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
-                  >
+                  <select value={proposeType} onChange={e => setProposeType(e.target.value)}
+                    className="w-28 rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[13px] px-3 py-2 focus:outline-none focus:border-[hsl(var(--accent))] transition-colors">
                     <option value="website">Site</option>
                     <option value="rss">RSS</option>
                     <option value="github">GitHub</option>
                     <option value="other">Autre</option>
                   </select>
                 </div>
-                <input
-                  value={proposeName} onChange={e => setProposeName(e.target.value)}
+                <input value={proposeName} onChange={e => setProposeName(e.target.value)}
                   placeholder="Nom lisible (optionnel)"
                   className="w-full rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[13px] px-3 py-2 placeholder:text-[hsl(var(--text-3))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
                 />
-                <button
-                  onClick={handlePropose}
-                  disabled={!proposeUrl.trim() || proposing}
-                  className="btn-primary flex items-center gap-1.5"
-                >
+                <button onClick={handlePropose} disabled={!proposeUrl.trim() || proposing}
+                  className="px-3 py-1.5 rounded-lg bg-[hsl(var(--accent))] text-white text-[12px] font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center gap-1.5">
                   {proposing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
                   Proposer
                 </button>
-                {proposeError && (
-                  <p className="text-[12px] text-[hsl(var(--red))]">{proposeError}</p>
+                {proposeError && <p className="text-[12px] text-[hsl(var(--red))]">{proposeError}</p>}
+              </div>
+
+            </div>
+          </div>
+
+          {/* ── Briefing projet ─────────────────────────────────────────── */}
+          <div hidden={tab !== 'briefing'}><ProjectBriefingTab projectId={projectId} /></div>
+
+          {/* ── Connexion IDE ───────────────────────────────────────────── */}
+          <div hidden={tab !== 'ide'}>
+            <div className="space-y-5">
+
+              {/* Intro */}
+              <div className="card space-y-2">
+                <p className="text-[13px] text-[hsl(var(--text-2))]">
+                  Connectez votre IDE au RAG de ce projet. Chaque clé donne accès en lecture seule
+                  au RAG et Knowledge Graph de ce projet — sans accès à votre espace personnel.
+                </p>
+              </div>
+
+              {/* Modale clé générée */}
+              {newKey && (
+                <div className="card border border-[hsl(var(--accent)/.4)] bg-[hsl(var(--accent)/.06)] space-y-3">
+                  <p className="text-[12px] font-mono text-[hsl(var(--text-3))] uppercase tracking-wider">Nouvelle clé — copiez-la maintenant</p>
+                  <p className="text-[11px] text-[hsl(var(--text-2))]">Elle ne sera plus affichée après fermeture de cette section.</p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 bg-[hsl(var(--bg-1))] border border-[hsl(var(--line))] rounded-lg px-3 py-2 text-[13px] font-mono text-[hsl(var(--text))] truncate">
+                      {newKey}
+                    </code>
+                    <button
+                      onClick={() => copyToClipboard(newKey, 'key')}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[hsl(var(--accent))] text-white text-[12px] font-medium hover:opacity-90 transition-opacity"
+                    >
+                      {copiedKey ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                      {copiedKey ? 'Copié' : 'Copier'}
+                    </button>
+                    <button onClick={() => setNewKey(null)} className="p-2 rounded-lg hover:bg-[hsl(var(--bg-1))] text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))] transition-colors">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Clés actives */}
+              <div className="card space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-mono text-[hsl(var(--text-3))] uppercase tracking-wider">Clés actives</p>
+                  <button
+                    onClick={handleGenerateKey}
+                    disabled={generatingKey}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[hsl(var(--accent))] text-white text-[12px] font-medium hover:opacity-90 disabled:opacity-50 transition-all"
+                  >
+                    {generatingKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Key className="w-3.5 h-3.5" />}
+                    Générer une clé
+                  </button>
+                </div>
+
+                {apiKeys.length === 0 ? (
+                  <p className="text-[13px] text-[hsl(var(--text-3))] py-2">Aucune clé active.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {apiKeys.map(k => (
+                      <div key={k.id} className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-[hsl(var(--bg-1))] border border-[hsl(var(--line))]">
+                        <div className="space-y-0.5">
+                          <p className="text-[13px] font-mono text-[hsl(var(--text))]">{k.key_prefix}…</p>
+                          <p className="text-[11px] text-[hsl(var(--text-3))]">
+                            Créée le {new Date(k.created_at).toLocaleDateString('fr-FR')}
+                            {k.last_used_at && ` · Utilisée le ${new Date(k.last_used_at).toLocaleDateString('fr-FR')}`}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleRevokeKey(k.id)}
+                          className="p-1.5 rounded-md hover:bg-[hsl(var(--red)/.1)] text-[hsl(var(--text-3))] hover:text-[hsl(var(--red))] transition-colors"
+                          title="Révoquer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
 
-              {/* Proposals list */}
-              <div className="space-y-2">
-                {proposals.length === 0 && (
-                  <p className="text-center py-8 text-[13px] text-[hsl(var(--text-3))]">Aucune proposition</p>
-                )}
-                {proposals.map(p => (
-                  <div key={p.id}
-                    className="flex items-center justify-between gap-4 px-4 py-3 rounded-xl border border-[hsl(var(--line))] bg-[hsl(var(--bg-1))]">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-medium text-[hsl(var(--text))] truncate">{p.name || p.url}</p>
-                      <p className="text-[11px] font-mono text-[hsl(var(--text-3))] truncate">{p.url}</p>
+              {/* Configs IDE */}
+              {apiKeys.length > 0 && (() => {
+                const firstKey = apiKeys[0]
+                const baseUrl = `${window.location.protocol}//${window.location.hostname}:8000`
+                const claudeConfig = JSON.stringify({
+                  mcpServers: {
+                    [`argos-${project.name?.toLowerCase().replace(/\s+/g, '-') || 'projet'}`]: {
+                      type: 'http',
+                      url: `${baseUrl}/mcp`,
+                      headers: { Authorization: `Bearer ${firstKey.key_prefix}… (remplacez par la clé complète)` }
+                    }
+                  }
+                }, null, 2)
+
+                return (
+                  <div className="card space-y-4">
+                    <p className="text-[11px] font-mono text-[hsl(var(--text-3))] uppercase tracking-wider">Configuration IDE</p>
+                    <p className="text-[12px] text-[hsl(var(--text-2))]">
+                      Ajoutez ce bloc dans votre <code className="font-mono bg-[hsl(var(--bg-1))] px-1 rounded">~/.claude/mcp.json</code> (Claude Desktop) ou dans les paramètres MCP de Cursor / VS Code.
+                    </p>
+                    <div className="relative">
+                      <pre className="bg-[hsl(var(--bg-1))] border border-[hsl(var(--line))] rounded-lg p-4 text-[12px] font-mono text-[hsl(var(--text-2))] overflow-x-auto whitespace-pre-wrap">
+                        {claudeConfig}
+                      </pre>
+                      <button
+                        onClick={() => copyToClipboard(claudeConfig, 'claude')}
+                        className="absolute top-2 right-2 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-[hsl(var(--bg))] border border-[hsl(var(--line))] text-[11px] text-[hsl(var(--text-2))] hover:text-[hsl(var(--text))] transition-colors"
+                      >
+                        {copiedConfig === 'claude' ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                        {copiedConfig === 'claude' ? 'Copié' : 'Copier'}
+                      </button>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
-                        p.status === 'approved'
-                          ? 'bg-[hsl(var(--aqua)/.1)] text-[hsl(var(--aqua))] border-[hsl(var(--aqua)/.3)]'
-                          : p.status === 'rejected'
-                          ? 'bg-[hsl(var(--red)/.1)] text-[hsl(var(--red))] border-[hsl(var(--red)/.3)]'
-                          : 'bg-[hsl(var(--yellow)/.1)] text-[hsl(var(--yellow))] border-[hsl(var(--yellow)/.3)]'
-                      }`}>
-                        {p.status}
-                      </span>
-                      {p.status === 'pending' && (
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => handleReview(p.id, 'approved')}
-                            className="w-6 h-6 rounded flex items-center justify-center bg-[hsl(var(--aqua)/.12)] text-[hsl(var(--aqua))] hover:bg-[hsl(var(--aqua)/.25)] transition-colors"
-                          >
-                            <Check className="w-3 h-3" />
-                          </button>
-                          <button
-                            onClick={() => handleReview(p.id, 'rejected')}
-                            className="w-6 h-6 rounded flex items-center justify-center bg-[hsl(var(--red)/.12)] text-[hsl(var(--red))] hover:bg-[hsl(var(--red)/.25)] transition-colors"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                    <p className="text-[11px] text-[hsl(var(--text-3))]">
+                      Remplacez la valeur <code className="font-mono bg-[hsl(var(--bg-1))] px-1 rounded">Authorization</code> par votre clé complète générée ci-dessus.
+                    </p>
                   </div>
-                ))}
-              </div>
+                )
+              })()}
+
             </div>
-          )}
+          </div>
+
+          {/* ── Métriques ───────────────────────────────────────────────── */}
+          <div hidden={tab !== 'metriques'}><MetriquesTab projectId={Number(id)} /></div>
+
           {/* ── Réglages ────────────────────────────────────────────────── */}
-          {tab === 'reglages' && settings && (
+          <div hidden={tab !== 'reglages'}>{settings && (
             <div className="space-y-6">
 
               {/* Identité */}
@@ -761,7 +1012,7 @@ export default function ProjetDetail() {
                 <button
                   onClick={handleSaveSettings}
                   disabled={savingSettings}
-                  className="btn-primary flex items-center gap-2"
+                  className="px-3 py-1.5 rounded-lg bg-[hsl(var(--accent))] text-white text-[12px] font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center gap-2"
                 >
                   {savingSettings ? <Loader2 className="w-4 h-4 animate-spin" /> : settingsSaved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
                   {settingsSaved ? 'Sauvegardé' : 'Sauvegarder'}
@@ -769,8 +1020,256 @@ export default function ProjetDetail() {
               </div>
             </div>
           )}
+          </div>
 
-        </motion.div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ProjectBriefingTab({ projectId }: { projectId: number }) {
+  const [today, setToday]         = useState<any>(null)
+  const [selected, setSelected]   = useState<any>(null)
+  const [history, setHistory]     = useState<any[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [generating, setGenerating] = useState(false)
+  const [hours, setHours]         = useState(72)
+  const [histOpen, setHistOpen]   = useState(false)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
+
+  useEffect(() => { loadAll() }, [])
+
+  async function loadAll() {
+    setLoading(true)
+    try {
+      const [t, h] = await Promise.all([
+        api.getProjectBriefingToday(projectId),
+        api.listProjectBriefings(projectId),
+      ])
+      setToday(t)
+      setHistory(Array.isArray(h) ? h : [])
+      if (t?.exists) setSelected(t)
+    } catch { /* silencieux */ }
+    finally { setLoading(false) }
+  }
+
+  async function generate(force = false) {
+    setGenerating(true)
+    try {
+      const r = await api.generateProjectBriefing(projectId, hours, force)
+      if (r.already_exists) {
+        const existing = await api.getBriefing(r.id)
+        setToday({ ...existing, exists: true })
+        setSelected({ ...existing, exists: true })
+      } else if (r.no_new_content) {
+        setToday({ exists: false, no_new_content: true })
+        setSelected(null)
+      } else {
+        setToday({ ...r, exists: true })
+        setSelected({ ...r, exists: true })
+        await loadAll()
+      }
+    } catch (e: any) { alert(`Erreur : ${e.message}`) }
+    finally { setGenerating(false) }
+  }
+
+  async function deleteBriefing(id: number) {
+    setDeletingId(id)
+    try {
+      await api.deleteBriefing(id)
+      setHistory(prev => prev.filter(b => b.id !== id))
+      if (selected?.id === id) setSelected(null)
+      if (today?.id === id) setToday(null)
+    } catch (e: any) { alert(`Erreur : ${e.message}`) }
+    finally { setDeletingId(null) }
+  }
+
+  return (
+    <div className="space-y-5">
+
+      {/* Header */}
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-[11px] font-mono text-[hsl(var(--text-3))] uppercase tracking-wider">
+          Briefing — sources du projet uniquement
+        </p>
+        <div className="flex items-center gap-2">
+          <select value={hours} onChange={e => setHours(Number(e.target.value))}
+            className="bg-[hsl(var(--bg-2))] border border-[hsl(var(--line))] rounded px-2 py-1.5 text-[11.5px] font-mono text-[hsl(var(--text-2))] outline-none">
+            {[24, 48, 72, 168].map(h => <option key={h} value={h}>{h === 168 ? '7j' : `${h}h`}</option>)}
+          </select>
+          <motion.button
+            onClick={() => generate(!!today?.exists)}
+            disabled={generating || loading}
+            whileTap={{ scale: 0.95 }}
+            className="flex items-center gap-2 px-4 py-2 rounded bg-[hsl(var(--accent))] text-white text-[12.5px] font-bold disabled:opacity-40 transition-opacity"
+          >
+            {generating
+              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Génération…</>
+              : today?.exists
+                ? <><RefreshCw className="w-3.5 h-3.5" />Regénérer</>
+                : <><Sparkles className="w-3.5 h-3.5" />Générer le brief</>
+            }
+          </motion.button>
+        </div>
+      </div>
+
+      {loading && (
+        <div className="flex justify-center py-16">
+          <Loader2 className="w-5 h-5 animate-spin text-[hsl(var(--text-3))]" />
+        </div>
+      )}
+
+      {!loading && !selected && !generating && (
+        <div className="panel p-10 flex flex-col items-center gap-4 text-center">
+          <Newspaper className="w-10 h-10 text-[hsl(var(--text-3))] opacity-30" />
+          <div>
+            <p className="text-[14px] font-semibold text-[hsl(var(--text))]">Brief non généré</p>
+            <p className="text-[12px] text-[hsl(var(--text-3))] mt-1">
+              Lancez le pipeline puis générez le brief pour voir les résultats.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {selected && !loading && (
+        <BriefingPanel briefingData={selected} />
+      )}
+
+      {/* Historique */}
+      {history.length > 0 && (
+        <div>
+          <button onClick={() => setHistOpen(v => !v)}
+            className="flex items-center gap-2 mb-3 text-[12px] font-semibold text-[hsl(var(--text-2))] hover:text-[hsl(var(--text))] transition-colors">
+            <motion.div animate={{ rotate: histOpen ? 0 : -90 }} transition={{ duration: 0.18 }}>
+              <ChevronDown className="w-3.5 h-3.5" />
+            </motion.div>
+            Historique ({history.length} briefings)
+          </button>
+          <AnimatePresence>
+            {histOpen && (
+              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                <div className="panel overflow-hidden divide-y divide-[hsl(var(--line))]">
+                  {history.map((b: any) => (
+                    <div key={b.id}
+                      className={`flex items-center gap-2 group/row transition-colors ${selected?.id === b.id ? 'bg-[hsl(var(--accent-dim))]' : 'hover:bg-[hsl(var(--bg-2))]'}`}>
+                      <button onClick={async () => { const full = await api.getBriefing(b.id); setSelected(full) }}
+                        className="flex-1 text-left px-4 py-3 flex items-center justify-between gap-4">
+                        <div>
+                          <p className="text-[12.5px] font-semibold text-[hsl(var(--text))]">
+                            {new Date(b.date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}
+                          </p>
+                          <p className="text-[11px] text-[hsl(var(--text-3))] line-clamp-1 mt-0.5">{b.excerpt?.replace(/#+\s/g, '')}</p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0 text-[10.5px] font-mono text-[hsl(var(--text-3))]">
+                          {b.stats?.total_items && <span>{b.stats.total_items} items</span>}
+                          <span>{timeAgo(b.generated_at)}</span>
+                        </div>
+                      </button>
+                      <button
+                        onClick={() => deleteBriefing(b.id)}
+                        disabled={deletingId === b.id}
+                        className="mr-3 p-1.5 rounded opacity-0 group-hover/row:opacity-100 text-[hsl(var(--text-3))] hover:text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-40"
+                      >
+                        {deletingId === b.id
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          : <Trash2 className="w-3.5 h-3.5" />
+                        }
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MetriquesTab({ projectId }: { projectId: number }) {
+  const [metrics, setMetrics] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [days, setDays] = useState(30)
+
+  useEffect(() => {
+    setLoading(true)
+    api.getProjectMetrics(projectId, days)
+      .then(d => { setMetrics(d); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [projectId, days])
+
+  if (loading) return <div className="flex justify-center p-8"><Loader2 className="w-5 h-5 animate-spin text-[hsl(var(--accent))]" /></div>
+  if (!metrics?.quality) return <div className="text-sm text-[hsl(var(--text-3))] p-4">Aucune métrique disponible.</div>
+
+  const q = metrics.quality
+  const ScoreChip = ({ v }: { v: number }) => {
+    const cls = v >= 4 ? 'text-green-400' : v >= 3 ? 'text-yellow-400' : 'text-red-400'
+    return <span className={`font-bold tabular-nums ${cls}`}>{v.toFixed(2)}</span>
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center gap-3 justify-between">
+        <p className="text-[11px] font-mono text-[hsl(var(--text-3))] uppercase tracking-wider">Métriques — {days} derniers jours</p>
+        <select value={days} onChange={e => setDays(Number(e.target.value))}
+          className="text-[12px] bg-[hsl(var(--bg))] border border-[hsl(var(--line))] rounded-md px-2 py-1">
+          {[7, 14, 30, 90].map(d => <option key={d} value={d}>{d}j</option>)}
+        </select>
+      </div>
+
+      {/* Quality KPIs */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: 'Score global', v: q.avg_global },
+          { label: 'Fidélité', v: q.avg_fidelity },
+          { label: 'Complétude', v: q.avg_completeness },
+          { label: 'Pertinence', v: q.avg_relevance },
+        ].map(({ label, v }) => (
+          <div key={label} className="rounded-xl border border-[hsl(var(--line))] p-3">
+            <div className="text-[10px] text-[hsl(var(--text-3))] mb-1">{label}</div>
+            <div className="text-xl">{q.total_scored > 0 ? <ScoreChip v={v} /> : <span className="text-[hsl(var(--text-3))]">—</span>}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Trend */}
+      {metrics.quality_trend?.length > 0 && (
+        <div className="rounded-xl border border-[hsl(var(--line))] p-4">
+          <p className="text-[11px] font-mono text-[hsl(var(--text-3))] mb-3">Évolution score global</p>
+          <ResponsiveContainer width="100%" height={150}>
+            <LineChart data={metrics.quality_trend}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--line))" />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+              <YAxis domain={[1, 5]} tick={{ fontSize: 10 }} />
+              <Tooltip />
+              <Line type="monotone" dataKey="avg_global" stroke="hsl(var(--accent))" dot={false} strokeWidth={2} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Costs */}
+      <div className="rounded-xl border border-[hsl(var(--line))] p-4">
+        <p className="text-[11px] font-mono text-[hsl(var(--text-3))] mb-2">Coûts LLM</p>
+        <p className="text-xl font-bold">${metrics.costs.total_usd.toFixed(4)}</p>
+        {metrics.costs.by_operation?.length > 0 && (
+          <div className="mt-2 space-y-1">
+            {metrics.costs.by_operation.map((op: any) => (
+              <div key={op.operation_type} className="flex justify-between text-[12px] text-[hsl(var(--text-2))]">
+                <span>{op.operation_type}</span>
+                <span>${op.cost_usd.toFixed(4)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {q.total_scored === 0 && (
+          <p className="mt-3 text-[11px] text-[hsl(var(--text-3))]">
+            Aucun digest évalué pour cette période — les scores apparaîtront après le prochain ingest.
+          </p>
+        )}
       </div>
     </div>
   )

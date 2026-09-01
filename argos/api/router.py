@@ -14,6 +14,7 @@ from pathlib import Path
 from argos.database import DatabaseManager
 from argos.config import settings
 from argos.services.llm_provider import create_llm_provider
+from argos.services.digest_judge import judge_digest
 
 logger = logging.getLogger(__name__)
 
@@ -979,6 +980,17 @@ async def ingest_pdf_from_url(data: Dict[str, Any]):
 
         await _auto_rag_index(row[0], row[1], json_data.get("summary", ""), json_data.get("digest_markdown", ""))
 
+        if digest.get("markdown") and row[0]:
+            import asyncio as _asyncio_j
+            _asyncio_j.create_task(judge_digest(
+                article_content=text,
+                digest_markdown=digest["markdown"],
+                context_profile="",
+                item_id=row[0],
+                workspace_id=workspace_id,
+                db=db,
+            ))
+
         return {
             "success": True,
             "item_id": row[0],
@@ -1213,6 +1225,17 @@ async def ingest_preview(item_id: int):
                         conn.commit()
             except Exception as save_err:
                 logger.warning(f"Could not save content for item {item_id}: {save_err}")
+
+        if need_digest and digest_md and item_id:
+            import asyncio as _asyncio_j
+            _asyncio_j.create_task(judge_digest(
+                article_content=cleaned_content or content,
+                digest_markdown=digest_md,
+                context_profile="",
+                item_id=item_id,
+                workspace_id=None,
+                db=db,
+            ))
 
         return {
             "item_id": item_id,
@@ -3241,6 +3264,106 @@ async def admin_fetch_and_tag(
     return {"status": "started", "count": len(item_ids)}
 
 
+@api_router.get("/admin/quality-metrics")
+async def admin_quality_metrics(
+    days: int = 30,
+    x_admin_token: Optional[str] = Header(default=None),
+):
+    """Métriques qualité des digests (LLM-as-judge) — accès admin."""
+    _check_admin(x_admin_token)
+    with db.get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT
+                    judge_model,
+                    COUNT(*) as total,
+                    ROUND(AVG(score_global)::numeric, 2) as avg_global,
+                    ROUND(AVG(score_fidelity)::numeric, 2) as avg_fidelity,
+                    ROUND(AVG(score_completeness)::numeric, 2) as avg_completeness,
+                    ROUND(AVG(score_relevance)::numeric, 2) as avg_relevance,
+                    ROUND(AVG(score_concision)::numeric, 2) as avg_concision,
+                    COUNT(*) FILTER (WHERE score_global < 3) as low_quality_count
+                FROM digest_scores
+                WHERE created_at >= NOW() - INTERVAL '%s days'
+                GROUP BY judge_model
+            """, (days,))
+            model_stats = [
+                {
+                    "judge_model": r[0], "total": r[1], "avg_global": float(r[2] or 0),
+                    "avg_fidelity": float(r[3] or 0), "avg_completeness": float(r[4] or 0),
+                    "avg_relevance": float(r[5] or 0), "avg_concision": float(r[6] or 0),
+                    "low_quality_count": r[7],
+                }
+                for r in cur.fetchall()
+            ]
+
+            cur.execute("""
+                SELECT ds.item_id, i.title, i.url, ds.score_global, ds.rationale, ds.created_at
+                FROM digest_scores ds
+                JOIN items i ON i.id = ds.item_id
+                WHERE ds.score_global < 3 AND ds.created_at >= NOW() - INTERVAL '%s days'
+                ORDER BY ds.score_global ASC
+                LIMIT 20
+            """, (days,))
+            low_quality = [
+                {"item_id": r[0], "title": r[1], "url": r[2],
+                 "score": float(r[3] or 0), "rationale": r[4],
+                 "scored_at": r[5].isoformat() if r[5] else None}
+                for r in cur.fetchall()
+            ]
+
+            cur.execute("""
+                SELECT DATE_TRUNC('day', created_at)::date as day,
+                       ROUND(AVG(score_global)::numeric, 2) as avg
+                FROM digest_scores
+                WHERE created_at >= NOW() - INTERVAL '%s days'
+                GROUP BY day ORDER BY day
+            """, (days,))
+            trend = [{"date": str(r[0]), "avg_global": float(r[1] or 0)} for r in cur.fetchall()]
+
+    return {"period_days": days, "by_model": model_stats, "low_quality_items": low_quality, "trend": trend}
+
+
+@api_router.get("/admin/cost-metrics")
+async def admin_cost_metrics(
+    days: int = 30,
+    x_admin_token: Optional[str] = Header(default=None),
+):
+    """Métriques de coûts LLM — accès admin."""
+    _check_admin(x_admin_token)
+    with db.get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT operation_type, model,
+                       COUNT(*) as calls,
+                       SUM(tokens_used) as tokens,
+                       ROUND(SUM(cost_usd)::numeric, 4) as cost_usd
+                FROM llm_usage
+                WHERE created_at >= NOW() - INTERVAL '%s days'
+                GROUP BY operation_type, model
+                ORDER BY cost_usd DESC
+            """, (days,))
+            by_operation = [
+                {"operation_type": r[0], "model": r[1], "calls": r[2],
+                 "tokens": r[3], "cost_usd": float(r[4] or 0)}
+                for r in cur.fetchall()
+            ]
+
+            cur.execute("""
+                SELECT DATE_TRUNC('day', created_at)::date as day,
+                       ROUND(SUM(cost_usd)::numeric, 4) as cost
+                FROM llm_usage
+                WHERE created_at >= NOW() - INTERVAL '%s days'
+                GROUP BY day ORDER BY day
+            """, (days,))
+            trend = [{"date": str(r[0]), "cost_usd": float(r[1] or 0)} for r in cur.fetchall()]
+
+            cur.execute("SELECT ROUND(SUM(cost_usd)::numeric, 4) FROM llm_usage WHERE created_at >= NOW() - INTERVAL '%s days'", (days,))  # noqa
+            total = float(cur.fetchone()[0] or 0)
+
+    return {"period_days": days, "total_cost_usd": total, "by_operation": by_operation, "trend": trend}
+
+
 # ===========================================
 # Web Tools Endpoints — REST wrappers for web.browse / web.search / web.digest
 # ===========================================
@@ -4514,7 +4637,18 @@ Critères : pertinence au sujet, contenu substantiel, sources diversifiées, év
                         )
                         row = cur.fetchone()
                         conn.commit()
-                        return row[0] if row else None
+                        item_id_new = row[0] if row else None
+                        if item_id_new and digest.get("markdown"):
+                            import asyncio as _asyncio_j
+                            _asyncio_j.create_task(judge_digest(
+                                article_content=content,
+                                digest_markdown=digest["markdown"],
+                                context_profile="",
+                                item_id=item_id_new,
+                                workspace_id=workspace_id,
+                                db=db,
+                            ))
+                        return item_id_new
             except Exception as e:
                 logger.warning(f"on-demand digest failed for {url}: {e}")
                 return None
@@ -4792,7 +4926,7 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
             cur.execute(f"""
                 SELECT id, title, summary, url, importance, item_type,
                        keywords, source_type, reliability_tier, reliability_score,
-                       created_at, sujet_id, content_tags
+                       created_at, sujet_id, content_tags, digest_markdown
                 FROM items
                 WHERE reliability_passed = TRUE
                   AND classification_status = 'classified'
@@ -4842,7 +4976,7 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
                     SELECT id, title, summary, url, importance, item_type,
                            keywords, source_type,
                            NULL as reliability_tier, NULL as reliability_score,
-                           created_at, sujet_id, content_tags
+                           created_at, sujet_id, content_tags, digest_markdown
                     FROM items
                     WHERE classification_status = 'classified'
                       AND reliability_passed IS NULL
@@ -4860,7 +4994,7 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
             url = r[3] or ""
             domain_result = score_domain(url)
             if domain_result.passed:
-                rows_pass.append(r[:8] + (domain_result.domain_tier, domain_result.score, r[10], r[11]))
+                rows_pass.append(r[:8] + (domain_result.domain_tier, domain_result.score, r[10], r[11], r[12], r[13] if len(r) > 13 else None))
                 # Mettre à jour en base pour les prochains appels
                 try:
                     with db.get_connection() as conn:
@@ -4916,6 +5050,7 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
             "created_at":       r[10].isoformat() if r[10] else None,
             "sujet_id":         r[11],
             "content_tags":     r[12] or {},
+            "digest_markdown":  r[13] or "",
         }
         for r in rows
     ]
@@ -4946,7 +5081,7 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
     for group_name, group_items in groups.items():
         block_lines = []
         for it in group_items[:5]:  # max 5 items par groupe
-            summary_line = it["summary"][:200].replace("\n", " ").strip()
+            summary_line = (it.get("digest_markdown") or it["summary"])[:400].replace("\n", " ").strip()
             if not summary_line:
                 summary_line = "(pas de résumé disponible)"
             block_lines.append(
@@ -5223,7 +5358,7 @@ async def get_today_briefing(sujet_id: Optional[int] = Query(default=None)):
             diag = {}
             with db.get_connection() as conn2:
                 with conn2.cursor() as cur2:
-                    cur2.execute("SELECT COUNT(*) FROM sources WHERE is_active = TRUE")
+                    cur2.execute("SELECT COUNT(*) FROM sources WHERE active = TRUE")
                     diag["sources_actives"] = cur2.fetchone()[0]
                     cur2.execute(
                         "SELECT COUNT(*) FROM items WHERE collected_at::date = %s", (today,)

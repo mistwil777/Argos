@@ -224,12 +224,30 @@ export const api = {
     request<any>(`/api/v1/projects/${projectId}/transfer-ownership`, { method: 'POST', body: JSON.stringify({ new_owner_member_id: newOwnerMemberId }) }),
   suggestProjectSources: (projectId: number) =>
     request<any>(`/api/v1/projects/${projectId}/suggest-sources`, { method: 'POST' }),
+  getProjectMetrics: (projectId: number, days = 30) =>
+    request<any>(`/api/v1/projects/${projectId}/metrics?days=${days}`),
+  runProjectPipeline: (projectId: number, proposalIds?: number[]) =>
+    request<any>(`/api/v1/projects/${projectId}/run-pipeline`, {
+      method: 'POST',
+      body: JSON.stringify({ proposal_ids: proposalIds ?? null }),
+    }),
+  getSourceProposalsBySubject: (projectId: number) =>
+    request<any>(`/api/v1/projects/${projectId}/source-proposals?grouped=true`),
+  getProjectBriefingToday: (projectId: number) =>
+    request<any>(`/api/v1/projects/${projectId}/briefing/today`),
+  generateProjectBriefing: (projectId: number, hours = 72, force = false) =>
+    request<any>(`/api/v1/projects/${projectId}/briefing/generate`, { method: 'POST', body: JSON.stringify({ hours, force }) }),
+  listProjectBriefings: (projectId: number, limit = 30) =>
+    request<any[]>(`/api/v1/projects/${projectId}/briefing/list?limit=${limit}`),
   listSourceProposals: (id: number, status?: string) =>
     request<any[]>(`/api/v1/projects/${id}/source-proposals${status ? `?status=${status}` : ''}`),
   proposeSource: (id: number, data: any) =>
     request<any>(`/api/v1/projects/${id}/source-proposals`, { method: 'POST', body: JSON.stringify(data) }),
   reviewProposal: (projectId: number, proposalId: number, data: any) =>
     request<any>(`/api/v1/projects/${projectId}/source-proposals/${proposalId}/review`, { method: 'PATCH', body: JSON.stringify(data) }),
+  listProjectApiKeys: (id: number) => request<any[]>(`/api/v1/projects/${id}/api-keys`),
+  createProjectApiKey: (id: number) => request<any>(`/api/v1/projects/${id}/api-keys`, { method: 'POST' }),
+  revokeProjectApiKey: (id: number, keyId: number) => request<void>(`/api/v1/projects/${id}/api-keys/${keyId}`, { method: 'DELETE' }),
   analyzeCdcStandalone: (cdc_text: string) =>
     request<any>('/api/v1/calibration/analyze', { method: 'POST', body: JSON.stringify({ cdc_text }) }),
   analyzeCdc: (id: number, cdc_text: string) =>

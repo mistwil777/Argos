@@ -52,21 +52,36 @@ export default function ProjetNouveau() {
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
 
-  // localStorage — restauration au montage
+  // localStorage — restauration au montage uniquement si le projet existe encore en base
   useEffect(() => {
     const saved = localStorage.getItem('argos_projet_nouveau')
     if (!saved) return
     try {
       const d = JSON.parse(saved)
-      if (d.name) setName(d.name)
-      if (d.desc) setDesc(d.desc)
-      if (d.cdcText) setCdcText(d.cdcText)
-      if (d.cdcAnalysis) setCdcAnalysis(d.cdcAnalysis)
-      if (d.editableSubjects) setEditableSubjects(d.editableSubjects)
-      if (d.qaHistory) setQaHistory(d.qaHistory)
-      if (d.interviewDone) setInterviewDone(d.interviewDone)
-      if (d.step && d.step !== 'finalisation') setStep(d.step)
-    } catch {}
+      if (!d.createdProjectId) {
+        localStorage.removeItem('argos_projet_nouveau')
+        return
+      }
+      // Vérifier que le projet existe encore en DB avant de restaurer
+      api.getProject(d.createdProjectId)
+        .then(() => {
+          if (d.name) setName(d.name)
+          if (d.desc) setDesc(d.desc)
+          if (d.cdcText) setCdcText(d.cdcText)
+          if (d.cdcAnalysis) setCdcAnalysis(d.cdcAnalysis)
+          if (d.editableSubjects) setEditableSubjects(d.editableSubjects)
+          if (d.qaHistory) setQaHistory(d.qaHistory)
+          if (d.interviewDone) setInterviewDone(d.interviewDone)
+          if (d.step && d.step !== 'finalisation') setStep(d.step)
+          setCreatedProjectId(d.createdProjectId)
+        })
+        .catch(() => {
+          // Projet supprimé — on repart de zéro
+          localStorage.removeItem('argos_projet_nouveau')
+        })
+    } catch {
+      localStorage.removeItem('argos_projet_nouveau')
+    }
   }, [])
 
   // localStorage — sauvegarde sur chaque changement d'état clé
@@ -74,7 +89,7 @@ export default function ProjetNouveau() {
     if (step === 'infos' && !name) return
     localStorage.setItem('argos_projet_nouveau', JSON.stringify({
       step, name, desc, cdcText, cdcAnalysis, editableSubjects,
-      qaHistory, interviewDone,
+      qaHistory, interviewDone, createdProjectId,
     }))
   }, [step, name, desc, cdcText, cdcAnalysis, editableSubjects, qaHistory, interviewDone])
 
@@ -317,13 +332,18 @@ export default function ProjetNouveau() {
                 <p className="text-[13px] font-medium text-[hsl(var(--text))]">
                   {editableSubjects.length} sujets identifiés
                 </p>
+                <div className="flex items-center gap-4 text-[10px] font-mono text-[hsl(var(--text-3))]">
+                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[hsl(var(--accent))] inline-block" />prioritaire</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[hsl(var(--yellow))] inline-block" />secondaire</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[hsl(var(--text-2))] inline-block" />contexte</span>
+                </div>
                 <div className="space-y-2">
                   {editableSubjects.map((s: any, i: number) => (
                     <div key={i} className="flex items-start gap-3 px-3 py-2 rounded-lg bg-[hsl(var(--bg))] group">
-                      <span className={`mt-0.5 flex-shrink-0 w-2 h-2 rounded-full ${
-                        s.priority === 'high' ? 'bg-[hsl(var(--accent))]' :
-                        s.priority === 'medium' ? 'bg-[hsl(var(--yellow))]' :
-                        'bg-[hsl(var(--text-3))]'
+                      <span className={`mt-1 flex-shrink-0 w-2 h-2 rounded-full ${
+                        (s.priority ?? 'low') === 'high' ? 'bg-[hsl(var(--accent))]' :
+                        (s.priority ?? 'low') === 'medium' ? 'bg-[hsl(var(--yellow))]' :
+                        'bg-[hsl(var(--text-2))]'
                       }`} />
                       <div className="flex-1 min-w-0">
                         <p className="text-[13px] font-medium text-[hsl(var(--text))]">{s.name}</p>
@@ -396,7 +416,7 @@ export default function ProjetNouveau() {
                     <button
                       onClick={() => handleFinalize(qaHistory)}
                       disabled={loading}
-                      className="btn-primary flex items-center gap-2"
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[hsl(var(--accent))] text-white text-[13px] font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity"
                     >
                       {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                       Finaliser le projet
