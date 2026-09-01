@@ -115,6 +115,11 @@ export default function ProjetDetail() {
     loadSubjectProposals()
   }, [projectId])
 
+  // Recharge les proposals quand on revient sur Sujets ou Propositions
+  useEffect(() => {
+    if (tab === 'sujets' || tab === 'propositions') loadSubjectProposals()
+  }, [tab])
+
   async function handleInvite() {
     if (!inviteEmail.trim()) return
     setInviting(true); setInviteError(null)
@@ -317,7 +322,7 @@ export default function ProjetDetail() {
           {([
             { id: 'sujets' as Tab, icon: Folder, label: 'Sujets' },
             { id: 'membres' as Tab, icon: Users, label: `Membres (${members.length})` },
-            { id: 'propositions' as Tab, icon: FileText, label: `Propositions (${proposals.filter(p => p.status === 'pending').length})` },
+            { id: 'propositions' as Tab, icon: FileText, label: `Propositions (${proposals.filter(p => p.status !== 'rejected').length})` },
             { id: 'briefing' as Tab, icon: Newspaper, label: 'Briefing' },
             { id: 'ide' as Tab, icon: Terminal, label: 'Connexion IDE' },
             { id: 'metriques' as Tab, icon: BarChart3, label: 'Métriques' },
@@ -690,14 +695,14 @@ export default function ProjetDetail() {
                 </div>
                 {suggestError && <p className="text-[12px] text-[hsl(var(--red))]">{suggestError}</p>}
 
-                {proposals.filter(p => p.status === 'pending').length === 0 && (
+                {proposals.filter(p => p.status !== 'rejected').length === 0 && (
                   <p className="text-[12px] text-[hsl(var(--text-3))] italic">
-                    Aucune suggestion en attente — cliquez "Générer des suggestions" pour démarrer.
+                    Aucune suggestion — cliquez "Générer des suggestions" pour démarrer.
                   </p>
                 )}
 
                 <div className="space-y-2">
-                  {proposals.filter(p => p.status === 'pending').map(p => (
+                  {proposals.filter(p => p.status !== 'rejected').map(p => (
                     <div key={p.id}
                       className="flex items-start gap-3 px-3 py-3 rounded-lg border border-[hsl(var(--yellow)/.3)] bg-[hsl(var(--yellow)/.04)]">
                       <div className="flex-1 min-w-0">
