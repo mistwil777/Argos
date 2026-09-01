@@ -1649,27 +1649,7 @@ async def translate_item(item_id: int, data: Dict[str, Any]):
         raise HTTPException(status_code=404, detail="Item introuvable")
 
     title, digest_markdown, cleaned_content, summary = row
-    content_to_translate = cleaned_content or ""
-
-    # Si cleaned_content absent, scraper l'article en live
-    if not content_to_translate:
-        with db.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT url FROM items WHERE id = %s", (item_id,))
-                url_row = cur.fetchone()
-        if url_row:
-            try:
-                from argos.services.web_browser import browse, html_to_markdown
-                browse_result = await browse(url_row[0], use_playwright=True)
-                raw_html = browse_result.get("html", "")
-                scraped = html_to_markdown(raw_html) if raw_html else browse_result.get("content", "")
-                if scraped and len(scraped) > 150:
-                    content_to_translate = scraped
-            except Exception:
-                pass
-
-    if not content_to_translate:
-        content_to_translate = digest_markdown or summary or ""
+    content_to_translate = cleaned_content or digest_markdown or summary or ""
     if not content_to_translate:
         raise HTTPException(status_code=422, detail="Aucun contenu à traduire")
 

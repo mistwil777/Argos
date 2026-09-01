@@ -108,19 +108,21 @@ export default function ItemReaderModal({ itemId, onClose, onSaved, onGenerateRe
   // Auto-traduction après chargement
   useEffect(() => {
     if (loading || paragraphs.length === 0) return
-    api.me().then((u: any) => {
+    api.me().then(async (u: any) => {
       const lang = u?.preferences?.reading_language || ''
       if (!lang) return
       setTranslating(true)
-      api.translateItem(itemId, lang)
-        .then((t: any) => {
-          if (t?.translated) {
-            setParagraphs(formatRawContent(t.translated))
-            setTranslatedLang(lang)
-          }
-        })
-        .catch(() => {})
-        .finally(() => setTranslating(false))
+      try {
+        // ingestPreview sauvegarde cleaned_content en base — nécessaire pour que
+        // translateItem ait accès au texte complet de l'article
+        await api.ingestPreview(itemId)
+        const t = await api.translateItem(itemId, lang)
+        if (t?.translated) {
+          setParagraphs(formatRawContent(t.translated))
+          setTranslatedLang(lang)
+        }
+      } catch {}
+      finally { setTranslating(false) }
     }).catch(() => {})
   }, [loading])
 
