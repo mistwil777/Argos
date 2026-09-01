@@ -58,13 +58,30 @@ async def run_pipeline_for_source(source_id: int) -> dict:
     classified_ids = await _step_classify(src_url, db)
     await _step_verify_domains(src_url, db)
 
+    relevance_stats = {}
+    if src_wid and classified_ids:
+        relevance_stats = await _step_relevance_filter(classified_ids, src_wid, db)
+
     result = {
         "source_id": source_id,
         "inserted": inserted,
         "classified": len(classified_ids),
+        "relevance": relevance_stats,
     }
     logger.info(f"[PIPELINE] Source {source_id} terminée — {result}")
     return result
+
+
+async def _step_relevance_filter(
+    item_ids: list[int], workspace_id: int, db
+) -> dict:
+    """Filtre les items par pertinence projet. Fire-and-forget si erreur."""
+    try:
+        from argos.services.project_relevance_filter import filter_items_by_relevance
+        return await filter_items_by_relevance(item_ids, workspace_id, db)
+    except Exception as e:
+        logger.warning(f"[PIPELINE] Relevance filter échoué (items conservés) : {e}")
+        return {}
 
 
 async def _step_collect(
