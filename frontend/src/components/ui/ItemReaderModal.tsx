@@ -1,6 +1,8 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { X, ExternalLink, Loader2, BookOpen, Save, Check, FileText } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { api } from '@/services/api'
 
 interface Props {
@@ -216,11 +218,13 @@ export default function ItemReaderModal({ itemId, onClose, onSaved, onGenerateRe
           {error && (
             <p className="text-[12.5px] text-[hsl(var(--red))]">{error}</p>
           )}
-          {!loading && !error && paragraphs.map((p, i) => (
-            isHeading(p)
-              ? <p key={i} className="text-[13px] font-semibold text-[hsl(var(--text))] mt-4 first:mt-0">{p}</p>
-              : <p key={i} className="text-[13px] text-[hsl(var(--text-2))] leading-relaxed">{p}</p>
-          ))}
+          {!loading && !error && (
+            <div className="prose prose-sm max-w-none text-[hsl(var(--text-2))] [&_h1]:text-[14px] [&_h1]:font-bold [&_h1]:text-[hsl(var(--text))] [&_h2]:text-[13px] [&_h2]:font-semibold [&_h2]:text-[hsl(var(--text))] [&_h3]:text-[13px] [&_h3]:font-semibold [&_h3]:text-[hsl(var(--text-2))] [&_p]:text-[13px] [&_p]:leading-relaxed [&_li]:text-[13px] [&_a]:text-[hsl(var(--accent))] [&_a]:no-underline [&_strong]:text-[hsl(var(--text))] [&_code]:text-[11px] [&_code]:bg-[hsl(var(--bg-3))] [&_code]:px-1 [&_code]:rounded">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {paragraphs.join('\n\n')}
+              </ReactMarkdown>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
