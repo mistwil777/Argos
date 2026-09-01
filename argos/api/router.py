@@ -1640,7 +1640,7 @@ async def translate_item(item_id: int, data: Dict[str, Any]):
     with db.get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT title, cleaned_content, summary FROM items WHERE id = %s",
+                "SELECT title, digest_markdown, cleaned_content, summary FROM items WHERE id = %s",
                 (item_id,)
             )
             row = cur.fetchone()
@@ -1648,8 +1648,8 @@ async def translate_item(item_id: int, data: Dict[str, Any]):
     if not row:
         raise HTTPException(status_code=404, detail="Item introuvable")
 
-    title, cleaned_content, summary = row
-    content_to_translate = cleaned_content or summary or ""
+    title, digest_markdown, cleaned_content, summary = row
+    content_to_translate = digest_markdown or cleaned_content or summary or ""
     if not content_to_translate:
         raise HTTPException(status_code=422, detail="Aucun contenu à traduire")
 
@@ -4825,7 +4825,7 @@ def _group_items_by_entity(items: list[dict]) -> dict[str, list[dict]]:
     return dict(sorted(groups.items(), key=lambda x: len(x[1]), reverse=True))
 
 
-async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int] = None, sujet_id: Optional[int] = None) -> dict:
+async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int] = None, sujet_id: Optional[int] = None, workspace_ids: Optional[list] = None) -> dict:
     """
     Génère le briefing Delta quotidien.
     N'utilise QUE les items avec reliability_passed = TRUE des dernières {hours}h.
@@ -4835,7 +4835,13 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
     import json as _json
     from argos.services.llm_provider import create_llm_provider
 
-    ws_filter = f"AND workspace_id = {workspace_id}" if workspace_id is not None else ""
+    if workspace_ids:
+        ids_str = ",".join(str(i) for i in workspace_ids)
+        ws_filter = f"AND workspace_id IN ({ids_str})"
+    elif workspace_id is not None:
+        ws_filter = f"AND workspace_id = {workspace_id}"
+    else:
+        ws_filter = ""
     sujet_filter = f"AND sujet_id = {sujet_id}" if sujet_id is not None else ""
     today_str = _dt.date.today().strftime("%d/%m/%Y")
 
@@ -4933,6 +4939,7 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
                   AND importance IN ('high', 'critical')
                   AND created_at > NOW() - INTERVAL '{hours} hours'
                   AND (published_at IS NULL OR published_at > NOW() - INTERVAL '90 days')
+                  AND (user_action IS NULL OR user_action != 'ignored')
                   {exclude_clause}
                   {ws_filter}
                   {sujet_filter}
@@ -4954,6 +4961,7 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
                       AND classification_status = 'classified'
                       AND (published_at IS NULL OR published_at > NOW() - INTERVAL '90 days')
                       AND created_at > NOW() - INTERVAL '72 hours'
+                      AND (user_action IS NULL OR user_action != 'ignored')
                       {exclude_clause}
                       {ws_filter}
                       {sujet_filter}
@@ -4980,6 +4988,7 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
                     FROM items
                     WHERE classification_status = 'classified'
                       AND reliability_passed IS NULL
+                      AND (user_action IS NULL OR user_action != 'ignored')
                       {exclude_clause}
                       {ws_filter}
                       {sujet_filter}

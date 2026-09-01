@@ -467,6 +467,16 @@ def _resolve_project_workspace(project_id: int) -> Optional[int]:
             return row[0] if row else None
 
 
+def _resolve_project_workspaces(project_id: int) -> List[int]:
+    with db.get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id FROM workspaces WHERE project_id = %s",
+                (project_id,),
+            )
+            return [r[0] for r in cur.fetchall()]
+
+
 @router.post("/projects/{project_id}/api-keys", status_code=201)
 async def create_api_key(project_id: int, current_user=Depends(get_current_user)):
     project = _svc().get_project(project_id=project_id, user_id=current_user["id"])
@@ -715,6 +725,7 @@ async def generate_project_briefing(
     from argos.api.router import _generate_briefing_content
 
     workspace_id = _check_project_access(project_id, current_user["id"])
+    workspace_ids = _resolve_project_workspaces(project_id)
     hours = int(data.get("hours", 72))
     force = bool(data.get("force", False))
     today = _dt.date.today()
@@ -730,7 +741,7 @@ async def generate_project_briefing(
         if existing:
             return {"already_exists": True, "date": str(today), "id": existing[0]}
 
-    result = await _generate_briefing_content(hours=hours, workspace_id=workspace_id)
+    result = await _generate_briefing_content(hours=hours, workspace_ids=workspace_ids)
     if "error" in result:
         raise HTTPException(status_code=422, detail=result.get("message", "Erreur génération"))
     if result.get("no_new_content"):

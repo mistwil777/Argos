@@ -56,6 +56,7 @@ export default function ProjetDetail() {
   // Pipeline
   const [pipelineRunning, setPipelineRunning] = useState(false)
   const [pipelineResult, setPipelineResult]   = useState<{launched: number; message?: string} | null>(null)
+  const [briefingRefreshKey, setBriefingRefreshKey] = useState(0)
 
   // Source proposals grouped by subject
   const [subjectProposals, setSubjectProposals] = useState<any[]>([])  // [{id, name, proposals:[]}]
@@ -229,8 +230,8 @@ export default function ProjetDetail() {
       const res = await api.runProjectPipeline(projectId, proposalIds)
       setPipelineResult(res)
       setSelectedProposals(new Set())
-      // Redirect to briefing after launch
-      setTimeout(() => setTab('briefing'), 800)
+      setBriefingRefreshKey(k => k + 1)
+      setTab('briefing')
     } catch (e: any) { setError(e.message) }
     finally { setPipelineRunning(false) }
   }
@@ -764,7 +765,7 @@ export default function ProjetDetail() {
           </div>
 
           {/* ── Briefing projet ─────────────────────────────────────────── */}
-          <div hidden={tab !== 'briefing'}><ProjectBriefingTab projectId={projectId} /></div>
+          <div hidden={tab !== 'briefing'}><ProjectBriefingTab projectId={projectId} refreshKey={briefingRefreshKey} /></div>
 
           {/* ── Connexion IDE ───────────────────────────────────────────── */}
           <div hidden={tab !== 'ide'}>
@@ -1033,7 +1034,7 @@ export default function ProjetDetail() {
   )
 }
 
-function ProjectBriefingTab({ projectId }: { projectId: number }) {
+function ProjectBriefingTab({ projectId, refreshKey = 0 }: { projectId: number; refreshKey?: number }) {
   const [today, setToday]         = useState<any>(null)
   const [selected, setSelected]   = useState<any>(null)
   const [history, setHistory]     = useState<any[]>([])
@@ -1043,9 +1044,13 @@ function ProjectBriefingTab({ projectId }: { projectId: number }) {
   const [histOpen, setHistOpen]   = useState(false)
   const [deletingId, setDeletingId] = useState<number | null>(null)
 
-  useEffect(() => { loadAll() }, [])
+  useEffect(() => {
+    loadAll().then(t => {
+      if (refreshKey > 0 && !t?.exists) generate(false)
+    })
+  }, [refreshKey])
 
-  async function loadAll() {
+  async function loadAll(): Promise<any> {
     setLoading(true)
     try {
       const [t, h] = await Promise.all([
@@ -1055,7 +1060,8 @@ function ProjectBriefingTab({ projectId }: { projectId: number }) {
       setToday(t)
       setHistory(Array.isArray(h) ? h : [])
       if (t?.exists) setSelected(t)
-    } catch { /* silencieux */ }
+      return t
+    } catch { return null }
     finally { setLoading(false) }
   }
 

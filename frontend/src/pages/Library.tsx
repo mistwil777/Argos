@@ -7,7 +7,7 @@ import {
   Pencil, Trash2, Loader2,
   Search, Sparkles, SlidersHorizontal, Wand2, RotateCcw,
   CheckSquare, Square, Folder, Tag, ChevronRight, Library as LibraryIcon,
-  Radio, ExternalLink, Upload, FilePlus,
+  Radio, ExternalLink, Upload, FilePlus, FolderPlus,
   Maximize2, Minimize2,
 } from 'lucide-react'
 import { api } from '@/services/api'
@@ -52,6 +52,9 @@ export default function Library() {
   const [workspaces, setWorkspaces]     = useState<any[]>([])
   const [sujets, setSujets]             = useState<any[]>([])
   const [wsLoading, setWsLoading]       = useState(true)
+  const [showCreateWs, setShowCreateWs] = useState(false)
+  const [newWsName, setNewWsName]       = useState('')
+  const [creatingWs, setCreatingWs]     = useState(false)
 
   // ── Onglet actif ──
   const [tab, setTab] = useState<'articles' | 'documents'>('articles')
@@ -162,6 +165,19 @@ export default function Library() {
       })
       .finally(() => setWsLoading(false))
   }, [])
+
+  async function handleCreateWorkspace() {
+    if (!newWsName.trim()) return
+    setCreatingWs(true)
+    try {
+      await api.createWorkspace({ name: newWsName.trim(), description: '' })
+      const wsData = await api.getWorkspaces()
+      setWorkspaces(wsData.workspaces || [])
+      setNewWsName('')
+      setShowCreateWs(false)
+    } catch (e: any) { alert(e.message) }
+    finally { setCreatingWs(false) }
+  }
 
   // ── Chargement documents ──
   const loadDocs = useCallback(async (sujetId?: number | null) => {
@@ -555,9 +571,29 @@ export default function Library() {
           <motion.div key="ws" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
             className="flex-1 overflow-auto px-8 py-6">
             {workspaces.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full gap-3 text-[hsl(var(--text-3))]">
+              <div className="flex flex-col items-center justify-center h-full gap-4 text-[hsl(var(--text-3))]">
                 <Folder className="w-12 h-12 opacity-20" />
-                <p className="text-[13px] font-mono">Aucun dossier — créez-en un dans la page Dossiers</p>
+                <p className="text-[13px] font-mono">Aucun espace de veille</p>
+                {!showCreateWs ? (
+                  <button onClick={() => setShowCreateWs(true)}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[hsl(var(--accent))] text-white text-[13px] font-medium hover:opacity-90 transition-opacity">
+                    <FolderPlus className="w-4 h-4" /> Créer un espace
+                  </button>
+                ) : (
+                  <div className="flex gap-2 items-center">
+                    <input autoFocus value={newWsName} onChange={e => setNewWsName(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleCreateWorkspace(); if (e.key === 'Escape') setShowCreateWs(false) }}
+                      placeholder="Nom de l'espace…"
+                      className="rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[13px] px-3 py-2 focus:outline-none focus:border-[hsl(var(--accent))]" />
+                    <button onClick={handleCreateWorkspace} disabled={creatingWs || !newWsName.trim()}
+                      className="px-3 py-2 rounded-lg bg-[hsl(var(--accent))] text-white text-[13px] disabled:opacity-50 flex items-center gap-1">
+                      {creatingWs ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                    </button>
+                    <button onClick={() => setShowCreateWs(false)} className="px-3 py-2 rounded-lg border border-[hsl(var(--line))] text-[13px]">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -730,7 +766,7 @@ export default function Library() {
                         <Radio className="w-12 h-12 opacity-20" />
                         <p className="text-[13px] font-mono">Aucun article collecté</p>
                         <p className="text-[11px] font-mono text-center leading-relaxed">
-                          Retournez dans Dossiers, activez la surveillance<br />puis lancez une collecte.
+                          Lancez le pipeline depuis Veille<br />pour alimenter cet espace.
                         </p>
                       </div>
                     )}

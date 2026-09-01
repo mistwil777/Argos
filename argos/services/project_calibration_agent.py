@@ -429,6 +429,15 @@ Réponds UNIQUEMENT avec ce JSON :
             discovery_svc = DiscoveryService(db_manager=self._db)
             candidates = await discovery_svc.find_sources(intent_data=intent_data)
 
+            # Filtrer les sources par pertinence projet avant proposition
+            project_context = "\n".join(filter(None, [
+                knowledge_profile.get("watch_focus_md", "")[:600],
+                knowledge_profile.get("bilan_md", "")[:400],
+            ]))
+            if project_context:
+                from argos.services.project_relevance_filter import filter_candidates_by_relevance
+                candidates = await filter_candidates_by_relevance(candidates, project_context, api_key)
+
             ws_by_name = {s["name"].lower(): s["id"] for s in created_subjects}
 
             def _match_ws(c: dict) -> int | None:

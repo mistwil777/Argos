@@ -41,15 +41,17 @@ function isHeading(p: string): boolean {
 }
 
 export default function ItemReaderModal({ itemId, onClose, onSaved, onGenerateReport }: Props) {
-  const [meta, setMeta]         = useState<any>(null)
+  const [meta, setMeta]             = useState<any>(null)
   const [paragraphs, setParagraphs] = useState<string[]>([])
-  const [loading, setLoading]   = useState(true)
-  const [saving, setSaving]     = useState(false)
-  const [saved, setSaved]       = useState(false)
-  const [error, setError]       = useState<string | null>(null)
-  const [source, setSource]     = useState<'raw' | 'digest'>('raw')
-  const [readPct, setReadPct]   = useState(0)
-  const scrollRef               = useRef<HTMLDivElement>(null)
+  const [loading, setLoading]       = useState(true)
+  const [saving, setSaving]         = useState(false)
+  const [saved, setSaved]           = useState(false)
+  const [error, setError]           = useState<string | null>(null)
+  const [source, setSource]         = useState<'raw' | 'digest'>('raw')
+  const [readPct, setReadPct]       = useState(0)
+  const [translating, setTranslating] = useState(false)
+  const [translatedLang, setTranslatedLang] = useState<string>('')
+  const scrollRef                   = useRef<HTMLDivElement>(null)
 
   const onScroll = useCallback(() => {
     const el = scrollRef.current
@@ -100,6 +102,25 @@ export default function ItemReaderModal({ itemId, onClose, onSaved, onGenerateRe
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
   }, [itemId])
+
+  // Auto-traduction après chargement
+  useEffect(() => {
+    if (loading || paragraphs.length === 0) return
+    api.me().then((u: any) => {
+      const lang = u?.preferences?.reading_language || ''
+      if (!lang) return
+      setTranslating(true)
+      api.translateItem(itemId, lang)
+        .then((t: any) => {
+          if (t?.translated) {
+            setParagraphs(formatRawContent(t.translated))
+            setTranslatedLang(lang)
+          }
+        })
+        .catch(() => {})
+        .finally(() => setTranslating(false))
+    }).catch(() => {})
+  }, [loading])
 
   async function saveToLibrary() {
     if (!paragraphs.length || !meta) return
@@ -179,6 +200,17 @@ export default function ItemReaderModal({ itemId, onClose, onSaved, onGenerateRe
           {loading && (
             <div className="flex items-center justify-center py-16">
               <Loader2 className="w-5 h-5 animate-spin text-[hsl(var(--text-3))]" />
+            </div>
+          )}
+          {translating && !loading && (
+            <div className="flex items-center gap-2 py-2 text-[11px] font-mono text-[hsl(var(--text-3))]">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Traduction en cours…
+            </div>
+          )}
+          {translatedLang && !translating && (
+            <div className="text-[10.5px] font-mono text-[hsl(var(--accent))] border border-[hsl(var(--accent-line))] rounded px-2 py-1 mb-2 w-fit">
+              Traduit en {translatedLang}
             </div>
           )}
           {error && (

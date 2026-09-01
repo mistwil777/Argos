@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Newspaper, Loader2, Sparkles, TrendingUp, ExternalLink, ShieldCheck,
-  Tag, Check, X, Save, BookmarkPlus, Database, EyeOff, Square, CheckSquare,
-  Layers, Maximize2, Minimize2, Clock
+  Tag, Check, BookmarkPlus, Database, EyeOff, Square, CheckSquare,
+  Layers, Clock
 } from 'lucide-react'
 import DocumentGeneratorModal from '@/components/ui/DocumentGeneratorModal'
+import ItemReaderModal from '@/components/ui/ItemReaderModal'
 import { api } from '@/services/api'
 import { timeAgo } from '@/lib/utils'
 import ReactMarkdown from 'react-markdown'
@@ -38,54 +39,13 @@ export default function BriefingPanel({
   const [itemActionLoading, setItemActionLoading] = useState<Record<number, string | null>>({})
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set())
   const [batchLoading, setBatchLoading] = useState<string | null>(null)
-  const [readModal, setReadModal] = useState<{ item: any; content: string; cleanedContent: string } | null>(null)
-  const [readFullscreen, setReadFullscreen] = useState(false)
-  const [readLoading, setReadLoading] = useState(false)
-  const [readSaving, setReadSaving] = useState(false)
-  const [readSaved, setReadSaved] = useState(false)
-  const [readSujetId, setReadSujetId] = useState<number | null>(null)
-  const [readTranslating, setReadTranslating] = useState(false)
-  const [readTranslated, setReadTranslated] = useState(false)
-  const [readingLanguage, setReadingLanguage] = useState<string>('')
-
-  useEffect(() => {
-    api.updateMe({}).then((u: any) => setReadingLanguage(u?.preferences?.reading_language || '')).catch(() => {})
-  }, [])
+  const [readerItemId, setReaderItemId] = useState<number | null>(null)
+  const [readerItem, setReaderItem] = useState<any>(null)
   const [genModal, setGenModal] = useState<{ itemIds: number[]; itemTitle: string; sujetId?: number | null } | null>(null)
 
-  async function openRead(item: any) {
-    setReadLoading(true)
-    setReadSaved(false)
-    setReadTranslated(false)
-    setReadSujetId(item.sujet_id ?? null)
-    setReadModal({ item, content: '', cleanedContent: '' })
-    try {
-      const r = await api.ingestPreview(item.id)
-      const cleaned = r.cleaned_content && r.cleaned_content.length > 500 ? r.cleaned_content : ''
-      const baseContent = r.markdown || r.content || ''
-      setReadModal({ item, content: baseContent, cleanedContent: cleaned })
-      if (readingLanguage) {
-        setReadTranslating(true)
-        try {
-          const t = await api.translateItem(item.id, readingLanguage)
-          setReadModal({ item, content: t.translated, cleanedContent: t.translated })
-          setReadTranslated(true)
-        } catch { /* garder l'original */ }
-        finally { setReadTranslating(false) }
-      }
-    } catch {
-      setReadModal({ item, content: item.summary || 'Contenu non disponible.', cleanedContent: '' })
-    } finally { setReadLoading(false) }
-  }
-
-  async function saveReadItem() {
-    if (!readModal) return
-    setReadSaving(true)
-    try {
-      await api.saveItem(readModal.item.id)
-      setReadSaved(true)
-    } catch (e: any) { alert(`Erreur : ${e.message}`) }
-    finally { setReadSaving(false) }
+  function openRead(item: any) {
+    setReaderItem(item)
+    setReaderItemId(item.id)
   }
 
   async function handleItemAction(id: number, action: 'save' | 'ingest' | 'ignore') {
@@ -520,61 +480,13 @@ export default function BriefingPanel({
 
       {/* Modal lecture article */}
       <AnimatePresence>
-        {readModal && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm"
-            onClick={e => { if (e.target === e.currentTarget) setReadModal(null) }}>
-            <motion.div initial={{ opacity: 0, scale: 0.95, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95 }} transition={{ type: 'spring', stiffness: 300, damping: 28 }}
-              className={`flex flex-col panel overflow-hidden transition-all ${readFullscreen ? 'fixed inset-4 z-[60] max-w-none max-h-none' : 'w-full max-w-2xl max-h-[85vh]'}`}>
-              <div className="flex items-center justify-between px-5 py-3 border-b border-[hsl(var(--line))] bg-[hsl(var(--bg-2))] flex-shrink-0">
-                <p className="text-[13px] font-bold text-[hsl(var(--text))] line-clamp-1 pr-4">{readModal.item.title}</p>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setReadFullscreen(f => !f)} className="text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))]">
-                    {readFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-                  </button>
-                  <button onClick={() => { setReadModal(null); setReadFullscreen(false) }} className="text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))]">
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-              {readTranslated && (
-                <div className="flex items-center gap-1.5 px-5 py-1.5 bg-[hsl(var(--accent-dim))] border-b border-[hsl(var(--accent-line))]">
-                  <span className="text-[10px] font-mono text-[hsl(var(--accent))]">Traduit en {readingLanguage}</span>
-                </div>
-              )}
-              <div className="flex-1 overflow-auto px-5 py-4">
-                {(readLoading || readTranslating)
-                  ? <div className="flex flex-col items-center justify-center py-12 gap-2">
-                      <Loader2 className="w-5 h-5 animate-spin text-[hsl(var(--accent))]" />
-                      {readTranslating && <span className="text-[11px] font-mono text-[hsl(var(--text-3))]">Traduction en {readingLanguage}…</span>}
-                    </div>
-                  : <div className="prose-app max-w-none"><ReactMarkdown remarkPlugins={[remarkGfm]}>{readModal.cleanedContent || readModal.content}</ReactMarkdown></div>
-                }
-              </div>
-              <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-[hsl(var(--line))] bg-[hsl(var(--bg-2))] flex-shrink-0">
-                {sujets.length > 0 ? (
-                  <select value={readSujetId ?? ''} onChange={e => setReadSujetId(e.target.value ? parseInt(e.target.value) : null)}
-                    className="text-[11px] font-mono bg-[hsl(var(--bg-3))] border border-[hsl(var(--line))] rounded px-2 py-1.5 text-[hsl(var(--text-2))] outline-none focus:border-[hsl(var(--accent-line))]">
-                    <option value="">Dossier : non classé</option>
-                    {sujets.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
-                ) : <div />}
-                <div className="flex items-center gap-2">
-                  <button onClick={() => { setGenModal({ itemIds: [readModal.item.id], itemTitle: readModal.item.title, sujetId: readSujetId }); setReadModal(null) }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-[hsl(var(--line))] text-[11.5px] font-mono text-[hsl(var(--text-2))] hover:border-[hsl(var(--line-bright))] transition-colors">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    Générer un document IA
-                  </button>
-                  <button onClick={saveReadItem} disabled={readSaving || readSaved}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[11.5px] font-mono font-bold text-white transition-all disabled:opacity-60 ${readSaved ? 'bg-[hsl(var(--green))]' : 'bg-[hsl(var(--accent))]'}`}>
-                    {readSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : readSaved ? <Check className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
-                    {readSaved ? 'Conservé !' : readSaving ? 'Sauvegarde…' : 'Conserver dans la bibliothèque'}
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
+        {readerItemId && (
+          <ItemReaderModal
+            itemId={readerItemId}
+            onClose={() => { setReaderItemId(null); setReaderItem(null) }}
+            onSaved={() => { setItemActions(prev => ({ ...prev, [readerItemId]: 'saved' })); setReaderItemId(null); setReaderItem(null) }}
+            onGenerateReport={(id, title) => { setGenModal({ itemIds: [id], itemTitle: title, sujetId: readerItem?.sujet_id ?? null }); setReaderItemId(null); setReaderItem(null) }}
+          />
         )}
       </AnimatePresence>
 

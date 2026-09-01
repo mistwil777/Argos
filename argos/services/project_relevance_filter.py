@@ -1,11 +1,9 @@
 """
-Project Relevance Filter — score la pertinence d'un article par rapport au bilan projet.
+Project Relevance Filter — score la pertinence d'articles et de sources par rapport au bilan projet.
 
-Utilise Haiku pour évaluer chaque item sur une échelle 1-5.
-Les items avec score <= 2 sont marqués ignored=True en base (pas supprimés).
-
-Déclenché uniquement pour les sources liées à un workspace projet (workspace_id non nul
-et lié à un project_id avec bilan calibré).
+Utilise Haiku pour évaluer chaque item/source sur une échelle 1-5.
+Items avec score <= RELEVANCE_THRESHOLD sont marqués ignored en base.
+Sources avec score <= SOURCE_RELEVANCE_THRESHOLD sont filtrées avant proposition.
 """
 
 import json
@@ -17,7 +15,8 @@ import anthropic
 logger = logging.getLogger(__name__)
 
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
-RELEVANCE_THRESHOLD = 2  # score <= seuil → ignoré
+RELEVANCE_THRESHOLD = 3        # score <= seuil → item ignoré après ingest
+SOURCE_RELEVANCE_THRESHOLD = 3 # score <= seuil → source filtrée avant proposition
 
 _SYSTEM_PROMPT = """Tu es un système de filtrage de pertinence pour un projet de veille technologique.
 Tu reçois le contexte d'un projet et un article collecté. Tu dois évaluer si l'article est pertinent pour ce projet.
@@ -166,6 +165,97 @@ def _get_project_context(workspace_id: int, db) -> Optional[str]:
         parts.append(f"Mots-clés : {', '.join(keywords)}")
 
     return "\n".join(parts) if parts else None
+
+
+_SOURCE_SYSTEM_PROMPT = """Tu es un système de sélection de sources pour un projet de veille technologique.
+Tu reçois le contexte d'un projet et une source candidate (URL, nom, description).
+Tu dois évaluer si cette source va régulièrement produire des articles utiles pour ce projet.
+
+Réponds UNIQUEMENT avec un JSON valide : {"score": <1-5>, "reason": "<une phrase>"}
+
+Échelle :
+1 = domaine sans rapport avec le projet (ex: gaming, audio, généraliste grand public)
+2 = domaine adjacent mais produira rarement du contenu utile
+3 = source généraliste IA qui couvre parfois le sujet mais sans ciblage
+4 = source spécialisée dans un domaine clé du projet
+5 = source de référence directe pour les objectifs du projet (normes, institutions, publications spécialisées)"""
+
+_SOURCE_USER_TEMPLATE = """## Contexte du projet
+{project_context}
+
+## Source candidate
+URL : {url}
+Nom : {name}
+Description : {description}
+
+Cette source va-t-elle produire régulièrement des articles utiles pour ce projet ?"""
+
+
+async def score_source_relevance(
+    url: str,
+    name: str,
+    description: str,
+    project_context: str,
+    api_key: str,
+) -> tuple[int, str]:
+    """Évalue si une source candidate est pertinente pour le projet. Retourne (score 1-5, raison)."""
+    client = anthropic.AsyncAnthropic(api_key=api_key)
+    user_msg = _SOURCE_USER_TEMPLATE.format(
+        project_context=project_context[:1200],
+        url=url[:200],
+        name=(name or url)[:150],
+        description=(description or "")[:300],
+    )
+    try:
+        msg = await client.messages.create(
+            model=HAIKU_MODEL,
+            max_tokens=120,
+            system=_SOURCE_SYSTEM_PROMPT,
+            messages=[
+                {"role": "user", "content": user_msg},
+                {"role": "assistant", "content": "{"},
+            ],
+        )
+        raw = "{" + msg.content[0].text.strip()
+        raw = raw.rstrip().rstrip(",").rstrip()
+        if not raw.endswith("}"):
+            raw += "}"
+        data = json.loads(raw)
+        return int(data.get("score", 3)), str(data.get("reason", ""))
+    except Exception as e:
+        logger.warning(f"[SOURCE-FILTER] Erreur scoring {url}: {e}")
+        return 3, "scoring_error"
+
+
+async def filter_candidates_by_relevance(
+    candidates: list[dict],
+    project_context: str,
+    api_key: str,
+) -> list[dict]:
+    """
+    Filtre les sources candidates par pertinence projet.
+    Retourne uniquement les sources avec score > SOURCE_RELEVANCE_THRESHOLD.
+    Ajoute 'relevance_score_llm' et 'relevance_reason' sur chaque candidat conservé.
+    """
+    if not candidates or not project_context:
+        return candidates
+
+    kept = []
+    for c in candidates:
+        url = c.get("url", "")
+        name = c.get("name", "")
+        description = c.get("reason") or c.get("description") or ""
+        score, reason = await score_source_relevance(url, name, description, project_context, api_key)
+        if score > SOURCE_RELEVANCE_THRESHOLD:
+            c["relevance_score_llm"] = score
+            c["relevance_reason"] = reason
+            kept.append(c)
+            logger.debug(f"[SOURCE-FILTER] CONSERVÉE score={score} — {url[:60]}")
+        else:
+            logger.info(f"[SOURCE-FILTER] FILTRÉE score={score} ({reason[:60]}) — {url[:60]}")
+
+    logger.info(f"[SOURCE-FILTER] {len(kept)}/{len(candidates)} sources conservées après filtre LLM")
+    return kept
 
 
 def _mark_ignored(item_id: int, score: int, reason: str, db) -> None:

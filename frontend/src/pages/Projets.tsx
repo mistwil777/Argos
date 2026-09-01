@@ -137,7 +137,7 @@ export default function Projets() {
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.18, delay: i * 0.04 }}
-                  className={`flex items-center gap-3 px-5 py-4 rounded-xl border transition-all group
+                  className={`flex items-center gap-3 px-5 py-4 rounded-xl border transition-all group w-full min-w-0
                     ${isSelected
                       ? 'border-[hsl(var(--accent-line))] bg-[hsl(var(--accent-dim))]'
                       : 'border-[hsl(var(--line))] bg-[hsl(var(--bg-1))] hover:border-[hsl(var(--line-bright))]'
@@ -160,12 +160,12 @@ export default function Projets() {
                     onClick={() => navigate(`/projets/${p.id}`)}
                     className="flex-1 flex items-center justify-between min-w-0 text-left"
                   >
-                    <div className="flex items-center gap-4 min-w-0">
+                    <div className="flex items-center gap-4 min-w-0 overflow-hidden">
                       <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
                            style={{ background: 'hsl(var(--accent)/.15)' }}>
                         <Folder style={{ width: 18, height: 18 }} className="text-[hsl(var(--accent))]" />
                       </div>
-                      <div className="min-w-0">
+                      <div className="min-w-0 overflow-hidden">
                         <p className="text-[14px] font-semibold text-[hsl(var(--text))] truncate">{p.name}</p>
                         {p.description && (
                           <p className="text-[12px] text-[hsl(var(--text-3))] truncate mt-0.5">{p.description}</p>
