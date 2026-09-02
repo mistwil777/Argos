@@ -976,7 +976,9 @@ async def list_project_items(
                 f"""SELECT id, title, summary, url, source_type, published_at, created_at,
                            workspace_id, digest_markdown, rag_indexed, importance
                     FROM items i
-                    WHERE workspace_id = ANY(%s) {extra}
+                    WHERE workspace_id = ANY(%s)
+                      AND user_action = 'ingested'
+                      {extra}
                     ORDER BY created_at DESC
                     LIMIT %s OFFSET %s""",
                 [ws_ids] + extra_params + [limit, offset],
@@ -996,7 +998,7 @@ async def list_project_items(
                 })
 
             cur.execute(
-                f"SELECT COUNT(*) FROM items WHERE workspace_id = ANY(%s) {extra}",
+                f"SELECT COUNT(*) FROM items WHERE workspace_id = ANY(%s) AND user_action = 'ingested' {extra}",
                 [ws_ids] + extra_params,
             )
             total = cur.fetchone()[0]
