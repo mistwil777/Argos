@@ -64,15 +64,18 @@ async def judge_digest(
     try:
         from argos.config import settings
 
-        # Résoudre workspace_id depuis l'item si non fourni
-        if workspace_id is None and item_id:
+        # Lire workspace_id et cleaned_content depuis l'item — source de vérité pour le juge
+        if item_id:
             try:
                 with db.get_connection() as conn:
                     with conn.cursor() as cur:
-                        cur.execute("SELECT workspace_id FROM items WHERE id = %s", (item_id,))
+                        cur.execute("SELECT workspace_id, cleaned_content FROM items WHERE id = %s", (item_id,))
                         row = cur.fetchone()
                         if row:
-                            workspace_id = row[0]
+                            if workspace_id is None:
+                                workspace_id = row[0]
+                            if row[1]:
+                                article_content = row[1]  # contenu complet > extrait passé par le caller
             except Exception:
                 pass
 
