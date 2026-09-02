@@ -149,107 +149,73 @@ class ProjectCalibrationAgent:
             if confirmation_question and any(last_a == s or last_a.startswith(s) for s in _VALIDATION_SIGNALS):
                 return {"done": True, "reason": "Configuration validée par l'équipe projet."}
 
+        MAX_QUESTIONS = 3
         n = len(qa_history)
 
-        # Génération LLM de la prochaine question
+        # Hard stop : budget épuisé
+        if n >= MAX_QUESTIONS:
+            return {"done": True, "reason": "Calibration terminée — contexte suffisant."}
+
+        budget_restant = MAX_QUESTIONS - n
+
         qa_text = "\n".join(
             f"Q{i+1}: {qa['q']}\nR{i+1}: {qa['a']}"
             for i, qa in enumerate(qa_history)
         ) if qa_history else "(aucun échange — c'est la première question)"
 
-        subjects_text = "\n".join(
-            f"  - {s['name']}" + (f" (priorité: {s.get('priority', '?')})" if s.get('priority') else "")
-            for s in cdc_analysis.get("subjects", [])
-        ) or "  - aucun sujet identifié"
-
+        # Résumé compact du CDC analysé pour le LLM
+        cdc_summary_parts = []
+        subjects = cdc_analysis.get("subjects", [])
+        if subjects:
+            cdc_summary_parts.append("Sujets identifiés : " + ", ".join(s["name"] for s in subjects))
         gaps = cdc_analysis.get("gaps", [])
-        gaps_text = "\n".join(f"  - {g}" for g in gaps) if gaps else "  - aucune lacune identifiée"
-
+        if gaps:
+            cdc_summary_parts.append("Lacunes : " + " | ".join(gaps))
         constraints = cdc_analysis.get("constraints", [])
-        constraints_text = "\n".join(f"  - {c}" for c in constraints) if constraints else "  - aucune"
+        if constraints:
+            cdc_summary_parts.append("Contraintes : " + " | ".join(constraints))
+        domains = cdc_analysis.get("domains", [])
+        if domains:
+            cdc_summary_parts.append("Domaines : " + ", ".join(domains))
+        cdc_summary = "\n".join(cdc_summary_parts) or "CDC non analysé"
 
-        # Détecter les axes déjà couverts — dans le CDC ET dans l'historique Q/A
-        cdc_subjects_lower = " ".join(
-            s.get("name", "") + " " + " ".join(s.get("sub_subjects", []))
-            for s in cdc_analysis.get("subjects", [])
-        ).lower()
-        cdc_constraints_lower = " ".join(cdc_analysis.get("constraints", [])).lower()
-        cdc_all = (
-            cdc_subjects_lower + " " + cdc_constraints_lower + " " +
-            " ".join(cdc_analysis.get("domains", [])).lower() + " " +
-            " ".join(cdc_analysis.get("gaps", [])).lower()
-        )
-        qa_lower = " ".join(f"{qa['q']} {qa['a']}" for qa in qa_history).lower()
-        corpus = cdc_all + " " + qa_lower
+        prompt = f"""Tu configures la veille externe pour le projet « {project_name} ».
+Tu disposes de {MAX_QUESTIONS} questions en tout. Tu en as posé {n}. Il t'en reste {budget_restant}.
 
-        axes_covered = []
-        # stack_technique : couverte si le CDC mentionne des technos précises avec versions
-        cdc_has_stack = any(w in cdc_all for w in [
-            "react", "fastapi", "postgresql", "python", "typescript", "kubernetes", "terraform",
-            "azure aks", "azure ad", "helm", "pydantic", "node", "django", ".net"
-        ])
-        if cdc_has_stack or any(w in qa_lower for w in ["stack", "framework", "langage", "techno", "version"]):
-            axes_covered.append("stack_technique")
+CDC ANALYSÉ (déjà connu) :
+{cdc_summary}
 
-        if any(w in corpus for w in ["risque", "critique", "dépendance", "vulnérab", "dépréciat", "fin de support"]):
-            axes_covered.append("composants_risque")
-
-        cdc_has_jalons = any(w in cdc_all for w in ["jalon", "date", "planning", "deadline", "livraison", "mise en prod", "q1", "q2", "q3", "q4", "2026", "2027"])
-        if cdc_has_jalons or any(w in qa_lower for w in ["jalon", "date", "délai", "livraison", "sprint", "démo"]):
-            axes_covered.append("jalons")
-
-        cdc_has_partners = any(w in cdc_all for w in ["sap", "microsoft", "cegedim", "partenaire", "fournisseur", "prestataire", "éditeur"])
-        if cdc_has_partners or any(w in qa_lower for w in ["partenaire", "fournisseur", "externe", "tiers"]):
-            axes_covered.append("partenaires_externes")
-
-        if any(w in corpus for w in ["sécurité", "conformité", "rgpd", "chiffrement", "audit", "iso", "nis2", "anssi", "hds"]):
-            axes_covered.append("securite_conformite")
-
-        axes_remaining = [a for a in [
-            "composants_risque", "jalons", "partenaires_externes", "securite_conformite", "stack_technique"
-        ] if a not in axes_covered]
-
-        format_note = (
-            '{"done": true, "reason": "..."} OU {"question": {"text": "...", "type": "open"|"multiselect", "options": []}}'
-        )
-
-        prompt = f"""Tu conduis un entretien de calibration pour le projet professionnel « {project_name} ».
-
-SUJETS DU PROJET :
-{subjects_text}
-
-LACUNES DU CDC :
-{gaps_text}
-
-CONTRAINTES CONNUES :
-{constraints_text}
-
-ÉCHANGES DÉJÀ RÉALISÉS ({n} questions) :
+ÉCHANGES DÉJÀ RÉALISÉS :
 {qa_text}
 
-AXES DÉJÀ COUVERTS (ne pas y revenir) : {', '.join(axes_covered) or 'aucun'}
-AXES RESTANTS À COUVRIR : {', '.join(axes_remaining) or 'aucun — terminer'}
+RAISONNEMENT REQUIS avant de répondre :
+1. Qu'est-ce que le moteur de veille doit absolument savoir — et qui n'est PAS dans le CDC ni dans les échanges ?
+2. Parmi ces lacunes, laquelle est la plus critique pour détecter les bons signaux externes ?
+3. Poser cette question apporte-t-il vraiment quelque chose, ou le contexte est déjà suffisant ?
 
-RÈGLES STRICTES :
-1. Si aucun axe restant : retourne {{"done": true, "reason": "..."}}.
-2. Pose UNE question sur le premier axe restant dans la liste ci-dessus.
-3. Les seuls axes autorisés sont : stack_technique, composants_risque, jalons, partenaires_externes, securite_conformite.
-4. INTERDIT : tests unitaires, CI/CD, monitoring interne, SLA de performance, outils de déploiement, méthodologie d'équipe, niveau de compétence. Ces sujets ne génèrent pas de veille utile.
-5. Ne pose jamais une question dont la réponse est déjà dans les échanges.
-6. Type "multiselect" en priorité avec 4-6 options contextualisées au projet. Type "open" uniquement si la réponse est vraiment libre.
+Si contexte suffisant OU budget épuisé → {{"done": true, "reason": "..."}}.
+Sinon → une seule question, la plus ciblée possible, qui maximise la valeur de la veille.
 
-FORMAT (JSON uniquement) :
-{format_note}"""
+CRITÈRES D'UNE BONNE QUESTION :
+- Porte sur des signaux externes surveillables (acteurs, régulateurs, technologies, standards, fournisseurs clés)
+- La réponse change concrètement quelles sources ou alertes seront configurées
+- N'est pas déjà répondue partiellement dans le CDC
+
+INTERDIT : organisation interne, délais, compétences personnelles, processus d'équipe, outils de déploiement.
+
+FORMAT JSON uniquement :
+{{"done": true, "reason": "..."}}
+OU
+{{"question": {{"text": "...", "type": "open"|"multiselect", "options": ["...", ...]}}}}"""
 
         try:
             response, _ = await self._llm.generate(
                 prompt=prompt,
                 system_prompt=(
-                    "Tu es un expert en veille technologique pour projets professionnels. "
-                    "Tu identifies uniquement ce qui génère des alertes de veille externe utiles : "
-                    "stack en production, dépendances à risque, jalons, partenaires, conformité. "
-                    "Tu ignores tout ce qui est tooling interne (tests, CI/CD, monitoring, SLA). "
-                    "Chaque question couvre un axe différent. Un axe couvert ne revient jamais. "
+                    "Tu es un expert en veille stratégique et technologique, agnostique au domaine. "
+                    "Tu analyses n'importe quel type de projet (tech, réglementaire, industriel, recherche, etc.) "
+                    "et identifies les informations manquantes pour configurer des alertes de veille externe pertinentes. "
+                    "Tu ne poses jamais de questions sur l'organisation interne ou les processus d'équipe. "
                     "Réponds en JSON valide uniquement, sans texte autour."
                 ),
                 temperature=0.4, max_tokens=600, top_p=0.9,
@@ -373,11 +339,21 @@ Réponds UNIQUEMENT avec ce JSON :
                     )
                     row = cur.fetchone()
                     if row:
+                        ws_name = row[1]
+                        # Mapper la priorité depuis les sujets CDC par matching partiel
+                        priority = "medium"
+                        for cdc_s in subjects_from_cdc:
+                            a = cdc_s.get("name", "").lower()
+                            b = ws_name.lower()
+                            if a and b and (a in b or b in a or a.split()[0] in b):
+                                priority = cdc_s.get("priority", "medium")
+                                break
                         created_subjects.append({
                             "id": row[0],
-                            "name": row[1],
+                            "name": ws_name,
                             "project_id": row[2],
                             "description": s.get("description", ""),
+                            "priority": priority,
                         })
 
                 # Sauvegarder le knowledge_profile sur le projet
@@ -385,6 +361,34 @@ Réponds UNIQUEMENT avec ce JSON :
                     "UPDATE projects SET knowledge_profile = %s, updated_at = NOW() WHERE id = %s",
                     (json.dumps(knowledge_profile), project_id),
                 )
+
+
+        # ── Insérer les source_candidates dans une transaction séparée ──
+        if source_candidates and created_subjects:
+            try:
+                with self._db.get_connection() as conn2:
+                    with conn2.cursor() as cur2:
+                        for cand in source_candidates:
+                            url = (cand.get("url") or "").strip()
+                            if not url:
+                                continue
+                            ws_id = created_subjects[0]["id"]
+                            cand_subj = (cand.get("subject") or "").lower()
+                            if cand_subj:
+                                for ws in created_subjects:
+                                    if ws["name"].lower() in cand_subj or cand_subj in ws["name"].lower():
+                                        ws_id = ws["id"]
+                                        break
+                            cur2.execute(
+                                "INSERT INTO source_proposals "
+                                "(project_id, sujet_id, url, name, source_type, status) "
+                                "VALUES (%s, %s, %s, %s, %s, 'approved')",
+                                (project_id, ws_id, url,
+                                 cand.get("name") or url,
+                                 cand.get("type") or "website"),
+                            )
+            except Exception as _e:
+                logger.warning("source_candidates insert failed: %s", _e)
 
         # ── Auto-suggest sources via LLM domain knowledge ───────────────
         import asyncio as _asyncio
@@ -408,10 +412,14 @@ Réponds UNIQUEMENT avec ce JSON :
         try:
             import os
             from argos.services.intent_discovery import IntentService, DiscoveryService
+            from argos.config import settings as _settings
 
-            api_key = os.getenv("ANTHROPIC_API_KEY")
-            if not api_key:
-                return
+            # Résoudre la clé API Anthropic : variable d'env explicite ou settings
+            api_key = (
+                os.getenv("ANTHROPIC_API_KEY")
+                or _settings.anthropic_api_key
+                or ""
+            )
 
             # Construire l'intent depuis le knowledge_profile
             subject_names = [s["name"] for s in created_subjects]
@@ -423,8 +431,19 @@ Réponds UNIQUEMENT avec ce JSON :
             if watch_focus:
                 intent_parts.insert(0, watch_focus[:600])
 
-            intent_svc = IntentService(anthropic_api_key=api_key)
-            intent_data = await intent_svc.decompose("\n".join(intent_parts))
+            if api_key:
+                intent_svc = IntentService(anthropic_api_key=api_key)
+                intent_data = await intent_svc.decompose("\n".join(intent_parts))
+            else:
+                # Fallback sans LLM : intent minimal depuis le profil
+                entities = [{"name": n, "type": "topic"} for n in subject_names]
+                themes = knowledge_profile.get("subjects_and_levels", {})
+                intent_data = {
+                    "entities": entities,
+                    "themes": list(themes.keys())[:6] if themes else subject_names[:4],
+                    "source_types": ["blog", "documentation", "github", "research"],
+                    "keywords": subject_names + knowledge_profile.get("key_terms", [])[:8],
+                }
 
             discovery_svc = DiscoveryService(db_manager=self._db)
             candidates = await discovery_svc.find_sources(intent_data=intent_data)
@@ -434,7 +453,7 @@ Réponds UNIQUEMENT avec ce JSON :
                 knowledge_profile.get("watch_focus_md", "")[:600],
                 knowledge_profile.get("bilan_md", "")[:400],
             ]))
-            if project_context:
+            if project_context and api_key:
                 from argos.services.project_relevance_filter import filter_candidates_by_relevance
                 candidates = await filter_candidates_by_relevance(candidates, project_context, api_key)
 

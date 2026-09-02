@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Loader2, AlertCircle, Folder, Users,
   FileText, Plus, Check, X, Sparkles, Settings, Save,
-  Key, Copy, Trash2, Terminal, BarChart3, Play, Newspaper, RefreshCw, ChevronDown
+  Key, Copy, Trash2, Terminal, BarChart3, Play, Newspaper, RefreshCw, ChevronDown, BookOpen, ExternalLink
 } from 'lucide-react'
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -12,10 +12,9 @@ import {
 import { api } from '@/services/api'
 import { timeAgo } from '@/lib/utils'
 import BriefingPanel from '@/components/BriefingPanel'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import ItemReaderModal from '@/components/ui/ItemReaderModal'
 
-type Tab = 'sujets' | 'membres' | 'propositions' | 'briefing' | 'ide' | 'metriques' | 'reglages'
+type Tab = 'sujets' | 'membres' | 'propositions' | 'briefing' | 'bibliotheque' | 'ide' | 'metriques' | 'reglages'
 
 export default function ProjetDetail() {
   const { id } = useParams<{ id: string }>()
@@ -55,13 +54,21 @@ export default function ProjetDetail() {
 
   // Pipeline
   const [pipelineRunning, setPipelineRunning] = useState(false)
-  const [pipelineResult, setPipelineResult]   = useState<{launched: number; message?: string} | null>(null)
+  const [, setPipelineResult]   = useState<{launched: number; message?: string} | null>(null)
   const [briefingRefreshKey, setBriefingRefreshKey] = useState(0)
 
   // Source proposals grouped by subject
   const [subjectProposals, setSubjectProposals] = useState<any[]>([])  // [{id, name, proposals:[]}]
   const [expandedSubject, setExpandedSubject]   = useState<number | null>(null)
   const [selectedProposals, setSelectedProposals] = useState<Set<number>>(new Set())
+
+  // Bibliothèque
+  const [bibItems, setBibItems]         = useState<any[]>([])
+  const [bibWorkspaces, setBibWorkspaces] = useState<any[]>([])
+  const [bibTotal, setBibTotal]         = useState(0)
+  const [bibSujetId, setBibSujetId]     = useState<number | undefined>(undefined)
+  const [bibLoading, setBibLoading]     = useState(false)
+  const [bibSelectedId, setBibSelectedId] = useState<number | null>(null)
 
   // Source suggestions
   // ── API Keys IDE ──────────────────────────────────────────────────────────
@@ -72,9 +79,8 @@ export default function ProjetDetail() {
   const [copiedConfig, setCopiedConfig]     = useState<string | null>(null)
 
   const [suggesting, setSuggesting]           = useState(false)
-  const [suggestions, setSuggestions]         = useState<any[]>([])
+  const [, setSuggestions]         = useState<any[]>([])
   const [suggestError, setSuggestError]       = useState<string | null>(null)
-  const [selectedSuggestions, setSelectedSuggestions] = useState<Set<number>>(new Set())
 
   useEffect(() => {
     api.listProjectApiKeys(projectId).then(setApiKeys).catch(() => {})
@@ -121,7 +127,16 @@ export default function ProjetDetail() {
   // Recharge les proposals quand on revient sur Sujets ou Propositions
   useEffect(() => {
     if (tab === 'sujets' || tab === 'propositions') loadSubjectProposals()
-  }, [tab])
+    if (tab === 'bibliotheque') loadBibItems()
+  }, [tab, bibSujetId])
+
+  function loadBibItems() {
+    setBibLoading(true)
+    api.getProjectItems(projectId, { sujet_id: bibSujetId, limit: 100 })
+      .then(res => { setBibItems(res.items || []); setBibWorkspaces(res.workspaces || []); setBibTotal(res.total || 0) })
+      .catch(() => {})
+      .finally(() => setBibLoading(false))
+  }
 
   async function handleInvite() {
     if (!inviteEmail.trim()) return
@@ -174,19 +189,6 @@ export default function ProjetDetail() {
     finally { setSuggesting(false) }
   }
 
-  async function handleAddSuggestions() {
-    const toAdd = suggestions.filter((_: any, i: number) => selectedSuggestions.has(i))
-    for (const s of toAdd) {
-      try {
-        const p = await api.proposeSource(projectId, {
-          url: s.url, source_type: s.source_type || 'website', name: s.name || s.title || undefined,
-        })
-        setProposals(prev => [p, ...prev])
-      } catch {}
-    }
-    setSuggestions([])
-    setSelectedSuggestions(new Set())
-  }
 
   async function handlePropose() {
     if (!proposeUrl.trim()) return
@@ -296,6 +298,13 @@ export default function ProjetDetail() {
 
   return (
     <div className="h-full overflow-auto px-8 py-7">
+      {bibSelectedId && (
+        <ItemReaderModal
+          itemId={bibSelectedId}
+          projectId={projectId}
+          onClose={() => setBibSelectedId(null)}
+        />
+      )}
       <div className="max-w-4xl mx-auto space-y-6">
 
         {/* Header */}
@@ -334,8 +343,9 @@ export default function ProjetDetail() {
           {([
             { id: 'sujets' as Tab, icon: Folder, label: 'Sujets' },
             { id: 'membres' as Tab, icon: Users, label: `Membres (${members.length})` },
-            { id: 'propositions' as Tab, icon: FileText, label: `Propositions (${proposals.filter(p => p.status !== 'rejected').length})` },
+            { id: 'propositions' as Tab, icon: FileText, label: `Propositions (${proposals.filter(p => p.status === 'pending').length})` },
             { id: 'briefing' as Tab, icon: Newspaper, label: 'Briefing' },
+            { id: 'bibliotheque' as Tab, icon: BookOpen, label: 'Bibliothèque' },
             { id: 'ide' as Tab, icon: Terminal, label: 'Connexion IDE' },
             { id: 'metriques' as Tab, icon: BarChart3, label: 'Métriques' },
             { id: 'reglages' as Tab, icon: Settings, label: 'Réglages' },
@@ -707,14 +717,14 @@ export default function ProjetDetail() {
                 </div>
                 {suggestError && <p className="text-[12px] text-[hsl(var(--red))]">{suggestError}</p>}
 
-                {proposals.filter(p => p.status !== 'rejected').length === 0 && (
+                {proposals.filter(p => p.status === 'pending').length === 0 && (
                   <p className="text-[12px] text-[hsl(var(--text-3))] italic">
                     Aucune suggestion — cliquez "Générer des suggestions" pour démarrer.
                   </p>
                 )}
 
                 <div className="space-y-2">
-                  {proposals.filter(p => p.status !== 'rejected').map(p => (
+                  {proposals.filter(p => p.status === 'pending').map(p => (
                     <div key={p.id}
                       className="flex items-start gap-3 px-3 py-3 rounded-lg border border-[hsl(var(--yellow)/.3)] bg-[hsl(var(--yellow)/.04)]">
                       <div className="flex-1 min-w-0">
@@ -892,6 +902,80 @@ export default function ProjetDetail() {
                 )
               })()}
 
+            </div>
+          </div>
+
+          {/* ── Bibliothèque ────────────────────────────────────────────── */}
+          <div hidden={tab !== 'bibliotheque'}>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-mono text-[hsl(var(--text-3))] uppercase tracking-wider">
+                  Articles indexés — {bibTotal} au total
+                </p>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={bibSujetId ?? ''}
+                    onChange={e => setBibSujetId(e.target.value ? Number(e.target.value) : undefined)}
+                    className="text-[12px] rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] px-2 py-1 focus:outline-none focus:border-[hsl(var(--accent))]"
+                  >
+                    <option value="">Tous les sujets</option>
+                    {bibWorkspaces.map((w: any) => (
+                      <option key={w.id} value={w.id}>{w.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {bibLoading && (
+                <div className="flex items-center gap-2 py-8 justify-center text-[hsl(var(--text-3))]">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="text-[13px]">Chargement…</span>
+                </div>
+              )}
+
+              {!bibLoading && bibItems.length === 0 && (
+                <p className="text-[13px] text-[hsl(var(--text-3))] italic py-8 text-center">
+                  Aucun article indexé — lancez le pipeline pour collecter des sources.
+                </p>
+              )}
+
+              {!bibLoading && bibItems.length > 0 && (
+                <div className="space-y-2">
+                  {bibItems.map((item: any) => (
+                    <div key={item.id}
+                      onClick={() => setBibSelectedId(item.id)}
+                      className="card flex items-start gap-3 p-3 cursor-pointer hover:border-[hsl(var(--accent)/.4)] transition-colors">
+                      <div className="flex-1 min-w-0 space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <p className="text-[13px] font-medium text-[hsl(var(--text))] truncate">{item.title || item.url}</p>
+                          {item.has_digest && (
+                            <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-[hsl(var(--accent)/.12)] text-[hsl(var(--accent))]">digest</span>
+                          )}
+                          {item.rag_indexed && (
+                            <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-[hsl(var(--aqua)/.12)] text-[hsl(var(--aqua))]">RAG</span>
+                          )}
+                        </div>
+                        {item.sujet_name && (
+                          <p className="text-[11px] text-[hsl(var(--text-3))]">{item.sujet_name}</p>
+                        )}
+                        {item.summary && (
+                          <p className="text-[12px] text-[hsl(var(--text-2))] line-clamp-2">{item.summary}</p>
+                        )}
+                        <p className="text-[10px] text-[hsl(var(--text-3))]">
+                          {item.published_at ? new Date(item.published_at).toLocaleDateString('fr-FR') : new Date(item.created_at).toLocaleDateString('fr-FR')}
+                        </p>
+                      </div>
+                      {item.url && (
+                        <a href={item.url} target="_blank" rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          className="flex-shrink-0 text-[hsl(var(--text-3))] hover:text-[hsl(var(--accent))] transition-colors mt-0.5">
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 

@@ -91,9 +91,10 @@ async def list_workspaces(
                     FROM workspaces w
                 """
                 
+                where_clauses = ["w.project_id IS NULL"]
                 if not include_inactive:
-                    query += " WHERE w.is_active = true"
-                
+                    where_clauses.append("w.is_active = true")
+                query += " WHERE " + " AND ".join(where_clauses)
                 query += " ORDER BY w.created_at DESC"
                 
                 cur.execute(query)

@@ -99,7 +99,8 @@ class ProjectService:
         name = (name or "").strip()
         if not name:
             raise ValueError("Le nom du projet est obligatoire")
-        slug = _slugify(name)
+        import secrets as _secrets
+        slug = _slugify(name) + "-" + _secrets.token_hex(3)
         with self.db.get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(

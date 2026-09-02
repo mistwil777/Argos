@@ -24,6 +24,8 @@
     --amber-light: #fef3c7;
     --violet: #7c3aed;
     --violet-light: #ede9fe;
+    --red: #dc2626;
+    --red-light: #fee2e2;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -34,18 +36,17 @@
     line-height: 1.75;
     color: var(--slate-mid);
     background: var(--bg);
-    max-width: 920px;
+    max-width: 940px;
     margin: 0 auto;
     padding: 48px 44px;
   }
 
-  /* ── Cover ── */
   .cover {
     padding: 52px 0 44px;
     border-bottom: 2px solid var(--slate);
     margin-bottom: 48px;
   }
-  .cover-eyebrow { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+  .cover-eyebrow { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
   .badge {
     display: inline-block; font-size: 10.5px; font-weight: 700;
     letter-spacing: 0.08em; text-transform: uppercase;
@@ -54,6 +55,7 @@
   .badge-blue   { background: var(--blue); color: white; }
   .badge-green  { background: var(--green-light); color: #166534; }
   .badge-violet { background: var(--violet-light); color: #5b21b6; }
+  .badge-amber  { background: var(--amber-light); color: #92400e; }
 
   .cover h1 {
     font-size: 52px; font-weight: 800; letter-spacing: -0.035em;
@@ -61,11 +63,10 @@
   }
   .cover-sub {
     font-size: 18px; color: var(--slate-light); font-weight: 300;
-    max-width: 640px; line-height: 1.55; margin-bottom: 0;
+    max-width: 680px; line-height: 1.55; margin-bottom: 0;
   }
   .cover-sub strong { color: var(--slate); font-weight: 600; }
 
-  /* ── Headings ── */
   h2 {
     font-size: 20px; font-weight: 700; color: var(--slate);
     margin: 56px 0 20px; padding-bottom: 10px;
@@ -86,7 +87,6 @@
   li { margin-bottom: 5px; line-height: 1.6; }
   li::marker { color: var(--blue); }
 
-  /* ── Callouts ── */
   .callout {
     border-radius: 8px; padding: 14px 17px; margin: 16px 0;
     display: flex; gap: 13px; align-items: flex-start;
@@ -111,36 +111,11 @@
   .callout-violet .callout-title { color: #5b21b6; }
   .callout-violet p { color: #4c1d95; }
 
-  /* ── Pipeline steps ── */
-  .pipeline { margin: 18px 0; }
-  .pipeline-step { display: flex; gap: 14px; align-items: flex-start; }
-  .step-left { display: flex; flex-direction: column; align-items: center; min-width: 32px; }
-  .step-dot {
-    width: 32px; height: 32px; border-radius: 50%; background: var(--blue);
-    color: white; display: flex; align-items: center; justify-content: center;
-    font-size: 11.5px; font-weight: 700; flex-shrink: 0;
-  }
-  .step-dot.violet { background: var(--violet); }
-  .step-dot.amber  { background: var(--amber); }
-  .step-line { width: 2px; background: var(--border); flex: 1; min-height: 16px; margin: 3px 0; }
-  .pipeline-step:last-child .step-line { display: none; }
-  .step-body { padding: 4px 0 18px; flex: 1; }
-  .step-head { display: flex; align-items: center; gap: 9px; margin-bottom: 4px; }
-  .step-name { font-size: 13.5px; font-weight: 700; color: var(--slate); }
-  .step-tag {
-    font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em;
-    text-transform: uppercase; padding: 2px 7px; border-radius: 10px;
-  }
-  .tag-auto   { background: var(--green-light); color: #166534; }
-  .tag-once   { background: var(--violet-light); color: #5b21b6; }
-  .tag-hitl   { background: var(--amber-light); color: #92400e; }
-  .step-desc { font-size: 12.5px; color: var(--slate-light); line-height: 1.6; }
-
-  /* ── SVG diagrams ── */
   .diagram { margin: 24px 0; }
   .diagram svg { width: 100%; height: auto; display: block; }
 
-  /* ── Tables ── */
+  .filter-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0; }
+
   table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 12.5px; }
   th {
     background: var(--slate); color: white; padding: 7px 12px;
@@ -151,12 +126,17 @@
   tr:nth-child(even) td { background: var(--bg-soft); }
   td strong { font-weight: 600; }
 
-  /* ── Status table ── */
   .status-table td:last-child { font-weight: 600; }
   .done { color: var(--green); }
   .next { color: var(--amber); }
 
-  /* ── Footer ── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 20px 0; }
+  .col-card {
+    border: 1.5px solid var(--border); border-radius: 10px; padding: 18px;
+    background: var(--bg-soft);
+  }
+  .col-card h3 { margin-top: 0; }
+
   .footer {
     margin-top: 60px; padding-top: 16px;
     border-top: 1px solid var(--border);
@@ -169,7 +149,7 @@
     .cover { padding: 28px 0; }
     .cover h1 { font-size: 38px; }
     h2 { margin-top: 34px; font-size: 16px; }
-    .callout, .step-body { break-inside: avoid; }
+    .callout, .filter-grid { break-inside: avoid; }
     a { color: inherit; text-decoration: none; }
   }
 </style>
@@ -182,210 +162,238 @@
     <span class="badge badge-blue">Présentation produit</span>
     <span class="badge badge-green">Prototype fonctionnel</span>
     <span class="badge badge-violet">Agnostique — tous domaines</span>
+    <span class="badge badge-amber">IA-native</span>
   </div>
   <h1>Argos</h1>
-  <p class="cover-sub">Un système qui <strong>comprend ce que vous ne savez pas encore</strong> — et vous sert exactement ce qu'il vous faut, au bon moment, dans le bon ordre.</p>
+  <p class="cover-sub">Un système qui <strong>comprend ce que vous savez et ce qu'il vous manque</strong> — et vous sert exactement le bon contenu, dans le bon ordre, au bon moment. Pour la veille comme pour l'apprentissage.</p>
 </div>
 
 
-<!-- ══════════════════════════ VUE D'ENSEMBLE ══════════════════════════ -->
-<h2><span class="num">01</span> Argos en un coup d'œil</h2>
+<!-- ══════════════════════════ PROBLÈME ══════════════════════════ -->
+<h2><span class="num">01</span> Le problème — sans Argos</h2>
 
-<!-- DIAGRAMME 1 : Vue d'ensemble complète -->
+<p>Un consultant, un ingénieur, un chef de projet passe en moyenne <strong>1 à 2 heures par jour</strong> à trier manuellement des informations. Résultat : 80 % du contenu consommé est hors-sujet, déjà connu, ou non exploitable. L'information utile est noyée.</p>
+
 <div class="diagram">
-<svg viewBox="0 0 860 340" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
+<svg viewBox="0 0 860 260" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
+  <!-- AVANT -->
+  <rect x="0" y="0" width="400" height="260" rx="10" fill="#fff1f2" stroke="#fca5a5" stroke-width="1.5"/>
+  <text x="200" y="28" text-anchor="middle" font-size="13" font-weight="800" fill="#9f1239">AVANT — Sans Argos</text>
 
-  <!-- Fond zones -->
-  <rect x="0" y="30" width="175" height="280" rx="10" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.2"/>
-  <rect x="190" y="30" width="210" height="280" rx="10" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.5"/>
-  <rect x="415" y="30" width="200" height="280" rx="10" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.2"/>
-  <rect x="630" y="30" width="220" height="280" rx="10" fill="#f0fdf4" stroke="#059669" stroke-width="1.2"/>
+  <!-- flux entrants pêle-mêle -->
+  <rect x="16" y="44" width="110" height="26" rx="5" fill="#fecdd3" stroke="#f87171" stroke-width="1"/>
+  <text x="71" y="62" text-anchor="middle" font-size="10.5" fill="#9f1239">50 newsletters/jour</text>
+  <rect x="134" y="44" width="110" height="26" rx="5" fill="#fecdd3" stroke="#f87171" stroke-width="1"/>
+  <text x="189" y="62" text-anchor="middle" font-size="10.5" fill="#9f1239">RSS non filtrés</text>
+  <rect x="256" y="44" width="120" height="26" rx="5" fill="#fecdd3" stroke="#f87171" stroke-width="1"/>
+  <text x="316" y="62" text-anchor="middle" font-size="10.5" fill="#9f1239">Alertes Google</text>
 
-  <!-- Labels zones -->
-  <text x="87" y="22" text-anchor="middle" font-size="10" font-weight="700" fill="#64748b" letter-spacing="0.06em">SOURCES</text>
-  <text x="295" y="22" text-anchor="middle" font-size="10" font-weight="700" fill="#2563eb" letter-spacing="0.06em">ARGOS</text>
-  <text x="515" y="22" text-anchor="middle" font-size="10" font-weight="700" fill="#64748b" letter-spacing="0.06em">BASE DE CONNAISSANCE</text>
-  <text x="740" y="22" text-anchor="middle" font-size="10" font-weight="700" fill="#059669" letter-spacing="0.06em">INTERFACES</text>
+  <!-- flèches vers personne -->
+  <line x1="71" y1="70" x2="100" y2="115" stroke="#f87171" stroke-width="1.5" marker-end="url(#red1)"/>
+  <line x1="189" y1="70" x2="180" y2="115" stroke="#f87171" stroke-width="1.5" marker-end="url(#red1)"/>
+  <line x1="316" y1="70" x2="260" y2="115" stroke="#f87171" stroke-width="1.5" marker-end="url(#red1)"/>
 
-  <!-- Sources -->
-  <rect x="12" y="55" width="151" height="30" rx="6" fill="white" stroke="#e2e8f0" stroke-width="1"/>
-  <text x="87" y="75" text-anchor="middle" font-size="11.5" font-weight="500" fill="#334155">Flux RSS · Newsletters</text>
+  <!-- personne submergée -->
+  <circle cx="185" cy="140" r="26" fill="#fca5a5" stroke="#ef4444" stroke-width="1.5"/>
+  <text x="185" y="148" text-anchor="middle" font-size="22">😵</text>
 
-  <rect x="12" y="95" width="151" height="30" rx="6" fill="white" stroke="#e2e8f0" stroke-width="1"/>
-  <text x="87" y="115" text-anchor="middle" font-size="11.5" font-weight="500" fill="#334155">Sites · Documentation</text>
+  <!-- résultats négatifs -->
+  <rect x="20" y="186" width="168" height="50" rx="6" fill="white" stroke="#fca5a5" stroke-width="1"/>
+  <text x="104" y="206" text-anchor="middle" font-size="11" font-weight="600" fill="#9f1239">80% hors-sujet</text>
+  <text x="104" y="222" text-anchor="middle" font-size="10.5" fill="#dc2626">ou déjà connu</text>
 
-  <rect x="12" y="135" width="151" height="30" rx="6" fill="white" stroke="#e2e8f0" stroke-width="1"/>
-  <text x="87" y="155" text-anchor="middle" font-size="11.5" font-weight="500" fill="#334155">GitHub · Dépôts publics</text>
+  <rect x="202" y="186" width="168" height="50" rx="6" fill="white" stroke="#fca5a5" stroke-width="1"/>
+  <text x="286" y="206" text-anchor="middle" font-size="11" font-weight="600" fill="#9f1239">1–2h perdues/jour</text>
+  <text x="286" y="222" text-anchor="middle" font-size="10.5" fill="#dc2626">sur le tri manuel</text>
 
-  <rect x="12" y="175" width="151" height="30" rx="6" fill="white" stroke="#e2e8f0" stroke-width="1"/>
-  <text x="87" y="195" text-anchor="middle" font-size="11.5" font-weight="500" fill="#334155">PDF · Documents internes</text>
+  <!-- APRÈS -->
+  <rect x="420" y="0" width="440" height="260" rx="10" fill="#f0fdf4" stroke="#86efac" stroke-width="1.5"/>
+  <text x="640" y="28" text-anchor="middle" font-size="13" font-weight="800" fill="#166534">APRÈS — Avec Argos</text>
 
-  <rect x="12" y="215" width="151" height="30" rx="6" fill="white" stroke="#e2e8f0" stroke-width="1"/>
-  <text x="87" y="235" text-anchor="middle" font-size="11.5" font-weight="500" fill="#334155">Bases de données publiques</text>
+  <!-- sources filtrées -->
+  <rect x="436" y="44" width="118" height="26" rx="5" fill="#d1fae5" stroke="#34d399" stroke-width="1"/>
+  <text x="495" y="62" text-anchor="middle" font-size="10.5" fill="#065f46">Sources validées</text>
+  <rect x="566" y="44" width="118" height="26" rx="5" fill="#d1fae5" stroke="#34d399" stroke-width="1"/>
+  <text x="625" y="62" text-anchor="middle" font-size="10.5" fill="#065f46">Filtrées par profil</text>
+  <rect x="696" y="44" width="148" height="26" rx="5" fill="#d1fae5" stroke="#34d399" stroke-width="1"/>
+  <text x="770" y="62" text-anchor="middle" font-size="10.5" fill="#065f46">Classifiées auto</text>
 
-  <rect x="12" y="255" width="151" height="30" rx="6" fill="white" stroke="#e2e8f0" stroke-width="1"/>
-  <text x="87" y="275" text-anchor="middle" font-size="11.5" font-weight="500" fill="#334155">Webhooks · APIs tierces</text>
+  <!-- flèches ordonnées -->
+  <line x1="495" y1="70" x2="570" y2="115" stroke="#34d399" stroke-width="1.5" marker-end="url(#grn1)"/>
+  <line x1="625" y1="70" x2="630" y2="115" stroke="#34d399" stroke-width="1.5" marker-end="url(#grn1)"/>
+  <line x1="770" y1="70" x2="700" y2="115" stroke="#34d399" stroke-width="1.5" marker-end="url(#grn1)"/>
 
-  <!-- Flèche sources → argos -->
-  <line x1="163" y1="170" x2="188" y2="170" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <!-- briefing ciblé -->
+  <rect x="560" y="115" width="140" height="58" rx="8" fill="white" stroke="#059669" stroke-width="1.5"/>
+  <text x="630" y="140" text-anchor="middle" font-size="12" font-weight="700" fill="#059669">Briefing ciblé</text>
+  <text x="630" y="156" text-anchor="middle" font-size="10.5" fill="#065f46">5–10 articles</text>
+  <text x="630" y="170" text-anchor="middle" font-size="10.5" fill="#065f46">vraiment utiles</text>
 
-  <!-- Argos pipeline -->
-  <rect x="202" y="55" width="186" height="34" rx="6" fill="#2563eb" />
-  <text x="295" y="70" text-anchor="middle" font-size="11" font-weight="700" fill="white">Profil de connaissance</text>
-  <text x="295" y="83" text-anchor="middle" font-size="10" fill="#bfdbfe">Entretien · Bilan · Plan</text>
+  <!-- résultats positifs -->
+  <rect x="436" y="186" width="168" height="50" rx="6" fill="white" stroke="#86efac" stroke-width="1"/>
+  <text x="520" y="206" text-anchor="middle" font-size="11" font-weight="600" fill="#166534">Lecture en 15 min</text>
+  <text x="520" y="222" text-anchor="middle" font-size="10.5" fill="#059669">tout est pertinent</text>
 
-  <line x1="295" y1="89" x2="295" y2="105" stroke="#93c5fd" stroke-width="1.5" marker-end="url(#arb)"/>
+  <rect x="618" y="186" width="222" height="50" rx="6" fill="white" stroke="#86efac" stroke-width="1"/>
+  <text x="729" y="206" text-anchor="middle" font-size="11" font-weight="600" fill="#166534">Apprentissage progressif</text>
+  <text x="729" y="222" text-anchor="middle" font-size="10.5" fill="#059669">dans l'ordre du plan</text>
 
-  <rect x="202" y="107" width="186" height="30" rx="6" fill="white" stroke="#bfdbfe" stroke-width="1.2"/>
-  <text x="295" y="126" text-anchor="middle" font-size="11" font-weight="500" fill="#334155">Filtrage fiabilité</text>
-
-  <line x1="295" y1="137" x2="295" y2="151" stroke="#93c5fd" stroke-width="1.5" marker-end="url(#arb)"/>
-
-  <rect x="202" y="153" width="186" height="30" rx="6" fill="white" stroke="#bfdbfe" stroke-width="1.2"/>
-  <text x="295" y="172" text-anchor="middle" font-size="11" font-weight="500" fill="#334155">Classification LLM</text>
-
-  <line x1="295" y1="183" x2="295" y2="197" stroke="#93c5fd" stroke-width="1.5" marker-end="url(#arb)"/>
-
-  <rect x="202" y="199" width="186" height="30" rx="6" fill="white" stroke="#bfdbfe" stroke-width="1.2"/>
-  <text x="295" y="218" text-anchor="middle" font-size="11" font-weight="500" fill="#334155">Tagging veille / apprentissage</text>
-
-  <line x1="295" y1="229" x2="295" y2="243" stroke="#93c5fd" stroke-width="1.5" marker-end="url(#arb)"/>
-
-  <rect x="202" y="245" width="186" height="34" rx="6" fill="#fef3c7" stroke="#d97706" stroke-width="1.2"/>
-  <text x="295" y="260" text-anchor="middle" font-size="11" font-weight="700" fill="#92400e">Décision du consultant</text>
-  <text x="295" y="273" text-anchor="middle" font-size="10" fill="#78350f">Intégrer · Sauvegarder · Ignorer</text>
-
-  <!-- Flèche argos → base -->
-  <line x1="388" y1="170" x2="413" y2="170" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
-
-  <!-- Base de connaissance -->
-  <rect x="427" y="55" width="176" height="46" rx="6" fill="white" stroke="#e2e8f0" stroke-width="1"/>
-  <text x="515" y="74" text-anchor="middle" font-size="11" font-weight="700" fill="#334155">RAG hybride</text>
-  <text x="515" y="90" text-anchor="middle" font-size="10" fill="#64748b">Sémantique + lexical · LanceDB</text>
-
-  <rect x="427" y="113" width="176" height="46" rx="6" fill="white" stroke="#e2e8f0" stroke-width="1"/>
-  <text x="515" y="132" text-anchor="middle" font-size="11" font-weight="700" fill="#334155">Knowledge Graph</text>
-  <text x="515" y="148" text-anchor="middle" font-size="10" fill="#64748b">Entités · Relations · Poids</text>
-
-  <rect x="427" y="171" width="176" height="46" rx="6" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1"/>
-  <text x="515" y="190" text-anchor="middle" font-size="11" font-weight="700" fill="#5b21b6">Mise à jour hebdo</text>
-  <text x="515" y="206" text-anchor="middle" font-size="10" fill="#6d28d9">Comparaison RAG+KG vs sources</text>
-
-  <rect x="427" y="229" width="176" height="46" rx="6" fill="white" stroke="#e2e8f0" stroke-width="1"/>
-  <text x="515" y="248" text-anchor="middle" font-size="11" font-weight="700" fill="#334155">Bibliothèque</text>
-  <text x="515" y="264" text-anchor="middle" font-size="10" fill="#64748b">Veille archivée · Apprentissage</text>
-
-  <!-- Flèche base → interfaces -->
-  <line x1="603" y1="170" x2="628" y2="170" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
-
-  <!-- Interfaces -->
-  <rect x="642" y="55" width="196" height="34" rx="6" fill="white" stroke="#e2e8f0" stroke-width="1"/>
-  <text x="740" y="69" text-anchor="middle" font-size="11" font-weight="700" fill="#334155">Briefing journalier</text>
-  <text x="740" y="82" text-anchor="middle" font-size="10" fill="#64748b">Veille · Apprentissage progressif</text>
-
-  <rect x="642" y="101" width="196" height="34" rx="6" fill="white" stroke="#e2e8f0" stroke-width="1"/>
-  <text x="740" y="115" text-anchor="middle" font-size="11" font-weight="700" fill="#334155">Assistant RAG+KG</text>
-  <text x="740" y="128" text-anchor="middle" font-size="10" fill="#64748b">Questions en langage naturel</text>
-
-  <rect x="642" y="147" width="196" height="34" rx="6" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.3"/>
-  <text x="740" y="161" text-anchor="middle" font-size="11" font-weight="700" fill="#5b21b6">IDE · VS Code · Cursor</text>
-  <text x="740" y="174" text-anchor="middle" font-size="10" fill="#6d28d9">via MCP</text>
-
-  <rect x="642" y="193" width="196" height="34" rx="6" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.3"/>
-  <text x="740" y="207" text-anchor="middle" font-size="11" font-weight="700" fill="#5b21b6">LLMs externes</text>
-  <text x="740" y="220" text-anchor="middle" font-size="10" fill="#6d28d9">Claude · GPT · Gemini · via MCP</text>
-
-  <rect x="642" y="239" width="196" height="34" rx="6" fill="white" stroke="#e2e8f0" stroke-width="1"/>
-  <text x="740" y="253" text-anchor="middle" font-size="11" font-weight="700" fill="#334155">Espaces équipes / projets</text>
-  <text x="740" y="266" text-anchor="middle" font-size="10" fill="#64748b">Base partagée · Rôles</text>
-
-  <!-- Defs -->
   <defs>
-    <marker id="arr" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
-      <polygon points="0 0, 7 3.5, 0 7" fill="#94a3b8"/>
+    <marker id="red1" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <polygon points="0 0, 7 3.5, 0 7" fill="#f87171"/>
     </marker>
-    <marker id="arb" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
-      <polygon points="0 0, 7 3.5, 0 7" fill="#93c5fd"/>
+    <marker id="grn1" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <polygon points="0 0, 7 3.5, 0 7" fill="#34d399"/>
     </marker>
   </defs>
 </svg>
 </div>
 
-<div class="callout callout-violet">
+<div class="callout callout-blue">
   <div class="callout-icon">◆</div>
   <div class="callout-body">
-    <div class="callout-title">Ce qui différencie Argos de tous les agrégateurs</div>
-    <p>Argos ne collecte pas pour tout le monde de la même façon. Il commence par <strong>cartographier ce que vous savez et ce qui vous manque</strong> — puis adapte chaque étape du pipeline à ce profil. Le même article peut être de la veille pour un expert et de l'apprentissage fondamental pour un débutant sur le même sujet.</p>
+    <div class="callout-title">Pourquoi les outils existants ne suffisent pas</div>
+    <p>Feedly, Google Alerts, Pocket — ils collectent. Ils ne comprennent pas. Ils ne savent pas ce que vous maîtrisez déjà, ni ce qui est prioritaire pour votre projet. Argos commence par <strong>cartographier votre niveau réel</strong>, puis adapte chaque étape du pipeline à ce profil.</p>
   </div>
 </div>
 
 
-<!-- ══════════════════════════ DOMAINES ══════════════════════════ -->
-<h2><span class="num">02</span> Agnostique — fonctionne pour n'importe quel domaine</h2>
+<!-- ══════════════════════════ VUE D'ENSEMBLE ══════════════════════════ -->
+<h2><span class="num">02</span> Vue d'ensemble — comment Argos fonctionne</h2>
 
-<p>Argos ne contient aucune logique codée pour un domaine spécifique. Le profil de connaissance, la classification, le graphe de relations et les sources sont entièrement configurés par l'utilisateur. Le système s'adapte au sujet, pas l'inverse.</p>
+<p>Argos est un pipeline end-to-end : de la collecte brute jusqu'au briefing personnalisé, en passant par plusieurs couches de filtrage automatique. L'utilisateur n'intervient qu'aux points de décision qui comptent vraiment.</p>
 
-<!-- DIAGRAMME 2 : Domaines -->
 <div class="diagram">
-<svg viewBox="0 0 860 200" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
+<svg viewBox="0 0 860 360" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
 
-  <!-- Domaine cards -->
-  <!-- IA / Tech -->
-  <rect x="10" y="20" width="130" height="70" rx="8" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.3"/>
-  <text x="75" y="50" text-anchor="middle" font-size="20">🤖</text>
-  <text x="75" y="68" text-anchor="middle" font-size="12" font-weight="700" fill="#1e40af">IA &amp; Tech</text>
-  <text x="75" y="82" text-anchor="middle" font-size="10" fill="#3b82f6">LLMs · Agents · MLOps</text>
+  <!-- Zones de fond -->
+  <rect x="0" y="30" width="155" height="310" rx="10" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.2"/>
+  <rect x="168" y="30" width="186" height="310" rx="10" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.5"/>
+  <rect x="367" y="30" width="186" height="310" rx="10" fill="#fff7ed" stroke="#f97316" stroke-width="1.2"/>
+  <rect x="566" y="30" width="148" height="310" rx="10" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.2"/>
+  <rect x="727" y="30" width="133" height="310" rx="10" fill="#f0fdf4" stroke="#059669" stroke-width="1.2"/>
 
-  <!-- Droit -->
-  <rect x="152" y="20" width="130" height="70" rx="8" fill="#fff7ed" stroke="#f97316" stroke-width="1.3"/>
-  <text x="217" y="50" text-anchor="middle" font-size="20">⚖️</text>
-  <text x="217" y="68" text-anchor="middle" font-size="12" font-weight="700" fill="#9a3412">Droit &amp; Réglementation</text>
-  <text x="217" y="82" text-anchor="middle" font-size="10" fill="#ea580c">RGPD · IA Act · NIS2</text>
+  <!-- Labels zones -->
+  <text x="77" y="22" text-anchor="middle" font-size="10" font-weight="700" fill="#64748b" letter-spacing="0.06em">SOURCES</text>
+  <text x="261" y="22" text-anchor="middle" font-size="10" font-weight="700" fill="#2563eb" letter-spacing="0.06em">PIPELINE ARGOS</text>
+  <text x="460" y="22" text-anchor="middle" font-size="10" font-weight="700" fill="#c2410c" letter-spacing="0.06em">FILTRES</text>
+  <text x="640" y="22" text-anchor="middle" font-size="10" font-weight="700" fill="#5b21b6" letter-spacing="0.06em">BASE DE CONN.</text>
+  <text x="793" y="22" text-anchor="middle" font-size="10" font-weight="700" fill="#059669" letter-spacing="0.06em">SORTIES</text>
 
-  <!-- Finance -->
-  <rect x="294" y="20" width="130" height="70" rx="8" fill="#f0fdf4" stroke="#22c55e" stroke-width="1.3"/>
-  <text x="359" y="50" text-anchor="middle" font-size="20">📈</text>
-  <text x="359" y="68" text-anchor="middle" font-size="12" font-weight="700" fill="#166534">Finance &amp; Marchés</text>
-  <text x="359" y="82" text-anchor="middle" font-size="10" fill="#16a34a">Crypto · ESG · Régulation</text>
+  <!-- Sources -->
+  <rect x="10" y="54" width="135" height="24" rx="5" fill="white" stroke="#e2e8f0"/>
+  <text x="77" y="70" text-anchor="middle" font-size="10.5" font-weight="500" fill="#334155">RSS · Newsletters</text>
+  <rect x="10" y="86" width="135" height="24" rx="5" fill="white" stroke="#e2e8f0"/>
+  <text x="77" y="102" text-anchor="middle" font-size="10.5" font-weight="500" fill="#334155">Sites web · SPA JS</text>
+  <rect x="10" y="118" width="135" height="24" rx="5" fill="white" stroke="#e2e8f0"/>
+  <text x="77" y="134" text-anchor="middle" font-size="10.5" font-weight="500" fill="#334155">GitHub · ArXiv</text>
+  <rect x="10" y="150" width="135" height="24" rx="5" fill="white" stroke="#e2e8f0"/>
+  <text x="77" y="166" text-anchor="middle" font-size="10.5" font-weight="500" fill="#334155">PDF · Documents</text>
+  <rect x="10" y="182" width="135" height="24" rx="5" fill="white" stroke="#e2e8f0"/>
+  <text x="77" y="198" text-anchor="middle" font-size="10.5" font-weight="500" fill="#334155">APIs · Webhooks</text>
 
-  <!-- Santé -->
-  <rect x="436" y="20" width="130" height="70" rx="8" fill="#fdf4ff" stroke="#c026d3" stroke-width="1.3"/>
-  <text x="501" y="50" text-anchor="middle" font-size="20">🧬</text>
-  <text x="501" y="68" text-anchor="middle" font-size="12" font-weight="700" fill="#86198f">Santé &amp; Bioméd.</text>
-  <text x="501" y="82" text-anchor="middle" font-size="10" fill="#a21caf">Recherche · Dispositifs · HDS</text>
+  <!-- Flèche sources → pipeline -->
+  <line x1="145" y1="170" x2="165" y2="170" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#ov1)"/>
 
-  <!-- Cyber -->
-  <rect x="578" y="20" width="130" height="70" rx="8" fill="#fff1f2" stroke="#f43f5e" stroke-width="1.3"/>
-  <text x="643" y="50" text-anchor="middle" font-size="20">🔐</text>
-  <text x="643" y="68" text-anchor="middle" font-size="12" font-weight="700" fill="#9f1239">Cybersécurité</text>
-  <text x="643" y="82" text-anchor="middle" font-size="10" fill="#e11d48">CVE · Outils · Standards</text>
+  <!-- Pipeline steps -->
+  <rect x="178" y="50" width="166" height="36" rx="6" fill="#2563eb"/>
+  <text x="261" y="65" text-anchor="middle" font-size="11" font-weight="700" fill="white">Collecte nocturne</text>
+  <text x="261" y="79" text-anchor="middle" font-size="9.5" fill="#bfdbfe">APScheduler · Celery</text>
 
-  <!-- Autre -->
-  <rect x="720" y="20" width="130" height="70" rx="8" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.3"/>
-  <text x="785" y="50" text-anchor="middle" font-size="20">＋</text>
-  <text x="785" y="68" text-anchor="middle" font-size="12" font-weight="700" fill="#475569">Tout autre domaine</text>
-  <text x="785" y="82" text-anchor="middle" font-size="10" fill="#64748b">RH · Énergie · Immobilier…</text>
+  <line x1="261" y1="86" x2="261" y2="100" stroke="#93c5fd" stroke-width="1.5" marker-end="url(#ov2)"/>
 
-  <!-- Flèches vers argos -->
-  <line x1="75" y1="90" x2="75" y2="130" stroke="#94a3b8" stroke-width="1.2"/>
-  <line x1="217" y1="90" x2="217" y2="130" stroke="#94a3b8" stroke-width="1.2"/>
-  <line x1="359" y1="90" x2="359" y2="130" stroke="#94a3b8" stroke-width="1.2"/>
-  <line x1="501" y1="90" x2="501" y2="130" stroke="#94a3b8" stroke-width="1.2"/>
-  <line x1="643" y1="90" x2="643" y2="130" stroke="#94a3b8" stroke-width="1.2"/>
-  <line x1="785" y1="90" x2="785" y2="130" stroke="#94a3b8" stroke-width="1.2"/>
+  <rect x="178" y="102" width="166" height="36" rx="6" fill="white" stroke="#bfdbfe" stroke-width="1.2"/>
+  <text x="261" y="117" text-anchor="middle" font-size="11" font-weight="600" fill="#334155">Classification LLM</text>
+  <text x="261" y="131" text-anchor="middle" font-size="9.5" fill="#64748b">importance · type · keywords</text>
 
-  <!-- Ligne horizontale -->
-  <line x1="75" y1="130" x2="785" y2="130" stroke="#94a3b8" stroke-width="1.2"/>
-  <!-- Flèche centrale vers Argos -->
-  <line x1="430" y1="130" x2="430" y2="155" stroke="#2563eb" stroke-width="2" marker-end="url(#arr2)"/>
+  <line x1="261" y1="138" x2="261" y2="152" stroke="#93c5fd" stroke-width="1.5" marker-end="url(#ov2)"/>
 
-  <!-- Box Argos -->
-  <rect x="330" y="158" width="200" height="32" rx="8" fill="#2563eb"/>
-  <text x="430" y="179" text-anchor="middle" font-size="13" font-weight="700" fill="white">Argos — profil unique par sujet</text>
+  <rect x="178" y="154" width="166" height="36" rx="6" fill="white" stroke="#bfdbfe" stroke-width="1.2"/>
+  <text x="261" y="169" text-anchor="middle" font-size="11" font-weight="600" fill="#334155">Digest structuré</text>
+  <text x="261" y="183" text-anchor="middle" font-size="9.5" fill="#64748b">LLM → markdown + JSON</text>
+
+  <line x1="261" y1="190" x2="261" y2="204" stroke="#93c5fd" stroke-width="1.5" marker-end="url(#ov2)"/>
+
+  <rect x="178" y="206" width="166" height="36" rx="6" fill="white" stroke="#bfdbfe" stroke-width="1.2"/>
+  <text x="261" y="221" text-anchor="middle" font-size="11" font-weight="600" fill="#334155">Tagging auto</text>
+  <text x="261" y="235" text-anchor="middle" font-size="9.5" fill="#64748b">veille / apprentissage / projet</text>
+
+  <line x1="261" y1="242" x2="261" y2="256" stroke="#93c5fd" stroke-width="1.5" marker-end="url(#ov2)"/>
+
+  <rect x="178" y="258" width="166" height="36" rx="6" fill="white" stroke="#bfdbfe" stroke-width="1.2"/>
+  <text x="261" y="273" text-anchor="middle" font-size="11" font-weight="600" fill="#334155">Indexation RAG</text>
+  <text x="261" y="287" text-anchor="middle" font-size="9.5" fill="#64748b">embeddings · LanceDB</text>
+
+  <!-- Flèche pipeline → filtres -->
+  <line x1="344" y1="185" x2="364" y2="185" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#ov1)"/>
+
+  <!-- Filtres -->
+  <rect x="377" y="50" width="166" height="36" rx="6" fill="#fef3c7" stroke="#d97706" stroke-width="1.3"/>
+  <text x="460" y="65" text-anchor="middle" font-size="11" font-weight="700" fill="#92400e">① Fiabilité source</text>
+  <text x="460" y="79" text-anchor="middle" font-size="9.5" fill="#78350f">Tier · Score domaine · Decay</text>
+
+  <rect x="377" y="100" width="166" height="36" rx="6" fill="#fef3c7" stroke="#d97706" stroke-width="1.3"/>
+  <text x="460" y="115" text-anchor="middle" font-size="11" font-weight="700" fill="#92400e">② Pertinence LLM</text>
+  <text x="460" y="129" text-anchor="middle" font-size="9.5" fill="#78350f">Note 1–5 × profil · ≤3 ignoré</text>
+
+  <rect x="377" y="150" width="166" height="36" rx="6" fill="#fef3c7" stroke="#d97706" stroke-width="1.3"/>
+  <text x="460" y="165" text-anchor="middle" font-size="11" font-weight="700" fill="#92400e">③ Progression</text>
+  <text x="460" y="179" text-anchor="middle" font-size="9.5" fill="#78350f">RAG+KG vs plan · ordre respecté</text>
+
+  <rect x="377" y="200" width="166" height="36" rx="6" fill="#fef3c7" stroke="#d97706" stroke-width="1.3"/>
+  <text x="460" y="215" text-anchor="middle" font-size="11" font-weight="700" fill="#92400e">④ HITL</text>
+  <text x="460" y="229" text-anchor="middle" font-size="9.5" fill="#78350f">Intégrer · Sauvegarder · Ignorer</text>
+
+  <!-- Flèche filtres → base -->
+  <line x1="543" y1="185" x2="563" y2="185" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#ov1)"/>
+
+  <!-- Base de connaissance -->
+  <rect x="576" y="50" width="128" height="52" rx="6" fill="white" stroke="#c4b5fd" stroke-width="1.2"/>
+  <text x="640" y="72" text-anchor="middle" font-size="11" font-weight="700" fill="#5b21b6">RAG hybride</text>
+  <text x="640" y="88" text-anchor="middle" font-size="9.5" fill="#6d28d9">Sémantique + lexical</text>
+
+  <rect x="576" y="116" width="128" height="52" rx="6" fill="white" stroke="#c4b5fd" stroke-width="1.2"/>
+  <text x="640" y="138" text-anchor="middle" font-size="11" font-weight="700" fill="#5b21b6">Knowledge Graph</text>
+  <text x="640" y="154" text-anchor="middle" font-size="9.5" fill="#6d28d9">Entités · Relations</text>
+
+  <rect x="576" y="182" width="128" height="52" rx="6" fill="white" stroke="#c4b5fd" stroke-width="1.2"/>
+  <text x="640" y="204" text-anchor="middle" font-size="11" font-weight="700" fill="#5b21b6">Bibliothèque</text>
+  <text x="640" y="220" text-anchor="middle" font-size="9.5" fill="#6d28d9">Veille · Apprentissage</text>
+
+  <rect x="576" y="248" width="128" height="52" rx="6" fill="white" stroke="#c4b5fd" stroke-width="1.2"/>
+  <text x="640" y="270" text-anchor="middle" font-size="11" font-weight="700" fill="#5b21b6">PostgreSQL</text>
+  <text x="640" y="286" text-anchor="middle" font-size="9.5" fill="#6d28d9">Métadonnées · Scores</text>
+
+  <!-- Flèche base → sorties -->
+  <line x1="704" y1="185" x2="724" y2="185" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#ov1)"/>
+
+  <!-- Sorties -->
+  <rect x="737" y="50" width="113" height="38" rx="6" fill="white" stroke="#86efac" stroke-width="1.2"/>
+  <text x="793" y="66" text-anchor="middle" font-size="10.5" font-weight="700" fill="#166534">Briefing journalier</text>
+  <text x="793" y="80" text-anchor="middle" font-size="9.5" fill="#059669">Veille · Apprentissage</text>
+
+  <rect x="737" y="104" width="113" height="38" rx="6" fill="white" stroke="#86efac" stroke-width="1.2"/>
+  <text x="793" y="120" text-anchor="middle" font-size="10.5" font-weight="700" fill="#166534">Assistant RAG</text>
+  <text x="793" y="134" text-anchor="middle" font-size="9.5" fill="#059669">Questions naturelles</text>
+
+  <rect x="737" y="158" width="113" height="38" rx="6" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.2"/>
+  <text x="793" y="174" text-anchor="middle" font-size="10.5" font-weight="700" fill="#5b21b6">IDE · VS Code</text>
+  <text x="793" y="188" text-anchor="middle" font-size="9.5" fill="#6d28d9">via MCP</text>
+
+  <rect x="737" y="212" width="113" height="38" rx="6" fill="white" stroke="#86efac" stroke-width="1.2"/>
+  <text x="793" y="228" text-anchor="middle" font-size="10.5" font-weight="700" fill="#166534">Projets équipes</text>
+  <text x="793" y="242" text-anchor="middle" font-size="9.5" fill="#059669">RAG+KG isolés</text>
+
+  <rect x="737" y="266" width="113" height="38" rx="6" fill="white" stroke="#86efac" stroke-width="1.2"/>
+  <text x="793" y="282" text-anchor="middle" font-size="10.5" font-weight="700" fill="#166534">Docs générés</text>
+  <text x="793" y="296" text-anchor="middle" font-size="9.5" fill="#059669">LLM sur demande</text>
 
   <defs>
-    <marker id="arr2" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
-      <polygon points="0 0, 7 3.5, 0 7" fill="#2563eb"/>
+    <marker id="ov1" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <polygon points="0 0, 7 3.5, 0 7" fill="#94a3b8"/>
+    </marker>
+    <marker id="ov2" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <polygon points="0 0, 7 3.5, 0 7" fill="#93c5fd"/>
     </marker>
   </defs>
 </svg>
@@ -393,46 +401,49 @@
 
 
 <!-- ══════════════════════════ PROFIL ══════════════════════════ -->
-<h2><span class="num">03</span> Étape 0 — comprendre avant de collecter</h2>
+<h2><span class="num">03</span> Profil de connaissance — comprendre avant de collecter</h2>
 
-<p>Avant toute collecte, Argos conduit un entretien structuré. Un agent conversationnel évalue ce que le consultant maîtrise réellement — pas ce qu'il pense maîtriser. Le résultat : un bilan de connaissance, un plan d'apprentissage chronologique, une whitelist de sources pertinentes.</p>
+<p>Avant toute collecte, Argos conduit un entretien structuré (15–20 min, une seule fois par sujet). Un agent conversationnel évalue ce que le consultant maîtrise <em>réellement</em> — pas ce qu'il pense maîtriser. Le profil produit conditionne tout le reste : sources, ordre du contenu, seuils de pertinence.</p>
 
-<!-- DIAGRAMME 3 : Onboarding -->
 <div class="diagram">
-<svg viewBox="0 0 860 110" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
+<svg viewBox="0 0 860 130" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
 
-  <rect x="0" y="15" width="190" height="80" rx="8" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.5"/>
-  <text x="95" y="46" text-anchor="middle" font-size="12" font-weight="700" fill="#5b21b6">Entretien de calibration</text>
-  <text x="95" y="62" text-anchor="middle" font-size="10.5" fill="#6d28d9">Agent IA conversationnel</text>
-  <text x="95" y="76" text-anchor="middle" font-size="10.5" fill="#6d28d9">15–20 min · une seule fois</text>
-  <text x="95" y="90" text-anchor="middle" font-size="10" fill="#7c3aed">Ce que je sais · Ce qui me manque</text>
+  <rect x="0" y="15" width="190" height="100" rx="8" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.5"/>
+  <text x="95" y="44" text-anchor="middle" font-size="12" font-weight="700" fill="#5b21b6">Entretien LLM</text>
+  <text x="95" y="61" text-anchor="middle" font-size="10.5" fill="#6d28d9">Agent conversationnel</text>
+  <text x="95" y="76" text-anchor="middle" font-size="10.5" fill="#6d28d9">Questions adaptatives</text>
+  <text x="95" y="91" text-anchor="middle" font-size="10.5" fill="#6d28d9">15–20 min · une seule fois</text>
+  <text x="95" y="106" text-anchor="middle" font-size="9.5" fill="#7c3aed">CDC analysé automatiquement</text>
 
-  <line x1="190" y1="55" x2="215" y2="55" stroke="#7c3aed" stroke-width="1.8" marker-end="url(#arrv)"/>
+  <line x1="190" y1="65" x2="214" y2="65" stroke="#7c3aed" stroke-width="1.8" marker-end="url(#pv1)"/>
 
-  <rect x="217" y="15" width="190" height="80" rx="8" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.5"/>
-  <text x="312" y="46" text-anchor="middle" font-size="12" font-weight="700" fill="#5b21b6">Bilan de connaissance</text>
-  <text x="312" y="62" text-anchor="middle" font-size="10.5" fill="#6d28d9">Maîtrisé / Lacunaire / Inconnu</text>
-  <text x="312" y="76" text-anchor="middle" font-size="10.5" fill="#6d28d9">Par sous-thème du sujet</text>
-  <text x="312" y="90" text-anchor="middle" font-size="10" fill="#7c3aed">Mis à jour quand les besoins évoluent</text>
+  <rect x="216" y="15" width="180" height="100" rx="8" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.5"/>
+  <text x="306" y="44" text-anchor="middle" font-size="12" font-weight="700" fill="#5b21b6">Bilan de connaissance</text>
+  <text x="306" y="61" text-anchor="middle" font-size="10.5" fill="#6d28d9">✓ Maîtrisé</text>
+  <text x="306" y="76" text-anchor="middle" font-size="10.5" fill="#6d28d9">~ Lacunaire</text>
+  <text x="306" y="91" text-anchor="middle" font-size="10.5" fill="#6d28d9">✗ Inconnu / Prérequis</text>
+  <text x="306" y="106" text-anchor="middle" font-size="9.5" fill="#7c3aed">Mis à jour si besoins évoluent</text>
 
-  <line x1="407" y1="55" x2="432" y2="55" stroke="#7c3aed" stroke-width="1.8" marker-end="url(#arrv)"/>
+  <line x1="396" y1="65" x2="420" y2="65" stroke="#7c3aed" stroke-width="1.8" marker-end="url(#pv1)"/>
 
-  <rect x="434" y="15" width="190" height="80" rx="8" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.5"/>
-  <text x="529" y="46" text-anchor="middle" font-size="12" font-weight="700" fill="#5b21b6">Plan d'apprentissage</text>
-  <text x="529" y="62" text-anchor="middle" font-size="10.5" fill="#6d28d9">Séquence chronologique</text>
-  <text x="529" y="76" text-anchor="middle" font-size="10.5" fill="#6d28d9">Prérequis identifiés</text>
-  <text x="529" y="90" text-anchor="middle" font-size="10" fill="#7c3aed">Fil conducteur du contenu servi</text>
+  <rect x="422" y="15" width="180" height="100" rx="8" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.5"/>
+  <text x="512" y="44" text-anchor="middle" font-size="12" font-weight="700" fill="#5b21b6">Plan d'apprentissage</text>
+  <text x="512" y="61" text-anchor="middle" font-size="10.5" fill="#6d28d9">Séquence chronologique</text>
+  <text x="512" y="76" text-anchor="middle" font-size="10.5" fill="#6d28d9">Prérequis avant concepts avancés</text>
+  <text x="512" y="91" text-anchor="middle" font-size="10.5" fill="#6d28d9">Fil conducteur du contenu</text>
+  <text x="512" y="106" text-anchor="middle" font-size="9.5" fill="#7c3aed">Mis à jour selon avancement réel</text>
 
-  <line x1="624" y1="55" x2="649" y2="55" stroke="#7c3aed" stroke-width="1.8" marker-end="url(#arrv)"/>
+  <line x1="602" y1="65" x2="626" y2="65" stroke="#7c3aed" stroke-width="1.8" marker-end="url(#pv1)"/>
 
-  <rect x="651" y="15" width="200" height="80" rx="8" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.5"/>
-  <text x="751" y="46" text-anchor="middle" font-size="12" font-weight="700" fill="#5b21b6">Whitelist de sources</text>
-  <text x="751" y="62" text-anchor="middle" font-size="10.5" fill="#6d28d9">Découverte automatique</text>
-  <text x="751" y="76" text-anchor="middle" font-size="10.5" fill="#6d28d9">RSS · Sites · GitHub · Docs</text>
-  <text x="751" y="90" text-anchor="middle" font-size="10" fill="#7c3aed">Validée et ajustée par le consultant</text>
+  <rect x="628" y="15" width="232" height="100" rx="8" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.5"/>
+  <text x="744" y="44" text-anchor="middle" font-size="12" font-weight="700" fill="#5b21b6">Whitelist de sources</text>
+  <text x="744" y="61" text-anchor="middle" font-size="10.5" fill="#6d28d9">Découverte automatique</text>
+  <text x="744" y="76" text-anchor="middle" font-size="10.5" fill="#6d28d9">RSS · Sites · GitHub · Docs</text>
+  <text x="744" y="91" text-anchor="middle" font-size="10.5" fill="#6d28d9">Scored par fiabilité domaine</text>
+  <text x="744" y="106" text-anchor="middle" font-size="9.5" fill="#7c3aed">Validée par le consultant</text>
 
   <defs>
-    <marker id="arrv" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+    <marker id="pv1" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
       <polygon points="0 0, 7 3.5, 0 7" fill="#7c3aed"/>
     </marker>
   </defs>
@@ -443,186 +454,798 @@
   <div class="callout-icon">◆</div>
   <div class="callout-body">
     <div class="callout-title">L'investissement de départ qui change tout</div>
-    <p>20 minutes d'entretien, une seule fois par sujet. En retour : un système qui sait exactement quoi vous servir et dans quel ordre — pour des mois de travail pertinent. Sans ce profil, Argos serait un agrégateur comme les autres.</p>
+    <p>20 minutes une seule fois. En retour : des mois de contenu parfaitement calibré. Sans ce profil, Argos serait un agrégateur comme les autres. C'est ce profil qui permet aux filtres suivants de fonctionner avec précision.</p>
   </div>
 </div>
 
 
-<!-- ══════════════════════════ DEUX FLUX ══════════════════════════ -->
-<h2><span class="num">04</span> Deux flux intelligents — le même article, deux valeurs différentes</h2>
+<!-- ══════════════════════════ FILTRES ══════════════════════════ -->
+<h2><span class="num">04</span> Les 4 filtres — ce qui sépare Argos des agrégateurs</h2>
 
-<!-- DIAGRAMME 4 : Veille vs Apprentissage -->
+<p>Chaque article collecté traverse quatre couches de filtrage indépendantes et complémentaires. Le contenu qui atteint l'utilisateur a passé chacune d'elles. <strong>Ce n'est pas un seul filtre sophistiqué — c'est quatre couches de raisonnement distincts.</strong></p>
+
+<!-- FILTRE 1 -->
+<h3>① Filtre de fiabilité source</h3>
+<p>Avant même de traiter un article, Argos évalue la fiabilité de sa source. Ce score est automatique, sans liste codée en dur — il repose sur des signaux observables : rang du domaine, validation croisée, comportement historique.</p>
+
 <div class="diagram">
-<svg viewBox="0 0 860 260" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
+<svg viewBox="0 0 860 200" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
+
+  <!-- Entonnoir fiabilité -->
+  <!-- Tier officiel -->
+  <rect x="20" y="10" width="820" height="36" rx="6" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.3"/>
+  <text x="300" y="34" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1e40af">OFFICIEL — Organisations reconnues, standards, publications gouvernementales</text>
+  <text x="770" y="34" text-anchor="middle" font-size="11" font-weight="600" fill="#2563eb">Score ≥ 0.80</text>
+
+  <!-- Tier recognized -->
+  <rect x="60" y="56" width="740" height="36" rx="6" fill="#d1fae5" stroke="#34d399" stroke-width="1.3"/>
+  <text x="300" y="80" text-anchor="middle" font-size="11.5" font-weight="700" fill="#065f46">RECONNU — Blogs experts, dépôts maintenus, médias spécialisés de référence</text>
+  <text x="750" y="80" text-anchor="middle" font-size="11" font-weight="600" fill="#059669">Score 0.55–0.79</text>
+
+  <!-- Tier community -->
+  <rect x="120" y="102" width="620" height="36" rx="6" fill="#fef3c7" stroke="#fbbf24" stroke-width="1.3"/>
+  <text x="350" y="126" text-anchor="middle" font-size="11.5" font-weight="700" fill="#92400e">COMMUNAUTÉ — Contributions open source, articles individuels vérifiés</text>
+  <text x="700" y="126" text-anchor="middle" font-size="11" font-weight="600" fill="#d97706">Score 0.30–0.54</text>
+
+  <!-- Tier unknown -->
+  <rect x="200" y="148" width="460" height="36" rx="6" fill="#fee2e2" stroke="#fca5a5" stroke-width="1.3"/>
+  <text x="420" y="172" text-anchor="middle" font-size="11.5" font-weight="700" fill="#9f1239">INCONNU / EXCLU — Domaine nouveau, score insuffisant, absence de validation croisée</text>
+
+  <!-- Labels signaux -->
+  <text x="20" y="196" font-size="10" fill="#64748b">Signaux : Tranco rank · Cross-source validation · Decay temporel · Historique fiabilité</text>
+</svg>
+</div>
+
+<!-- FILTRE 2 -->
+<h3>② Filtre de pertinence LLM</h3>
+<p>Chaque article passé le filtre source est évalué par un LLM léger (Haiku). Il compare le contenu de l'article au profil de l'utilisateur et lui attribue un score de 1 à 5. Les articles notés ≤ 3 sont automatiquement ignorés — ils n'apparaissent jamais dans le briefing.</p>
+
+<div class="diagram">
+<svg viewBox="0 0 860 180" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
 
   <!-- Article entrant -->
-  <rect x="280" y="10" width="300" height="50" rx="8" fill="#0f172a"/>
-  <text x="430" y="32" text-anchor="middle" font-size="12" font-weight="700" fill="white">Article collecté</text>
-  <text x="430" y="50" text-anchor="middle" font-size="10.5" fill="#94a3b8">Argos analyse : contenu × profil du consultant</text>
+  <rect x="10" y="70" width="130" height="46" rx="7" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.2"/>
+  <text x="75" y="91" text-anchor="middle" font-size="11.5" font-weight="600" fill="#334155">Article collecté</text>
+  <text x="75" y="108" text-anchor="middle" font-size="10" fill="#64748b">contenu extrait</text>
 
-  <!-- Flèches sortantes -->
-  <line x1="330" y1="60" x2="195" y2="100" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrg)"/>
-  <line x1="530" y1="60" x2="665" y2="100" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrg)"/>
+  <line x1="140" y1="93" x2="184" y2="93" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#pt2)"/>
 
-  <!-- Flux VEILLE -->
-  <rect x="10" y="100" width="360" height="145" rx="10" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
-  <text x="190" y="126" text-anchor="middle" font-size="14" font-weight="800" fill="#1e40af">VEILLE</text>
-  <text x="190" y="145" text-anchor="middle" font-size="11" fill="#3b82f6">Le consultant peut évaluer immédiatement</text>
-  <line x1="30" y1="155" x2="350" y2="155" stroke="#bfdbfe" stroke-width="1"/>
-  <text x="190" y="172" text-anchor="middle" font-size="11" fill="#334155">Annonces · Releases · Changements</text>
-  <text x="190" y="188" text-anchor="middle" font-size="11" fill="#334155">Tendances · Actualité du domaine</text>
-  <text x="190" y="212" text-anchor="middle" font-size="11.5" font-weight="600" fill="#1e40af">→ Flux rapide, orienté décision</text>
-  <text x="190" y="229" text-anchor="middle" font-size="10.5" fill="#64748b">Lire · Décider · Intégrer ou ignorer</text>
+  <!-- Haiku LLM -->
+  <rect x="186" y="56" width="148" height="76" rx="7" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="260" y="80" text-anchor="middle" font-size="12" font-weight="700" fill="#1e40af">LLM Haiku</text>
+  <text x="260" y="97" text-anchor="middle" font-size="10.5" fill="#334155">profil utilisateur ×</text>
+  <text x="260" y="112" text-anchor="middle" font-size="10.5" fill="#334155">contenu article</text>
 
-  <!-- Flux APPRENTISSAGE -->
-  <rect x="490" y="100" width="360" height="145" rx="10" fill="#f0fdf4" stroke="#059669" stroke-width="1.5"/>
-  <text x="670" y="126" text-anchor="middle" font-size="14" font-weight="800" fill="#166534">APPRENTISSAGE</text>
-  <text x="670" y="145" text-anchor="middle" font-size="11" fill="#16a34a">Comble une lacune du bilan</text>
-  <line x1="510" y1="155" x2="830" y2="155" stroke="#bbf7d0" stroke-width="1"/>
-  <text x="670" y="172" text-anchor="middle" font-size="11" fill="#334155">Concept non maîtrisé · Prérequis</text>
-  <text x="670" y="188" text-anchor="middle" font-size="11" fill="#334155">Servi dans l'ordre du plan · Progressif</text>
-  <text x="670" y="212" text-anchor="middle" font-size="11.5" font-weight="600" fill="#166534">→ Flux lent, orienté progression</text>
-  <text x="670" y="229" text-anchor="middle" font-size="10.5" fill="#64748b">Lire · Assimiler · Avancer dans le plan</text>
+  <!-- Flèche vers scoring -->
+  <line x1="334" y1="93" x2="378" y2="93" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#pt2)"/>
+
+  <!-- Scores -->
+  <rect x="380" y="20" width="100" height="40" rx="6" fill="#f0fdf4" stroke="#34d399" stroke-width="1.3"/>
+  <text x="430" y="38" text-anchor="middle" font-size="13" font-weight="800" fill="#166534">4 – 5</text>
+  <text x="430" y="52" text-anchor="middle" font-size="9.5" fill="#059669">Très pertinent</text>
+
+  <rect x="380" y="70" width="100" height="40" rx="6" fill="#fef9c3" stroke="#facc15" stroke-width="1.3"/>
+  <text x="430" y="88" text-anchor="middle" font-size="13" font-weight="800" fill="#854d0e">3</text>
+  <text x="430" y="102" text-anchor="middle" font-size="9.5" fill="#a16207">Limite</text>
+
+  <rect x="380" y="120" width="100" height="40" rx="6" fill="#fee2e2" stroke="#f87171" stroke-width="1.3"/>
+  <text x="430" y="138" text-anchor="middle" font-size="13" font-weight="800" fill="#9f1239">1 – 2</text>
+  <text x="430" y="152" text-anchor="middle" font-size="9.5" fill="#dc2626">Non pertinent</text>
+
+  <!-- Flèches depuis scores -->
+  <line x1="480" y1="40" x2="540" y2="70" stroke="#059669" stroke-width="1.5" marker-end="url(#grn2)"/>
+  <line x1="480" y1="90" x2="540" y2="90" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#amb2)"/>
+  <line x1="480" y1="140" x2="540" y2="120" stroke="#dc2626" stroke-width="1.5" marker-end="url(#red2)"/>
+
+  <!-- Destinations -->
+  <rect x="542" y="50" width="168" height="56" rx="7" fill="#f0fdf4" stroke="#059669" stroke-width="1.3"/>
+  <text x="626" y="72" text-anchor="middle" font-size="11" font-weight="700" fill="#166534">→ Briefing</text>
+  <text x="626" y="88" text-anchor="middle" font-size="10" fill="#059669">servi à l'utilisateur</text>
+
+  <rect x="542" y="112" width="168" height="44" rx="7" fill="#fee2e2" stroke="#f87171" stroke-width="1.3"/>
+  <text x="626" y="132" text-anchor="middle" font-size="11" font-weight="700" fill="#9f1239">→ Ignoré auto.</text>
+  <text x="626" y="148" text-anchor="middle" font-size="10" fill="#dc2626">user_action = 'ignored'</text>
+
+  <!-- Note seuil -->
+  <text x="730" y="93" font-size="9.5" fill="#64748b">≤ 3 → ignoré</text>
+  <text x="730" y="107" font-size="9.5" fill="#64748b">sans intervention</text>
 
   <defs>
-    <marker id="arrg" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+    <marker id="pt2" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
       <polygon points="0 0, 7 3.5, 0 7" fill="#94a3b8"/>
+    </marker>
+    <marker id="grn2" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <polygon points="0 0, 7 3.5, 0 7" fill="#059669"/>
+    </marker>
+    <marker id="amb2" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <polygon points="0 0, 7 3.5, 0 7" fill="#d97706"/>
+    </marker>
+    <marker id="red2" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <polygon points="0 0, 7 3.5, 0 7" fill="#dc2626"/>
     </marker>
   </defs>
 </svg>
 </div>
 
-<p>Le contenu d'apprentissage n'est pas déversé d'un coup. Argos respecte une logique de temporalité : les articles arrivent dans l'ordre du plan, au rythme de la collecte. Le consultant progresse sans être submergé.</p>
+<!-- FILTRE 3 -->
+<h3>③ Filtre de progression (apprentissage uniquement)</h3>
+<p>Le plan d'apprentissage définit un ordre strict. Argos ne sert pas un concept avancé avant que ses prérequis soient assimilés. Le RAG et le Knowledge Graph mesurent en continu ce qui est réellement compris — et ajustent dynamiquement la position dans le plan.</p>
 
-
-<!-- ══════════════════════════ ESPACES ══════════════════════════ -->
-<h2><span class="num">05</span> Espaces et travail en équipe</h2>
-
-<!-- DIAGRAMME 5 : Espaces -->
 <div class="diagram">
-<svg viewBox="0 0 860 230" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
+<svg viewBox="0 0 860 160" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
 
-  <!-- Espace personnel -->
-  <rect x="10" y="10" width="260" height="210" rx="10" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5"/>
-  <text x="140" y="38" text-anchor="middle" font-size="13" font-weight="700" fill="#334155">Espace personnel</text>
-  <circle cx="140" cy="75" r="22" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
-  <text x="140" y="80" text-anchor="middle" font-size="18">👤</text>
-  <text x="140" y="114" text-anchor="middle" font-size="11" fill="#64748b">Veille · Apprentissage</text>
-  <text x="140" y="130" text-anchor="middle" font-size="11" fill="#64748b">RAG privé · Plan personnel</text>
-  <text x="140" y="146" text-anchor="middle" font-size="11" fill="#64748b">Assistant 24/7</text>
-  <rect x="40" y="165" width="200" height="30" rx="6" fill="white" stroke="#e2e8f0" stroke-width="1"/>
-  <text x="140" y="184" text-anchor="middle" font-size="10.5" fill="#64748b">1 consultant · 1 base</text>
+  <!-- Plan linéaire -->
+  <text x="10" y="22" font-size="10" font-weight="700" fill="#64748b" letter-spacing="0.05em">PLAN D'APPRENTISSAGE</text>
 
-  <!-- Espace partagé -->
-  <rect x="300" y="10" width="260" height="210" rx="10" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.5"/>
-  <text x="430" y="38" text-anchor="middle" font-size="13" font-weight="700" fill="#1e40af">Espace partagé</text>
-  <circle cx="400" cy="75" r="18" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
-  <text x="400" y="80" text-anchor="middle" font-size="15">👤</text>
-  <circle cx="430" cy="65" r="18" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
-  <text x="430" y="70" text-anchor="middle" font-size="15">👤</text>
-  <circle cx="460" cy="75" r="18" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
-  <text x="460" y="80" text-anchor="middle" font-size="15">👤</text>
-  <text x="430" y="112" text-anchor="middle" font-size="11" fill="#334155">Veille mutualisée</text>
-  <text x="430" y="128" text-anchor="middle" font-size="11" fill="#334155">RAG commun · Rôles</text>
-  <text x="430" y="144" text-anchor="middle" font-size="11" fill="#334155">Chaque validation visible par tous</text>
-  <rect x="330" y="165" width="200" height="30" rx="6" fill="white" stroke="#bfdbfe" stroke-width="1"/>
-  <text x="430" y="184" text-anchor="middle" font-size="10.5" fill="#2563eb">Propriétaire · Éditeur · Lecteur</text>
+  <!-- Steps du plan -->
+  <rect x="10" y="34" width="110" height="48" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="1.5"/>
+  <text x="65" y="55" text-anchor="middle" font-size="10.5" font-weight="700" fill="#065f46">Fondamentaux</text>
+  <text x="65" y="70" text-anchor="middle" font-size="10" fill="#059669">✓ Assimilé</text>
 
-  <!-- Espace projet -->
-  <rect x="590" y="10" width="260" height="210" rx="10" fill="#fff7ed" stroke="#f97316" stroke-width="1.5"/>
-  <text x="720" y="38" text-anchor="middle" font-size="13" font-weight="700" fill="#9a3412">Espace projet</text>
-  <text x="720" y="68" text-anchor="middle" font-size="22">🏗</text>
-  <text x="720" y="95" text-anchor="middle" font-size="11" fill="#334155">Mémoire de mission</text>
-  <text x="720" y="111" text-anchor="middle" font-size="11" fill="#334155">Contrats · Specs · Docs client</text>
-  <text x="720" y="127" text-anchor="middle" font-size="11" fill="#334155">Veille réglementaire projet</text>
-  <text x="720" y="143" text-anchor="middle" font-size="11" fill="#334155">RAG + KG isolés par mission</text>
-  <rect x="620" y="165" width="200" height="30" rx="6" fill="#fef3c7" stroke="#f97316" stroke-width="1"/>
-  <text x="720" y="184" text-anchor="middle" font-size="10.5" fill="#9a3412">Livrable transmissible en fin de mission</text>
+  <line x1="120" y1="58" x2="145" y2="58" stroke="#059669" stroke-width="2" marker-end="url(#pr3)"/>
+
+  <rect x="147" y="34" width="110" height="48" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="1.5"/>
+  <text x="202" y="55" text-anchor="middle" font-size="10.5" font-weight="700" fill="#065f46">Concepts clés</text>
+  <text x="202" y="70" text-anchor="middle" font-size="10" fill="#059669">✓ Assimilé</text>
+
+  <line x1="257" y1="58" x2="282" y2="58" stroke="#059669" stroke-width="2" marker-end="url(#pr3)"/>
+
+  <!-- Position actuelle -->
+  <rect x="284" y="24" width="130" height="68" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="2.5"/>
+  <text x="349" y="48" text-anchor="middle" font-size="11" font-weight="800" fill="#1e40af">◀ ÉTAPE ACTUELLE</text>
+  <text x="349" y="65" text-anchor="middle" font-size="10.5" font-weight="600" fill="#334155">Architectures LLM</text>
+  <text x="349" y="80" text-anchor="middle" font-size="10" fill="#2563eb">en cours d'assimilation</text>
+
+  <line x1="414" y1="58" x2="440" y2="58" stroke="#64748b" stroke-width="1.5" stroke-dasharray="4,3"/>
+
+  <rect x="442" y="34" width="120" height="48" rx="6" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.2"/>
+  <text x="502" y="55" text-anchor="middle" font-size="10.5" font-weight="700" fill="#64748b">Fine-tuning</text>
+  <text x="502" y="70" text-anchor="middle" font-size="10" fill="#94a3b8">verrouillé</text>
+
+  <line x1="562" y1="58" x2="588" y2="58" stroke="#64748b" stroke-width="1.5" stroke-dasharray="4,3"/>
+
+  <rect x="590" y="34" width="120" height="48" rx="6" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.2"/>
+  <text x="650" y="55" text-anchor="middle" font-size="10.5" font-weight="700" fill="#64748b">MLOps avancé</text>
+  <text x="650" y="70" text-anchor="middle" font-size="10" fill="#94a3b8">verrouillé</text>
+
+  <!-- RAG+KG mesure -->
+  <rect x="726" y="34" width="124" height="68" rx="6" fill="#fff7ed" stroke="#f97316" stroke-width="1.3"/>
+  <text x="788" y="55" text-anchor="middle" font-size="10.5" font-weight="700" fill="#9a3412">RAG + KG</text>
+  <text x="788" y="70" text-anchor="middle" font-size="10" fill="#c2410c">mesure l'assimilation</text>
+  <text x="788" y="85" text-anchor="middle" font-size="10" fill="#c2410c">avance auto le plan</text>
+
+  <!-- Flèche retour -->
+  <path d="M788,102 Q788,140 349,140 Q349,120 349,92" stroke="#f97316" stroke-width="1.5" fill="none" stroke-dasharray="5,3" marker-end="url(#amb3)"/>
+  <text x="560" y="155" text-anchor="middle" font-size="9.5" fill="#c2410c">progression détectée → étape suivante déverrouillée</text>
+
+  <defs>
+    <marker id="pr3" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <polygon points="0 0, 7 3.5, 0 7" fill="#059669"/>
+    </marker>
+    <marker id="amb3" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <polygon points="0 0, 7 3.5, 0 7" fill="#f97316"/>
+    </marker>
+  </defs>
 </svg>
 </div>
 
+<!-- FILTRE 4 -->
+<h3>④ Filtre HITL — Human-in-the-Loop</h3>
+<p>Le dernier contrôle reste humain. Pour chaque article du briefing, l'utilisateur choisit explicitement ce qu'il en fait. Ces décisions alimentent en retour les filtres précédents : un article ignoré n'apparaîtra plus, un article intégré renforce la pertinence de la source.</p>
 
-<!-- ══════════════════════════ MCP ══════════════════════════ -->
-<h2><span class="num">06</span> Connexion aux IDE et aux LLMs — via MCP</h2>
-
-<p>Argos expose un protocole standardisé (MCP — Model Context Protocol) qui permet à n'importe quel IDE ou assistant IA compatible de puiser directement dans la base de connaissance, sans copier-coller.</p>
-
-<!-- DIAGRAMME 6 : MCP -->
 <div class="diagram">
-<svg viewBox="0 0 860 200" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
+<svg viewBox="0 0 860 170" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
 
-  <!-- Argos au centre -->
-  <rect x="330" y="70" width="200" height="60" rx="10" fill="#2563eb"/>
-  <text x="430" y="97" text-anchor="middle" font-size="14" font-weight="800" fill="white">Argos</text>
-  <text x="430" y="115" text-anchor="middle" font-size="10.5" fill="#bfdbfe">Base RAG + KG · Serveur MCP</text>
+  <!-- Article dans le briefing -->
+  <rect x="20" y="55" width="150" height="60" rx="7" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.2"/>
+  <text x="95" y="80" text-anchor="middle" font-size="11.5" font-weight="600" fill="#334155">Article dans</text>
+  <text x="95" y="96" text-anchor="middle" font-size="11.5" font-weight="600" fill="#334155">le briefing</text>
 
-  <!-- IDE côté gauche -->
-  <rect x="30" y="15" width="160" height="46" rx="8" fill="#1e1e2e" stroke="#7c3aed" stroke-width="1.3"/>
-  <text x="110" y="36" text-anchor="middle" font-size="12" font-weight="700" fill="white">VS Code</text>
-  <text x="110" y="52" text-anchor="middle" font-size="10" fill="#a78bfa">GitHub Copilot · Continue</text>
+  <!-- Flèche décision -->
+  <line x1="170" y1="85" x2="214" y2="85" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#ht4)"/>
 
-  <rect x="30" y="77" width="160" height="46" rx="8" fill="#1a1a2e" stroke="#7c3aed" stroke-width="1.3"/>
-  <text x="110" y="98" text-anchor="middle" font-size="12" font-weight="700" fill="white">Cursor</text>
-  <text x="110" y="114" text-anchor="middle" font-size="10" fill="#a78bfa">Agent de code · Chat</text>
+  <!-- Centre décision -->
+  <circle cx="240" cy="85" r="28" fill="#0f172a" stroke="#334155" stroke-width="1.5"/>
+  <text x="240" y="90" text-anchor="middle" font-size="20">👤</text>
 
-  <rect x="30" y="139" width="160" height="46" rx="8" fill="#0f172a" stroke="#7c3aed" stroke-width="1.3"/>
-  <text x="110" y="160" text-anchor="middle" font-size="12" font-weight="700" fill="white">JetBrains</text>
-  <text x="110" y="176" text-anchor="middle" font-size="10" fill="#a78bfa">AI Assistant</text>
+  <!-- 3 branches -->
+  <line x1="268" y1="68" x2="330" y2="30" stroke="#059669" stroke-width="2" marker-end="url(#grn4)"/>
+  <line x1="270" y1="85" x2="330" y2="85" stroke="#2563eb" stroke-width="2" marker-end="url(#blu4)"/>
+  <line x1="268" y1="102" x2="330" y2="140" stroke="#dc2626" stroke-width="2" marker-end="url(#red4)"/>
 
-  <!-- Flèches IDE → Argos -->
-  <line x1="190" y1="38" x2="328" y2="85" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrp)"/>
-  <line x1="190" y1="100" x2="328" y2="100" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrp)"/>
-  <line x1="190" y1="162" x2="328" y2="115" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrp)"/>
+  <!-- Destination INTÉGRER -->
+  <rect x="332" y="10" width="160" height="46" rx="7" fill="#f0fdf4" stroke="#059669" stroke-width="1.5"/>
+  <text x="412" y="30" text-anchor="middle" font-size="12" font-weight="700" fill="#166534">Sauvegarder &amp; Indexer</text>
+  <text x="412" y="48" text-anchor="middle" font-size="10" fill="#059669">→ Bibliothèque + RAG</text>
 
-  <!-- LLMs côté droit -->
-  <rect x="670" y="15" width="160" height="46" rx="8" fill="#1a1a2e" stroke="#7c3aed" stroke-width="1.3"/>
-  <text x="750" y="36" text-anchor="middle" font-size="12" font-weight="700" fill="white">Claude Desktop</text>
-  <text x="750" y="52" text-anchor="middle" font-size="10" fill="#a78bfa">Anthropic</text>
+  <!-- Destination SAUVEGARDER -->
+  <rect x="332" y="62" width="160" height="46" rx="7" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="412" y="82" text-anchor="middle" font-size="12" font-weight="700" fill="#1e40af">Sauvegarder</text>
+  <text x="412" y="100" text-anchor="middle" font-size="10" fill="#2563eb">→ Bibliothèque uniquement</text>
 
-  <rect x="670" y="77" width="160" height="46" rx="8" fill="#0d1117" stroke="#7c3aed" stroke-width="1.3"/>
-  <text x="750" y="98" text-anchor="middle" font-size="12" font-weight="700" fill="white">ChatGPT</text>
-  <text x="750" y="114" text-anchor="middle" font-size="10" fill="#a78bfa">OpenAI</text>
+  <!-- Destination IGNORER -->
+  <rect x="332" y="118" width="160" height="46" rx="7" fill="#fff1f2" stroke="#f87171" stroke-width="1.5"/>
+  <text x="412" y="138" text-anchor="middle" font-size="12" font-weight="700" fill="#9f1239">Ignorer</text>
+  <text x="412" y="156" text-anchor="middle" font-size="10" fill="#dc2626">→ Écarté, source notée</text>
 
-  <rect x="670" y="139" width="160" height="46" rx="8" fill="#0f172a" stroke="#7c3aed" stroke-width="1.3"/>
-  <text x="750" y="160" text-anchor="middle" font-size="12" font-weight="700" fill="white">n8n · Pipelines</text>
-  <text x="750" y="176" text-anchor="middle" font-size="10" fill="#a78bfa">Automatisations</text>
+  <!-- Retour vers filtres -->
+  <rect x="520" y="40" width="200" height="90" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1.3"/>
+  <text x="620" y="65" text-anchor="middle" font-size="11.5" font-weight="700" fill="#92400e">Rétroaction</text>
+  <text x="620" y="83" text-anchor="middle" font-size="10.5" fill="#78350f">→ Score source mis à jour</text>
+  <text x="620" y="99" text-anchor="middle" font-size="10.5" fill="#78350f">→ Profil enrichi</text>
+  <text x="620" y="115" text-anchor="middle" font-size="10.5" fill="#78350f">→ Prochains filtres affinés</text>
 
-  <!-- Flèches Argos → LLMs -->
-  <line x1="530" y1="85" x2="668" y2="38" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrp)"/>
-  <line x1="530" y1="100" x2="668" y2="100" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrp)"/>
-  <line x1="530" y1="115" x2="668" y2="162" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrp)"/>
-
-  <!-- Label MCP -->
-  <text x="248" y="93" text-anchor="middle" font-size="10" font-weight="700" fill="#7c3aed" letter-spacing="0.06em">MCP</text>
-  <text x="612" y="93" text-anchor="middle" font-size="10" font-weight="700" fill="#7c3aed" letter-spacing="0.06em">MCP</text>
+  <line x1="492" y1="85" x2="518" y2="85" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#amb4)"/>
 
   <defs>
-    <marker id="arrp" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+    <marker id="ht4" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <polygon points="0 0, 7 3.5, 0 7" fill="#94a3b8"/>
+    </marker>
+    <marker id="grn4" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <polygon points="0 0, 7 3.5, 0 7" fill="#059669"/>
+    </marker>
+    <marker id="blu4" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <polygon points="0 0, 7 3.5, 0 7" fill="#2563eb"/>
+    </marker>
+    <marker id="red4" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <polygon points="0 0, 7 3.5, 0 7" fill="#dc2626"/>
+    </marker>
+    <marker id="amb4" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <polygon points="0 0, 7 3.5, 0 7" fill="#d97706"/>
+    </marker>
+  </defs>
+</svg>
+</div>
+
+<div class="callout callout-amber">
+  <div class="callout-icon">◆</div>
+  <div class="callout-body">
+    <div class="callout-title">Pourquoi 4 filtres distincts plutôt qu'un seul</div>
+    <p>Chaque filtre cible une dimension différente : la <strong>source</strong> (fiabilité intrinsèque du domaine), le <strong>contenu</strong> (pertinence par rapport au profil), la <strong>séquence</strong> (respect du plan pédagogique), et la <strong>décision finale</strong> (jugement humain). Aucun LLM seul ne peut combiner ces quatre dimensions sans perte.</p>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════ DEUX FLUX ══════════════════════════ -->
+<h2><span class="num">05</span> Veille et Apprentissage — deux flux, une seule interface</h2>
+
+<p>Le même article peut être de la veille pour un expert et de l'apprentissage fondamental pour un débutant. Argos les sert différemment selon le profil — vitesse, ordre, profondeur de traitement.</p>
+
+<div class="diagram">
+<svg viewBox="0 0 860 290" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
+
+  <!-- Article entrant -->
+  <rect x="280" y="10" width="300" height="52" rx="8" fill="#0f172a"/>
+  <text x="430" y="33" text-anchor="middle" font-size="12" font-weight="700" fill="white">Article collecté</text>
+  <text x="430" y="52" text-anchor="middle" font-size="10.5" fill="#94a3b8">profil × contenu → classification automatique</text>
+
+  <!-- Flèches vers flux -->
+  <line x1="360" y1="62" x2="210" y2="110" stroke="#3b82f6" stroke-width="2" marker-end="url(#fl5b)"/>
+  <line x1="500" y1="62" x2="650" y2="110" stroke="#059669" stroke-width="2" marker-end="url(#fl5g)"/>
+
+  <!-- Flux VEILLE -->
+  <rect x="20" y="112" width="360" height="164" rx="10" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+  <text x="200" y="140" text-anchor="middle" font-size="15" font-weight="800" fill="#1e40af">VEILLE</text>
+  <text x="200" y="160" text-anchor="middle" font-size="11" fill="#3b82f6">Peut être évalué immédiatement</text>
+
+  <rect x="40" y="170" width="148" height="36" rx="5" fill="white" stroke="#bfdbfe" stroke-width="1"/>
+  <text x="114" y="186" text-anchor="middle" font-size="10.5" font-weight="600" fill="#334155">Annonces · Releases</text>
+  <text x="114" y="200" text-anchor="middle" font-size="10" fill="#64748b">Changements d'outils</text>
+
+  <rect x="202" y="170" width="148" height="36" rx="5" fill="white" stroke="#bfdbfe" stroke-width="1"/>
+  <text x="276" y="186" text-anchor="middle" font-size="10.5" font-weight="600" fill="#334155">Tendances · Actualité</text>
+  <text x="276" y="200" text-anchor="middle" font-size="10" fill="#64748b">Régulation · Marché</text>
+
+  <rect x="40" y="216" width="310" height="44" rx="6" fill="#dbeafe"/>
+  <text x="195" y="236" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1e40af">→ Flux rapide, orienté décision</text>
+  <text x="195" y="252" text-anchor="middle" font-size="10.5" fill="#2563eb">Lire · Décider · Intégrer ou ignorer</text>
+
+  <!-- Flux APPRENTISSAGE -->
+  <rect x="480" y="112" width="360" height="164" rx="10" fill="#f0fdf4" stroke="#059669" stroke-width="2"/>
+  <text x="660" y="140" text-anchor="middle" font-size="15" font-weight="800" fill="#166534">APPRENTISSAGE</text>
+  <text x="660" y="160" text-anchor="middle" font-size="11" fill="#16a34a">Comble une lacune du bilan</text>
+
+  <rect x="500" y="170" width="148" height="36" rx="5" fill="white" stroke="#bbf7d0" stroke-width="1"/>
+  <text x="574" y="186" text-anchor="middle" font-size="10.5" font-weight="600" fill="#334155">Concept manquant</text>
+  <text x="574" y="200" text-anchor="middle" font-size="10" fill="#64748b">Prérequis du plan</text>
+
+  <rect x="662" y="170" width="148" height="36" rx="5" fill="white" stroke="#bbf7d0" stroke-width="1"/>
+  <text x="736" y="186" text-anchor="middle" font-size="10.5" font-weight="600" fill="#334155">Servi dans l'ordre</text>
+  <text x="736" y="200" text-anchor="middle" font-size="10" fill="#64748b">Progressif · Séquencé</text>
+
+  <rect x="500" y="216" width="310" height="44" rx="6" fill="#dcfce7"/>
+  <text x="655" y="236" text-anchor="middle" font-size="11.5" font-weight="700" fill="#166534">→ Flux lent, orienté progression</text>
+  <text x="655" y="252" text-anchor="middle" font-size="10.5" fill="#059669">Lire · Assimiler · Plan avance auto</text>
+
+  <defs>
+    <marker id="fl5b" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <polygon points="0 0, 7 3.5, 0 7" fill="#3b82f6"/>
+    </marker>
+    <marker id="fl5g" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <polygon points="0 0, 7 3.5, 0 7" fill="#059669"/>
+    </marker>
+  </defs>
+</svg>
+</div>
+
+<div class="callout callout-green">
+  <div class="callout-icon">◆</div>
+  <div class="callout-body">
+    <div class="callout-title">L'apprentissage s'adapte à l'avancement réel</div>
+    <p>Argos ne se contente pas de suivre un plan statique. Le RAG et le Knowledge Graph mesurent ce qui est réellement assimilé — si un concept est maîtrisé plus vite que prévu, le plan avance automatiquement. <strong>L'utilisateur ne revoit jamais ce qu'il connaît déjà.</strong></p>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════ BRIEFING PERSONNEL ══════════════════════════ -->
+<h2><span class="num">06</span> Le briefing journalier — partie personnelle</h2>
+
+<p>Chaque matin, Argos génère un briefing personnalisé structuré en deux onglets distincts : Veille (actualité à évaluer) et Apprentissage (contenu dans l'ordre du plan). Chaque carte d'article affiche une note de pertinence spécifique — une phrase expliquant <em>pourquoi</em> cet article est intéressant pour ce profil précis.</p>
+
+<div class="diagram">
+<svg viewBox="0 0 860 280" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
+
+  <!-- Interface briefing -->
+  <rect x="10" y="10" width="840" height="260" rx="10" fill="#0f172a" stroke="#1e293b" stroke-width="1.5"/>
+
+  <!-- Header -->
+  <rect x="10" y="10" width="840" height="44" rx="10" fill="#1e293b"/>
+  <rect x="10" y="44" width="840" height="10" fill="#1e293b"/>
+  <text x="40" y="38" font-size="13" font-weight="700" fill="white">Briefing du 2 septembre 2026</text>
+  <text x="700" y="38" font-size="11" fill="#64748b">Généré automatiquement</text>
+
+  <!-- Onglets -->
+  <rect x="20" y="60" width="120" height="28" rx="6" fill="#2563eb"/>
+  <text x="80" y="78" text-anchor="middle" font-size="11" font-weight="700" fill="white">Veille (8)</text>
+  <rect x="150" y="60" width="140" height="28" rx="6" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+  <text x="220" y="78" text-anchor="middle" font-size="11" fill="#94a3b8">Apprentissage (3)</text>
+  <rect x="300" y="60" width="120" height="28" rx="6" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+  <text x="360" y="78" text-anchor="middle" font-size="11" fill="#94a3b8">Sources (14)</text>
+
+  <!-- Résumé exécutif -->
+  <rect x="20" y="98" width="820" height="38" rx="6" fill="#1e3a5f" stroke="#2563eb" stroke-width="1"/>
+  <text x="36" y="114" font-size="10" font-weight="700" fill="#93c5fd">RÉSUMÉ EXÉCUTIF</text>
+  <text x="36" y="129" font-size="10.5" fill="#cbd5e1">Cette semaine : 3 nouvelles releases majeures · 1 changement réglementaire clé · 2 articles de fond sur l'architecture RAG</text>
+
+  <!-- Carte article 1 -->
+  <rect x="20" y="146" width="820" height="50" rx="6" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+  <text x="36" y="164" font-size="11" font-weight="700" fill="white">Anthropic releases Claude 3.6 with extended context window</text>
+  <rect x="36" y="170" width="52" height="16" rx="3" fill="#1e40af"/>
+  <text x="62" y="182" text-anchor="middle" font-size="9" font-weight="700" fill="white">OFFICIEL</text>
+  <text x="100" y="182" font-size="10" fill="#64748b">anthropic.com</text>
+  <!-- Note de pertinence -->
+  <rect x="36" y="188" width="788" height="0" rx="0" fill="none"/>
+  <text x="36" y="188" font-size="10" fill="#60a5fa" font-style="italic">Impact direct : fenêtre contexte étendue disponible pour les agents multi-documents de votre pipeline.</text>
+
+  <!-- Carte article 2 -->
+  <rect x="20" y="200" width="820" height="60" rx="6" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+  <text x="36" y="218" font-size="11" font-weight="700" fill="white">EU AI Act — nouvelles obligations pour systèmes à risque élevé (EASA)</text>
+  <rect x="36" y="224" width="58" height="16" rx="3" fill="#166534"/>
+  <text x="65" y="236" text-anchor="middle" font-size="9" font-weight="700" fill="white">RECONNU</text>
+  <text x="106" y="236" font-size="10" fill="#64748b">easa.europa.eu</text>
+  <text x="36" y="252" font-size="10" fill="#60a5fa" font-style="italic">Pertinent DO-178C : obligations de documentation et de traçabilité applicables à votre certification embarquée.</text>
+
+  <!-- Boutons action -->
+  <rect x="700" y="210" width="54" height="22" rx="4" fill="#2563eb"/>
+  <text x="727" y="225" text-anchor="middle" font-size="9.5" font-weight="700" fill="white">Lire</text>
+  <rect x="760" y="210" width="72" height="22" rx="4" fill="#0f172a" stroke="#334155"/>
+  <text x="796" y="225" text-anchor="middle" font-size="9.5" fill="#94a3b8">Ignorer</text>
+</svg>
+</div>
+
+<h4>Ce que fait le bouton "Lire"</h4>
+<p>Un clic ouvre un document complet généré par LLM : l'article entier restructuré avec titres, tableaux, définitions, exemples — <strong>pas un résumé, le contenu réel</strong>. Si un profil projet est actif, une section "Pertinence pour ce projet" apparaît en tête du document. La traduction automatique s'applique selon la langue configurée.</p>
+
+
+<!-- ══════════════════════════ LLM-AS-JUDGE ══════════════════════════ -->
+<h2><span class="num">07</span> LLM-as-Judge — garantie de qualité des digests</h2>
+
+<p>Générer un digest avec un LLM ne garantit pas sa qualité. Un second LLM, appelé indépendamment, évalue le résultat produit par le premier. C'est le principe du <strong>LLM-as-Judge</strong> : séparer la production de l'évaluation pour détecter les dérives sans intervention humaine systématique.</p>
+
+<div class="diagram">
+<svg viewBox="0 0 920 280" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
+  <defs>
+    <marker id="jArrow" markerWidth="8" markerHeight="8" refX="7" refY="3.5" orient="auto">
+      <polygon points="0 0, 8 3.5, 0 7" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <!-- Article brut -->
+  <rect x="10" y="100" width="130" height="60" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1.5"/>
+  <text x="75" y="124" text-anchor="middle" font-size="11" font-weight="700" fill="#e2e8f0">Article brut</text>
+  <text x="75" y="142" text-anchor="middle" font-size="10" fill="#64748b">Collecté &amp; stocké</text>
+  <text x="75" y="155" text-anchor="middle" font-size="10" fill="#64748b">dans la DB</text>
+
+  <line x1="140" y1="130" x2="175" y2="130" stroke="#64748b" stroke-width="1.5" marker-end="url(#jArrow)"/>
+
+  <!-- LLM Digest -->
+  <rect x="177" y="90" width="140" height="80" rx="8" fill="#1e3a5f" stroke="#3987e5" stroke-width="1.8"/>
+  <text x="247" y="115" text-anchor="middle" font-size="11" font-weight="700" fill="#60a5fa">LLM Digest</text>
+  <text x="247" y="133" text-anchor="middle" font-size="10" fill="#93c5fd">Résume, restructure,</text>
+  <text x="247" y="147" text-anchor="middle" font-size="10" fill="#93c5fd">traduit l'article</text>
+  <text x="247" y="163" text-anchor="middle" font-size="9" fill="#3987e5">Claude Sonnet</text>
+
+  <line x1="317" y1="130" x2="352" y2="130" stroke="#64748b" stroke-width="1.5" marker-end="url(#jArrow)"/>
+
+  <!-- Digest Markdown -->
+  <rect x="354" y="100" width="130" height="60" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1.5"/>
+  <text x="419" y="124" text-anchor="middle" font-size="11" font-weight="700" fill="#e2e8f0">Digest</text>
+  <text x="419" y="140" text-anchor="middle" font-size="10" fill="#64748b">Markdown généré</text>
+  <text x="419" y="155" text-anchor="middle" font-size="10" fill="#64748b">stocké en base</text>
+
+  <line x1="484" y1="130" x2="519" y2="130" stroke="#64748b" stroke-width="1.5" marker-end="url(#jArrow)"/>
+
+  <!-- LLM Judge -->
+  <rect x="521" y="90" width="150" height="80" rx="8" fill="#1a2e1a" stroke="#1baf7a" stroke-width="2"/>
+  <text x="596" y="112" text-anchor="middle" font-size="11" font-weight="700" fill="#4ade80">LLM Judge</text>
+  <text x="596" y="130" text-anchor="middle" font-size="10" fill="#86efac">Appel indépendant</text>
+  <text x="596" y="146" text-anchor="middle" font-size="10" fill="#86efac">évalue le digest</text>
+  <text x="596" y="162" text-anchor="middle" font-size="9" fill="#1baf7a">sans accès à l'article</text>
+
+  <line x1="671" y1="130" x2="706" y2="130" stroke="#64748b" stroke-width="1.5" marker-end="url(#jArrow)"/>
+
+  <!-- Scores box -->
+  <rect x="708" y="80" width="190" height="100" rx="8" fill="#1c1f2e" stroke="#9085e9" stroke-width="1.8"/>
+  <text x="803" y="103" text-anchor="middle" font-size="11" font-weight="700" fill="#c4b5fd">4 scores (1–5)</text>
+  <text x="720" y="122" font-size="10" fill="#a78bfa">• Fidélité</text>
+  <text x="720" y="138" font-size="10" fill="#a78bfa">• Complétude</text>
+  <text x="720" y="154" font-size="10" fill="#a78bfa">• Pertinence contextuelle</text>
+  <text x="720" y="170" font-size="10" fill="#a78bfa">• Concision</text>
+
+  <!-- Arrow down to digest_scores -->
+  <line x1="803" y1="180" x2="803" y2="215" stroke="#64748b" stroke-width="1.5" marker-end="url(#jArrow)"/>
+
+  <!-- digest_scores table -->
+  <rect x="718" y="217" width="170" height="40" rx="6" fill="#0f172a" stroke="#334155" stroke-width="1.2"/>
+  <text x="803" y="234" text-anchor="middle" font-size="10" font-weight="700" fill="#94a3b8">digest_scores</text>
+  <text x="803" y="249" text-anchor="middle" font-size="9" fill="#475569">Scores persistés en base</text>
+
+  <!-- Arrow to Métriques -->
+  <line x1="803" y1="257" x2="803" y2="265" stroke="#64748b" stroke-width="1.2" marker-end="url(#jArrow)"/>
+  <rect x="718" y="266" width="170" height="30" rx="6" fill="#1e293b" stroke="#e8a600" stroke-width="1.2"/>
+  <text x="803" y="286" text-anchor="middle" font-size="10" fill="#fbbf24">Onglet Métriques projet</text>
+
+  <!-- Isolation label -->
+  <text x="596" y="46" text-anchor="middle" font-size="10" font-style="italic" fill="#4ade80">Contexte isolé — ne voit pas l'article original</text>
+  <line x1="521" y1="52" x2="671" y2="52" stroke="#1baf7a" stroke-width="1" stroke-dasharray="4,3"/>
+</svg>
+</div>
+
+<h4>Les 4 critères d'évaluation</h4>
+
+<table>
+  <thead>
+    <tr><th>Critère</th><th>Ce que le juge vérifie</th><th>Problème détecté si score bas</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Fidélité</strong></td>
+      <td>Le digest ne contient que ce qui était dans l'article</td>
+      <td>Hallucination — le LLM a inventé du contenu</td>
+    </tr>
+    <tr>
+      <td><strong>Complétude</strong></td>
+      <td>Aucun point important de l'article n'est manquant</td>
+      <td>Résumé trop court — perte d'information critique</td>
+    </tr>
+    <tr>
+      <td><strong>Pertinence contextuelle</strong></td>
+      <td>Les éléments les plus utiles pour le profil projet sont mis en avant</td>
+      <td>Digest générique — pas adapté au contexte</td>
+    </tr>
+    <tr>
+      <td><strong>Concision</strong></td>
+      <td>Pas de répétitions ni de remplissage</td>
+      <td>Digest verbeux — dilue l'information utile</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout callout-insight">
+<strong>Pourquoi un appel séparé ?</strong> Si le juge voyait l'article original, il pourrait être influencé par le même contenu que celui qui a produit le digest. L'indépendance du juge est la condition qui rend son verdict fiable. C'est le même principe qu'un auditeur externe qui ne lit pas les notes internes de l'équipe auditée.
+</div>
+
+<h4>Ce que ça change concrètement</h4>
+<p>Sans LLM-as-Judge, un digest de mauvaise qualité passe invisible. Avec le système de scores, l'onglet <strong>Métriques</strong> d'un projet montre en un coup d'œil quels articles ont des digests fiables et lesquels méritent une réingestion. À terme, un seuil configurable peut déclencher automatiquement la régénération des digests sous-performants.</p>
+
+
+<!-- ══════════════════════════ PARTIE PROJET ══════════════════════════ -->
+<h2><span class="num">08</span> Les espaces projet — mémoire de mission et veille ciblée</h2>
+
+<p>Un espace projet est un environnement isolé : RAG, Knowledge Graph, sources et droits dédiés. Il ne contamine pas et n'est pas contaminé par la veille personnelle. Il peut être transmis en fin de mission.</p>
+
+<div class="diagram">
+<svg viewBox="0 0 860 420" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
+
+  <!-- Étape 1 : CDC -->
+  <rect x="10" y="10" width="188" height="100" rx="8" fill="#fff7ed" stroke="#f97316" stroke-width="1.5"/>
+  <text x="104" y="36" text-anchor="middle" font-size="12" font-weight="700" fill="#9a3412">1. Cahier des charges</text>
+  <text x="104" y="54" text-anchor="middle" font-size="10.5" fill="#c2410c">Coller le CDC texte</text>
+  <text x="104" y="70" text-anchor="middle" font-size="10.5" fill="#c2410c">ou décrire le projet</text>
+  <text x="104" y="86" text-anchor="middle" font-size="10.5" fill="#c2410c">LLM extrait sujets,</text>
+  <text x="104" y="100" text-anchor="middle" font-size="10" fill="#f97316">lacunes &amp; contraintes</text>
+
+  <line x1="198" y1="60" x2="222" y2="60" stroke="#f97316" stroke-width="1.8" marker-end="url(#pj1)"/>
+
+  <!-- Étape 2 : Entretien -->
+  <rect x="224" y="10" width="188" height="100" rx="8" fill="#fff7ed" stroke="#f97316" stroke-width="1.5"/>
+  <text x="318" y="36" text-anchor="middle" font-size="12" font-weight="700" fill="#9a3412">2. Entretien LLM</text>
+  <text x="318" y="54" text-anchor="middle" font-size="10.5" fill="#c2410c">Comble les lacunes</text>
+  <text x="318" y="70" text-anchor="middle" font-size="10.5" fill="#c2410c">identifiées dans le CDC</text>
+  <text x="318" y="86" text-anchor="middle" font-size="10.5" fill="#c2410c">Profil projet généré</text>
+  <text x="318" y="100" text-anchor="middle" font-size="10" fill="#f97316">avec bilan de connaissance</text>
+
+  <line x1="412" y1="60" x2="436" y2="60" stroke="#f97316" stroke-width="1.8" marker-end="url(#pj1)"/>
+
+  <!-- Étape 3 : Sujets auto -->
+  <rect x="438" y="10" width="188" height="100" rx="8" fill="#fff7ed" stroke="#f97316" stroke-width="1.5"/>
+  <text x="532" y="36" text-anchor="middle" font-size="12" font-weight="700" fill="#9a3412">3. Sujets générés</text>
+  <text x="532" y="54" text-anchor="middle" font-size="10.5" fill="#c2410c">Arborescence créée</text>
+  <text x="532" y="70" text-anchor="middle" font-size="10.5" fill="#c2410c">en base automatiquement</text>
+  <text x="532" y="86" text-anchor="middle" font-size="10.5" fill="#c2410c">Modifiables avant</text>
+  <text x="532" y="100" text-anchor="middle" font-size="10" fill="#f97316">de lancer l'entretien</text>
+
+  <line x1="626" y1="60" x2="650" y2="60" stroke="#f97316" stroke-width="1.8" marker-end="url(#pj1)"/>
+
+  <!-- Étape 4 : Sources -->
+  <rect x="652" y="10" width="198" height="100" rx="8" fill="#fff7ed" stroke="#f97316" stroke-width="1.5"/>
+  <text x="751" y="36" text-anchor="middle" font-size="12" font-weight="700" fill="#9a3412">4. Sources validées</text>
+  <text x="751" y="54" text-anchor="middle" font-size="10.5" fill="#c2410c">Propositions auto</text>
+  <text x="751" y="70" text-anchor="middle" font-size="10.5" fill="#c2410c">Membres proposent aussi</text>
+  <text x="751" y="86" text-anchor="middle" font-size="10.5" fill="#c2410c">Propriétaire approuve</text>
+  <text x="751" y="100" text-anchor="middle" font-size="10" fill="#f97316">ou rejette chaque source</text>
+
+  <!-- Ligne séparatrice -->
+  <line x1="10" y1="128" x2="850" y2="128" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,4"/>
+
+  <!-- Zone centrale projet -->
+  <rect x="10" y="140" width="840" height="160" rx="10" fill="#fff7ed" stroke="#f97316" stroke-width="2"/>
+  <text x="430" y="168" text-anchor="middle" font-size="13" font-weight="800" fill="#9a3412">Espace Projet — Environnement isolé</text>
+
+  <!-- Pipeline projet -->
+  <rect x="30" y="180" width="160" height="48" rx="6" fill="white" stroke="#fed7aa" stroke-width="1.2"/>
+  <text x="110" y="202" text-anchor="middle" font-size="11" font-weight="600" fill="#334155">Pipeline dédié</text>
+  <text x="110" y="218" text-anchor="middle" font-size="10" fill="#64748b">Sources approuvées → Collecte</text>
+
+  <line x1="190" y1="204" x2="215" y2="204" stroke="#f97316" stroke-width="1.5" marker-end="url(#pj1)"/>
+
+  <!-- Filtres projet -->
+  <rect x="217" y="180" width="160" height="48" rx="6" fill="white" stroke="#fed7aa" stroke-width="1.2"/>
+  <text x="297" y="202" text-anchor="middle" font-size="11" font-weight="600" fill="#334155">Filtres (4 couches)</text>
+  <text x="297" y="218" text-anchor="middle" font-size="10" fill="#64748b">Fiabilité · Pertinence projet</text>
+
+  <line x1="377" y1="204" x2="402" y2="204" stroke="#f97316" stroke-width="1.5" marker-end="url(#pj1)"/>
+
+  <!-- RAG KG isolés -->
+  <rect x="404" y="180" width="160" height="48" rx="6" fill="white" stroke="#fed7aa" stroke-width="1.2"/>
+  <text x="484" y="202" text-anchor="middle" font-size="11" font-weight="600" fill="#334155">RAG + KG isolés</text>
+  <text x="484" y="218" text-anchor="middle" font-size="10" fill="#64748b">Pas de contamination externe</text>
+
+  <line x1="564" y1="204" x2="589" y2="204" stroke="#f97316" stroke-width="1.5" marker-end="url(#pj1)"/>
+
+  <!-- Briefing projet -->
+  <rect x="591" y="180" width="238" height="48" rx="6" fill="#fef3c7" stroke="#f97316" stroke-width="1.5"/>
+  <text x="710" y="202" text-anchor="middle" font-size="11" font-weight="700" fill="#92400e">Briefing projet</text>
+  <text x="710" y="218" text-anchor="middle" font-size="10" fill="#78350f">Note pertinence par item · Décision</text>
+
+  <!-- Membres et rôles -->
+  <text x="430" y="262" text-anchor="middle" font-size="11.5" font-weight="700" fill="#9a3412">Gestion d'équipe</text>
+  <rect x="100" y="272" width="148" height="20" rx="4" fill="white" stroke="#fed7aa" stroke-width="1"/>
+  <text x="174" y="286" text-anchor="middle" font-size="10" fill="#334155">👑 Propriétaire — tous droits</text>
+  <rect x="264" y="272" width="148" height="20" rx="4" fill="white" stroke="#fed7aa" stroke-width="1"/>
+  <text x="338" y="286" text-anchor="middle" font-size="10" fill="#334155">✏️ Éditeur — collecte + validation</text>
+  <rect x="428" y="272" width="148" height="20" rx="4" fill="white" stroke="#fed7aa" stroke-width="1"/>
+  <text x="502" y="286" text-anchor="middle" font-size="10" fill="#334155">👁️ Lecteur — consultation seule</text>
+  <rect x="592" y="272" width="158" height="20" rx="4" fill="#fef3c7" stroke="#f97316" stroke-width="1"/>
+  <text x="671" y="286" text-anchor="middle" font-size="10" fill="#92400e">📩 Notif. Teams webhook</text>
+
+  <!-- Livrable fin de mission -->
+  <rect x="10" y="316" width="840" height="90" rx="10" fill="#f0fdf4" stroke="#059669" stroke-width="1.5"/>
+  <text x="430" y="342" text-anchor="middle" font-size="13" font-weight="800" fill="#166534">En fin de mission — livrable transmissible</text>
+  <rect x="36" y="356" width="176" height="36" rx="6" fill="white" stroke="#86efac" stroke-width="1.2"/>
+  <text x="124" y="372" text-anchor="middle" font-size="10.5" font-weight="600" fill="#334155">Base RAG projet</text>
+  <text x="124" y="386" text-anchor="middle" font-size="10" fill="#64748b">Tous les articles classifiés</text>
+  <rect x="228" y="356" width="176" height="36" rx="6" fill="white" stroke="#86efac" stroke-width="1.2"/>
+  <text x="316" y="372" text-anchor="middle" font-size="10.5" font-weight="600" fill="#334155">Knowledge Graph</text>
+  <text x="316" y="386" text-anchor="middle" font-size="10" fill="#64748b">Entités et relations projet</text>
+  <rect x="420" y="356" width="176" height="36" rx="6" fill="white" stroke="#86efac" stroke-width="1.2"/>
+  <text x="508" y="372" text-anchor="middle" font-size="10.5" font-weight="600" fill="#334155">Documents générés</text>
+  <text x="508" y="386" text-anchor="middle" font-size="10" fill="#64748b">Rapports · Fiches · Synthèses</text>
+  <rect x="612" y="356" width="222" height="36" rx="6" fill="white" stroke="#86efac" stroke-width="1.2"/>
+  <text x="723" y="372" text-anchor="middle" font-size="10.5" font-weight="600" fill="#334155">Profil de connaissance projet</text>
+  <text x="723" y="386" text-anchor="middle" font-size="10" fill="#64748b">Réutilisable sur missions suivantes</text>
+
+  <defs>
+    <marker id="pj1" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <polygon points="0 0, 7 3.5, 0 7" fill="#f97316"/>
+    </marker>
+  </defs>
+</svg>
+</div>
+
+<div class="callout callout-amber">
+  <div class="callout-icon">◆</div>
+  <div class="callout-body">
+    <div class="callout-title">Note de pertinence par item dans le briefing projet</div>
+    <p>Chaque article du briefing projet affiche une phrase générée automatiquement expliquant <em>pourquoi</em> cet article est important pour ce projet précis — et dans quelle mesure (directement applicable, contexte réglementaire, benchmark concurrent…). L'équipe décide immédiatement sans lire l'article complet.</p>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════ MCP / IDE ══════════════════════════ -->
+<h2><span class="num">09</span> Connexion IDE et LLMs — via MCP</h2>
+
+<p>Argos expose un serveur MCP (Model Context Protocol — standard ouvert d'Anthropic). N'importe quel IDE ou assistant IA compatible peut interroger la base de connaissance Argos directement, sans copier-coller.</p>
+
+<div class="diagram">
+<svg viewBox="0 0 860 210" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
+
+  <!-- Argos centre -->
+  <rect x="320" y="80" width="220" height="60" rx="10" fill="#2563eb"/>
+  <text x="430" y="108" text-anchor="middle" font-size="14" font-weight="800" fill="white">Argos</text>
+  <text x="430" y="127" text-anchor="middle" font-size="10.5" fill="#bfdbfe">Serveur MCP · RAG · KG</text>
+
+  <!-- IDE gauche -->
+  <rect x="20" y="18" width="160" height="46" rx="7" fill="#1e1e2e" stroke="#7c3aed" stroke-width="1.3"/>
+  <text x="100" y="39" text-anchor="middle" font-size="12" font-weight="700" fill="white">VS Code</text>
+  <text x="100" y="55" text-anchor="middle" font-size="10" fill="#a78bfa">Copilot · Continue</text>
+
+  <rect x="20" y="82" width="160" height="46" rx="7" fill="#0d1117" stroke="#7c3aed" stroke-width="1.3"/>
+  <text x="100" y="103" text-anchor="middle" font-size="12" font-weight="700" fill="white">Cursor</text>
+  <text x="100" y="119" text-anchor="middle" font-size="10" fill="#a78bfa">Agent de code</text>
+
+  <rect x="20" y="148" width="160" height="46" rx="7" fill="#0f172a" stroke="#7c3aed" stroke-width="1.3"/>
+  <text x="100" y="169" text-anchor="middle" font-size="12" font-weight="700" fill="white">JetBrains</text>
+  <text x="100" y="185" text-anchor="middle" font-size="10" fill="#a78bfa">AI Assistant</text>
+
+  <!-- LLMs droite -->
+  <rect x="680" y="18" width="160" height="46" rx="7" fill="#1a1a2e" stroke="#7c3aed" stroke-width="1.3"/>
+  <text x="760" y="39" text-anchor="middle" font-size="12" font-weight="700" fill="white">Claude Desktop</text>
+  <text x="760" y="55" text-anchor="middle" font-size="10" fill="#a78bfa">Anthropic</text>
+
+  <rect x="680" y="82" width="160" height="46" rx="7" fill="#0d1117" stroke="#7c3aed" stroke-width="1.3"/>
+  <text x="760" y="103" text-anchor="middle" font-size="12" font-weight="700" fill="white">ChatGPT</text>
+  <text x="760" y="119" text-anchor="middle" font-size="10" fill="#a78bfa">OpenAI</text>
+
+  <rect x="680" y="148" width="160" height="46" rx="7" fill="#0f172a" stroke="#7c3aed" stroke-width="1.3"/>
+  <text x="760" y="169" text-anchor="middle" font-size="12" font-weight="700" fill="white">n8n · Pipelines</text>
+  <text x="760" y="185" text-anchor="middle" font-size="10" fill="#a78bfa">Automatisations</text>
+
+  <!-- Flèches IDE → Argos -->
+  <line x1="180" y1="41" x2="318" y2="92" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#mcp1)"/>
+  <line x1="180" y1="105" x2="318" y2="110" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#mcp1)"/>
+  <line x1="180" y1="171" x2="318" y2="128" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#mcp1)"/>
+
+  <!-- Flèches Argos → LLMs -->
+  <line x1="540" y1="92" x2="678" y2="41" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#mcp1)"/>
+  <line x1="540" y1="110" x2="678" y2="105" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#mcp1)"/>
+  <line x1="540" y1="128" x2="678" y2="171" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#mcp1)"/>
+
+  <!-- Labels MCP -->
+  <text x="248" y="100" text-anchor="middle" font-size="10" font-weight="700" fill="#7c3aed" letter-spacing="0.05em">MCP</text>
+  <text x="610" y="100" text-anchor="middle" font-size="10" font-weight="700" fill="#7c3aed" letter-spacing="0.05em">MCP</text>
+
+  <defs>
+    <marker id="mcp1" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
       <polygon points="0 0, 7 3.5, 0 7" fill="#7c3aed"/>
     </marker>
   </defs>
 </svg>
 </div>
 
-<p>Concrètement : un développeur écrit du code, il pose une question à son assistant dans l'IDE — l'assistant interroge la base Argos de son équipe en temps réel et répond avec les données de veille internes, pas avec ses données d'entraînement potentiellement obsolètes.</p>
+<p>Un développeur écrit du code, pose une question à son assistant dans l'IDE — l'assistant interroge la base Argos de son équipe <em>en temps réel</em> et répond avec les données de veille internes, pas avec ses données d'entraînement potentiellement obsolètes.</p>
+
+
+<!-- ══════════════════════════ ARCHITECTURE ══════════════════════════ -->
+<h2><span class="num">10</span> Architecture technique</h2>
+
+<div class="diagram">
+<svg viewBox="0 0 860 310" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
+
+  <!-- Couche collecte -->
+  <rect x="0" y="0" width="860" height="56" rx="8" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.2"/>
+  <text x="20" y="20" font-size="10" font-weight="700" fill="#64748b" letter-spacing="0.06em">COLLECTE &amp; SCRAPING</text>
+  <rect x="20" y="28" width="120" height="20" rx="4" fill="white" stroke="#e2e8f0"/>
+  <text x="80" y="42" text-anchor="middle" font-size="10" fill="#334155">trafilatura</text>
+  <rect x="152" y="28" width="120" height="20" rx="4" fill="white" stroke="#e2e8f0"/>
+  <text x="212" y="42" text-anchor="middle" font-size="10" fill="#334155">Playwright (SPA/JS)</text>
+  <rect x="284" y="28" width="120" height="20" rx="4" fill="white" stroke="#e2e8f0"/>
+  <text x="344" y="42" text-anchor="middle" font-size="10" fill="#334155">SearXNG (recherche)</text>
+  <rect x="416" y="28" width="120" height="20" rx="4" fill="white" stroke="#e2e8f0"/>
+  <text x="476" y="42" text-anchor="middle" font-size="10" fill="#334155">Celery + Redis</text>
+  <rect x="548" y="28" width="120" height="20" rx="4" fill="white" stroke="#e2e8f0"/>
+  <text x="608" y="42" text-anchor="middle" font-size="10" fill="#334155">APScheduler</text>
+  <rect x="680" y="28" width="168" height="20" rx="4" fill="white" stroke="#e2e8f0"/>
+  <text x="764" y="42" text-anchor="middle" font-size="10" fill="#334155">PyMuPDF (PDF/images)</text>
+
+  <!-- Couche LLM -->
+  <rect x="0" y="68" width="860" height="56" rx="8" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.2"/>
+  <text x="20" y="88" font-size="10" font-weight="700" fill="#2563eb" letter-spacing="0.06em">COUCHE LLM</text>
+  <rect x="20" y="96" width="148" height="20" rx="4" fill="white" stroke="#bfdbfe"/>
+  <text x="94" y="110" text-anchor="middle" font-size="10" fill="#334155">Claude Sonnet (digest)</text>
+  <rect x="180" y="96" width="148" height="20" rx="4" fill="white" stroke="#bfdbfe"/>
+  <text x="254" y="110" text-anchor="middle" font-size="10" fill="#334155">Claude Haiku (scoring)</text>
+  <rect x="340" y="96" width="168" height="20" rx="4" fill="white" stroke="#bfdbfe"/>
+  <text x="424" y="110" text-anchor="middle" font-size="10" fill="#334155">AWS Bedrock / Anthropic API</text>
+  <rect x="520" y="96" width="148" height="20" rx="4" fill="white" stroke="#bfdbfe"/>
+  <text x="594" y="110" text-anchor="middle" font-size="10" fill="#334155">sentence-transformers</text>
+  <rect x="680" y="96" width="168" height="20" rx="4" fill="white" stroke="#bfdbfe"/>
+  <text x="764" y="110" text-anchor="middle" font-size="10" fill="#334155">LLM agnostique (provider)</text>
+
+  <!-- Couche data -->
+  <rect x="0" y="136" width="860" height="56" rx="8" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.2"/>
+  <text x="20" y="156" font-size="10" font-weight="700" fill="#5b21b6" letter-spacing="0.06em">STOCKAGE &amp; VECTORISATION</text>
+  <rect x="20" y="164" width="148" height="20" rx="4" fill="white" stroke="#c4b5fd"/>
+  <text x="94" y="178" text-anchor="middle" font-size="10" fill="#334155">PostgreSQL 16</text>
+  <rect x="180" y="164" width="148" height="20" rx="4" fill="white" stroke="#c4b5fd"/>
+  <text x="254" y="178" text-anchor="middle" font-size="10" fill="#334155">LanceDB (hybrid search)</text>
+  <rect x="340" y="164" width="148" height="20" rx="4" fill="white" stroke="#c4b5fd"/>
+  <text x="414" y="178" text-anchor="middle" font-size="10" fill="#334155">Redis (files Celery)</text>
+  <rect x="500" y="164" width="148" height="20" rx="4" fill="white" stroke="#c4b5fd"/>
+  <text x="574" y="178" text-anchor="middle" font-size="10" fill="#334155">Knowledge Graph (pg)</text>
+  <rect x="660" y="164" width="188" height="20" rx="4" fill="white" stroke="#c4b5fd"/>
+  <text x="754" y="178" text-anchor="middle" font-size="10" fill="#334155">sklearn · textstat · hdbscan</text>
+
+  <!-- Couche API -->
+  <rect x="0" y="204" width="860" height="56" rx="8" fill="#f0fdf4" stroke="#86efac" stroke-width="1.2"/>
+  <text x="20" y="224" font-size="10" font-weight="700" fill="#059669" letter-spacing="0.06em">API &amp; PROTOCOLES</text>
+  <rect x="20" y="232" width="148" height="20" rx="4" fill="white" stroke="#86efac"/>
+  <text x="94" y="246" text-anchor="middle" font-size="10" fill="#334155">FastAPI + Python 3.11</text>
+  <rect x="180" y="232" width="148" height="20" rx="4" fill="white" stroke="#86efac"/>
+  <text x="254" y="246" text-anchor="middle" font-size="10" fill="#334155">MCP JSON-RPC</text>
+  <rect x="340" y="232" width="148" height="20" rx="4" fill="white" stroke="#86efac"/>
+  <text x="414" y="246" text-anchor="middle" font-size="10" fill="#334155">JWT Auth (RS256)</text>
+  <rect x="500" y="232" width="148" height="20" rx="4" fill="white" stroke="#86efac"/>
+  <text x="574" y="246" text-anchor="middle" font-size="10" fill="#334155">REST + WebSocket (SSE)</text>
+  <rect x="660" y="232" width="188" height="20" rx="4" fill="white" stroke="#86efac"/>
+  <text x="754" y="246" text-anchor="middle" font-size="10" fill="#334155">Teams Webhook</text>
+
+  <!-- Frontend -->
+  <rect x="0" y="272" width="860" height="36" rx="8" fill="#fef9c3" stroke="#fbbf24" stroke-width="1.2"/>
+  <text x="20" y="292" font-size="10" font-weight="700" fill="#92400e" letter-spacing="0.06em">FRONTEND</text>
+  <text x="160" y="294" font-size="10.5" fill="#334155">React + Vite · TypeScript · Tailwind CSS · Framer Motion · Recharts · ReactMarkdown</text>
+  <text x="680" y="294" font-size="10" fill="#78350f">Docker Compose</text>
+</svg>
+</div>
+
+<table>
+  <thead><tr><th>Composant</th><th>Technologie</th><th>Rôle</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Backend</strong></td><td>FastAPI + Python 3.11</td><td>API REST + serveur MCP JSON-RPC</td></tr>
+    <tr><td><strong>Base de données</strong></td><td>PostgreSQL 16</td><td>Métadonnées, scores, workspaces, projets</td></tr>
+    <tr><td><strong>Vector store</strong></td><td>LanceDB (hybrid search)</td><td>Embeddings + recherche fulltext</td></tr>
+    <tr><td><strong>LLM principal</strong></td><td>Claude Sonnet (Bedrock)</td><td>Digest, briefing, entretien, reader-doc</td></tr>
+    <tr><td><strong>LLM scoring</strong></td><td>Claude Haiku</td><td>Scoring pertinence 1–5, filtrage</td></tr>
+    <tr><td><strong>Embeddings</strong></td><td>sentence-transformers (local)</td><td>Indexation sémantique sans appel externe</td></tr>
+    <tr><td><strong>Queue</strong></td><td>Celery + Redis</td><td>Pipeline asynchrone, pipeline projet</td></tr>
+    <tr><td><strong>Scraping</strong></td><td>trafilatura + Playwright</td><td>Extraction propre + fallback SPA/JS</td></tr>
+    <tr><td><strong>Recherche web</strong></td><td>SearXNG auto-hébergé</td><td>Découverte de sources sans API key</td></tr>
+    <tr><td><strong>Auth</strong></td><td>JWT RS256</td><td>Authentification par espace/rôle</td></tr>
+    <tr><td><strong>Frontend</strong></td><td>React + Vite + Tailwind</td><td>Interface multi-espace, briefing, projets</td></tr>
+    <tr><td><strong>Déploiement</strong></td><td>Docker Compose</td><td>Stack complète en un seul commande</td></tr>
+  </tbody>
+</table>
 
 
 <!-- ══════════════════════════ ÉTAT ══════════════════════════ -->
-<h2><span class="num">07</span> Ce qui est livré aujourd'hui</h2>
+<h2><span class="num">11</span> Ce qui est livré aujourd'hui</h2>
 
-<h4>Socle individuel</h4>
+<h4>Socle individuel — veille et apprentissage</h4>
 <table class="status-table">
   <thead><tr><th>Fonctionnalité</th><th>Statut</th></tr></thead>
   <tbody>
     <tr><td>Entretien de calibration — bilan, plan d'apprentissage chronologique, whitelist de sources</td><td class="done">✓ Livré</td></tr>
-    <tr><td>Pipeline de collecte — RSS, sites web (avec rendu JS), GitHub, PDF/images</td><td class="done">✓ Livré</td></tr>
-    <tr><td>Filtre de fiabilité automatique — agnostique, sans liste codée en dur</td><td class="done">✓ Livré</td></tr>
-    <tr><td>Classification automatique veille / apprentissage par profil utilisateur</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Pipeline de collecte — RSS, sites web (avec rendu JS), GitHub, ArXiv, PDF</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Filtre fiabilité automatique — tiers, scoring domaine (Tranco), decay temporel</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Filtre pertinence LLM — Haiku score 1–5, ignoré automatiquement si ≤ 3</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Tagging automatique veille / apprentissage par profil utilisateur</td><td class="done">✓ Livré</td></tr>
     <tr><td>Apprentissage progressif — contenu servi dans l'ordre du plan pédagogique</td><td class="done">✓ Livré</td></tr>
     <tr><td>Briefing journalier structuré — onglets Veille et Apprentissage distincts</td><td class="done">✓ Livré</td></tr>
-    <tr><td>Base RAG hybride + Knowledge Graph interrogeables en langage naturel</td><td class="done">✓ Livré</td></tr>
-    <tr><td>Contrôle humain explicite — Intégrer · Sauvegarder · Ignorer</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Note de pertinence par carte — pourquoi cet article pour ce profil</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Reader document — article complet restructuré par LLM (titres, tableaux, exemples)</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Contrôle humain explicite — Sauvegarder &amp; Indexer · Sauvegarder · Ignorer</td><td class="done">✓ Livré</td></tr>
     <tr><td>Traduction à la volée — langue cible configurable par sujet</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Base RAG hybride + Knowledge Graph interrogeables en langage naturel</td><td class="done">✓ Livré</td></tr>
     <tr><td>Serveur MCP — connexion aux IDE et assistants IA (7 outils exposés)</td><td class="done">✓ Livré</td></tr>
   </tbody>
 </table>
@@ -631,15 +1254,16 @@
 <table class="status-table">
   <thead><tr><th>Fonctionnalité</th><th>Statut</th></tr></thead>
   <tbody>
-    <tr><td>Création de projet — nom, description, webhook Teams optionnel</td><td class="done">✓ Livré</td></tr>
-    <tr><td>Analyse LLM du CDC — extraction automatique des sujets, lacunes et contraintes</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Création projet depuis CDC — extraction auto des sujets, lacunes, contraintes</td><td class="done">✓ Livré</td></tr>
     <tr><td>Entretien projet conversationnel — comble les lacunes identifiées dans le CDC</td><td class="done">✓ Livré</td></tr>
-    <tr><td>Génération automatique des sujets — arborescence créée en base depuis l'entretien</td><td class="done">✓ Livré</td></tr>
-    <tr><td>Gestion des membres — invitation par email, rôles owner / éditeur / lecteur</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Génération automatique des sujets — arborescence en base depuis l'entretien</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Gestion membres — invitation email, rôles owner / éditeur / lecteur</td><td class="done">✓ Livré</td></tr>
     <tr><td>Propositions de sources — membres proposent, propriétaire valide ou rejette</td><td class="done">✓ Livré</td></tr>
-    <tr><td>Notifications Teams — invitation, validation de source, calibration terminée</td><td class="done">✓ Livré</td></tr>
-    <tr><td>Interface dédiée — /projets avec liste, flow création, dashboard 3 onglets</td><td class="done">✓ Livré</td></tr>
-    <tr><td>Couverture de tests — 165 tests automatisés, 0 régression</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Pipeline projet dédié — sources approuvées → collecte → filtres → briefing projet</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Briefing projet avec note de pertinence par item selon le contexte projet</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Notifications Teams — invitation, validation source, calibration terminée</td><td class="done">✓ Livré</td></tr>
+    <tr><td>RAG + KG isolés par projet — pas de contamination entre espaces</td><td class="done">✓ Livré</td></tr>
+    <tr><td>Couverture de tests — tests automatisés, pipeline CI</td><td class="done">✓ Livré</td></tr>
   </tbody>
 </table>
 
@@ -647,18 +1271,20 @@
 <table class="status-table">
   <thead><tr><th>Fonctionnalité</th><th>Objectif</th></tr></thead>
   <tbody>
-    <tr><td>Moteur de progression — mesure de l'avancement réel vs le plan pédagogique</td><td class="next">Ajuster le rythme selon ce qui est effectivement assimilé</td></tr>
+    <tr><td>Moteur de progression — mesure de l'avancement réel vs le plan pédagogique</td><td class="next">Ajuster le rythme selon ce qui est effectivement assimilé via RAG+KG</td></tr>
     <tr><td>Mise à jour du bilan — détecter quand le profil a évolué</td><td class="next">Maintenir la pertinence dans le temps sans repartir de zéro</td></tr>
     <tr><td>Rétention RAG intelligente — nettoyage temporel et par progression</td><td class="next">Base propre sans intervention manuelle</td></tr>
-    <tr><td>Intégration Microsoft Graph API — invitation Teams native (enterprise)</td><td class="next">Invitation directe depuis Teams sans webhook</td></tr>
-    <tr><td>Onglets Veille / Apprentissage dans la Librairie</td><td class="next">Navigation structurée par type de contenu archivé</td></tr>
+    <tr><td>LLM-as-judge — évaluation automatique qualité des digests</td><td class="next">Non-régression si changement de modèle ou prompt</td></tr>
+    <tr><td>Onglets Veille / Apprentissage dans la Bibliothèque</td><td class="next">Navigation structurée dans le contenu archivé</td></tr>
+    <tr><td>Intégration Microsoft Graph API — invitation Teams native</td><td class="next">Invitation directe depuis Teams sans webhook</td></tr>
   </tbody>
 </table>
 
+
 <!-- ══════════════════════════ FOOTER ══════════════════════════ -->
 <div class="footer">
-  <span>Argos — plateforme de veille et d'apprentissage agnostique, conçue et développée par Wilfried Leroulier.</span>
-  <span>Wilfried Leroulier · Août 2026</span>
+  <span>Argos — plateforme de veille intelligente et d'apprentissage adaptatif, conçue et développée par Wilfried Leroulier.</span>
+  <span>Wilfried Leroulier · Septembre 2026</span>
 </div>
 
 </body>

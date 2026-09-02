@@ -54,11 +54,21 @@ export default function ProjetNouveau() {
 
   // localStorage — restauration au montage uniquement si le projet existe encore en base
   useEffect(() => {
+    // Migration v2 : purge les entrées sans version (format ancien, possiblement corrompues)
     const saved = localStorage.getItem('argos_projet_nouveau')
     if (!saved) return
     try {
       const d = JSON.parse(saved)
+      if (!d._v || d._v < 2) {
+        localStorage.removeItem('argos_projet_nouveau')
+        return
+      }
       if (!d.createdProjectId) {
+        localStorage.removeItem('argos_projet_nouveau')
+        return
+      }
+      // Ne pas restaurer un projet déjà finalisé
+      if (d.step === 'finalisation') {
         localStorage.removeItem('argos_projet_nouveau')
         return
       }
@@ -72,7 +82,7 @@ export default function ProjetNouveau() {
           if (d.editableSubjects) setEditableSubjects(d.editableSubjects)
           if (d.qaHistory) setQaHistory(d.qaHistory)
           if (d.interviewDone) setInterviewDone(d.interviewDone)
-          if (d.step && d.step !== 'finalisation') setStep(d.step)
+          if (d.step) setStep(d.step)
           setCreatedProjectId(d.createdProjectId)
         })
         .catch(() => {
@@ -86,9 +96,13 @@ export default function ProjetNouveau() {
 
   // localStorage — sauvegarde sur chaque changement d'état clé
   useEffect(() => {
+    if (step === 'finalisation') {
+      localStorage.removeItem('argos_projet_nouveau')
+      return
+    }
     if (step === 'infos' && !name) return
     localStorage.setItem('argos_projet_nouveau', JSON.stringify({
-      step, name, desc, cdcText, cdcAnalysis, editableSubjects,
+      _v: 2, step, name, desc, cdcText, cdcAnalysis, editableSubjects,
       qaHistory, interviewDone, createdProjectId,
     }))
   }, [step, name, desc, cdcText, cdcAnalysis, editableSubjects, qaHistory, interviewDone])
@@ -580,17 +594,24 @@ export default function ProjetNouveau() {
 
                 {/* Sujets créés */}
                 <div className="space-y-2">
-                  {finalResult.subjects?.map((s: any, i: number) => (
-                    <div key={i} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-[hsl(var(--bg))]">
-                      <Check className="w-3.5 h-3.5 text-[hsl(var(--aqua))] flex-shrink-0" />
-                      <div>
-                        <p className="text-[13px] font-medium text-[hsl(var(--text))]">{s.name}</p>
-                        {s.description && (
-                          <p className="text-[11px] text-[hsl(var(--text-3))]">{s.description}</p>
-                        )}
+                  {finalResult.subjects?.map((s: any, i: number) => {
+                    const prio = editableSubjects.find(e => e.name === s.name)?.priority ?? 'low'
+                    return (
+                      <div key={i} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-[hsl(var(--bg))]">
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                          prio === 'high' ? 'bg-[hsl(var(--accent))]' :
+                          prio === 'medium' ? 'bg-[hsl(var(--yellow))]' :
+                          'bg-[hsl(var(--line))]'
+                        }`} />
+                        <div>
+                          <p className="text-[13px] font-medium text-[hsl(var(--text))]">{s.name}</p>
+                          {s.description && (
+                            <p className="text-[11px] text-[hsl(var(--text-3))]">{s.description}</p>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
 
                 {/* Sources suggérées */}

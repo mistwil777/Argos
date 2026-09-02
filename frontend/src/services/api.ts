@@ -247,6 +247,10 @@ export const api = {
     request<any>(`/api/v1/projects/${id}/source-proposals`, { method: 'POST', body: JSON.stringify(data) }),
   reviewProposal: (projectId: number, proposalId: number, data: any) =>
     request<any>(`/api/v1/projects/${projectId}/source-proposals/${proposalId}/review`, { method: 'PATCH', body: JSON.stringify(data) }),
+  getProjectItems: (id: number, params: { sujet_id?: number; limit?: number; offset?: number } = {}) => {
+    const qs = new URLSearchParams(Object.entries(params).filter(([,v]) => v !== undefined).map(([k,v]) => [k, String(v)])).toString()
+    return request<any>(`/api/v1/projects/${id}/items${qs ? `?${qs}` : ''}`)
+  },
   listProjectApiKeys: (id: number) => request<any[]>(`/api/v1/projects/${id}/api-keys`),
   createProjectApiKey: (id: number) => request<any>(`/api/v1/projects/${id}/api-keys`, { method: 'POST' }),
   revokeProjectApiKey: (id: number, keyId: number) => request<void>(`/api/v1/projects/${id}/api-keys/${keyId}`, { method: 'DELETE' }),

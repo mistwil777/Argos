@@ -1,4 +1,4 @@
-en parallèle, démarre argos dans chrome, je v"""
+"""
 CalibrationAgent — entretien de configuration de veille
 Boucle : Lire → Décider (chercher / demander / finaliser)
 

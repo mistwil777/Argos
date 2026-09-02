@@ -34,6 +34,7 @@ class CollectorService:
             config_path: Path to sources configuration file
         """
         self.db = db_manager
+        self.db_manager = db_manager
         self.config_path = config_path
         self.config = self._load_config()
         

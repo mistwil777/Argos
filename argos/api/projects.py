@@ -7,7 +7,7 @@ import secrets
 from typing import Optional, List
 from datetime import date
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
 
 from argos.database import DatabaseManager
@@ -312,7 +312,7 @@ async def suggest_sources_for_project(project_id: int, current_user=Depends(get_
             for name, wid in ws_by_name.items():
                 if any(word in subject_hint for word in name.lower().split() if len(word) > 3):
                     return wid
-            return workspaces[0]["id"] if workspaces else None
+            return None
 
         with db.get_connection() as conn:
             with conn.cursor() as cur:
@@ -639,23 +639,25 @@ async def run_project_pipeline(
                 target_workspace = sujet_id or _resolve_project_workspace(project_id)
                 if not target_workspace:
                     continue
+                _ALLOWED_TYPES = {'rss', 'website', 'github', 'api'}
+                safe_type = source_type if source_type in _ALLOWED_TYPES else 'website'
                 cur.execute(
-                    "SELECT id FROM sources WHERE url = %s AND workspace_id = %s",
-                    (url, target_workspace),
+                    """INSERT INTO sources (name, url, type, active, workspace_id)
+                       VALUES (%s, %s, %s, TRUE, %s)
+                       ON CONFLICT (url, COALESCE(sujet_id, '-1'::integer)) DO UPDATE
+                         SET name = EXCLUDED.name, workspace_id = EXCLUDED.workspace_id
+                       RETURNING id""",
+                    (name or url, url, safe_type, target_workspace),
                 )
                 row = cur.fetchone()
-                if row:
-                    source_id = row[0]
-                else:
-                    _ALLOWED_TYPES = {'rss', 'website', 'github', 'api'}
-                    safe_type = source_type if source_type in _ALLOWED_TYPES else 'website'
-                    cur.execute(
-                        """INSERT INTO sources (name, url, type, active, workspace_id)
-                           VALUES (%s, %s, %s, TRUE, %s) RETURNING id""",
-                        (name or url, url, safe_type, target_workspace),
-                    )
-                    source_id = cur.fetchone()[0]
-                    conn.commit()
+                if not row:
+                    cur.execute("SELECT id FROM sources WHERE url = %s AND workspace_id = %s",
+                                (url, target_workspace))
+                    row = cur.fetchone()
+                if not row:
+                    continue
+                source_id = row[0]
+                conn.commit()
 
                 asyncio.create_task(run_pipeline_for_source(source_id))
                 launched += 1
@@ -891,3 +893,65 @@ async def get_project_metrics(
         "quality_trend": quality_trend,
         "costs": {"total_usd": total_cost, "by_operation": costs},
     }
+
+
+@router.get("/projects/{project_id}/items")
+async def list_project_items(
+    project_id: int,
+    sujet_id: Optional[int] = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    current_user=Depends(get_current_user),
+):
+    """Articles indexés pour tous les sujets (workspaces) du projet."""
+    project = _svc().get_project(project_id=project_id, user_id=current_user["id"])
+    if not project:
+        raise HTTPException(status_code=404, detail="Projet introuvable ou accès refusé")
+
+    with db.get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, name FROM workspaces WHERE project_id = %s ORDER BY id",
+                (project_id,),
+            )
+            workspaces = [{"id": r[0], "name": r[1]} for r in cur.fetchall()]
+            ws_ids = [w["id"] for w in workspaces]
+
+            if not ws_ids:
+                return {"workspaces": [], "items": [], "total": 0}
+
+            ws_map = {w["id"]: w["name"] for w in workspaces}
+
+            extra = "AND i.workspace_id = %s" if sujet_id is not None else ""
+            extra_params = [sujet_id] if sujet_id is not None else []
+
+            cur.execute(
+                f"""SELECT id, title, summary, url, source_type, published_at, created_at,
+                           workspace_id, digest_markdown, rag_indexed, importance
+                    FROM items i
+                    WHERE workspace_id = ANY(%s) {extra}
+                    ORDER BY created_at DESC
+                    LIMIT %s OFFSET %s""",
+                [ws_ids] + extra_params + [limit, offset],
+            )
+            items = []
+            for row in cur.fetchall():
+                items.append({
+                    "id": row[0], "title": row[1], "summary": row[2],
+                    "url": row[3], "source_type": row[4],
+                    "published_at": row[5].isoformat() if row[5] else None,
+                    "created_at": row[6].isoformat() if row[6] else None,
+                    "workspace_id": row[7],
+                    "sujet_name": ws_map.get(row[7], ""),
+                    "has_digest": bool(row[8]),
+                    "rag_indexed": bool(row[9]),
+                    "importance": row[10],
+                })
+
+            cur.execute(
+                f"SELECT COUNT(*) FROM items WHERE workspace_id = ANY(%s) {extra}",
+                [ws_ids] + extra_params,
+            )
+            total = cur.fetchone()[0]
+
+    return {"workspaces": workspaces, "items": items, "total": total}
