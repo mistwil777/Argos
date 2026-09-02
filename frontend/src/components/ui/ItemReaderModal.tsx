@@ -113,10 +113,8 @@ export default function ItemReaderModal({ itemId, onClose, onSaved, onGenerateRe
       if (!lang) return
       setTranslating(true)
       try {
-        // ingestPreview sauvegarde cleaned_content en base — nécessaire pour que
-        // translateItem ait accès au texte complet de l'article
-        await api.ingestPreview(itemId)
-        const t = await api.translateItem(itemId, lang)
+        const content = paragraphs.join('\n\n')
+        const t = await api.translateItem(itemId, lang, content)
         if (t?.translated) {
           setParagraphs(formatRawContent(t.translated))
           setTranslatedLang(lang)

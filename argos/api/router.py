@@ -1649,7 +1649,9 @@ async def translate_item(item_id: int, data: Dict[str, Any]):
         raise HTTPException(status_code=404, detail="Item introuvable")
 
     title, digest_markdown, cleaned_content, summary = row
-    content_to_translate = cleaned_content or digest_markdown or summary or ""
+    # Si le frontend envoie le contenu directement, on l'utilise
+    inline_content = (data.get("content") or "").strip()
+    content_to_translate = inline_content or cleaned_content or digest_markdown or summary or ""
     if not content_to_translate:
         raise HTTPException(status_code=422, detail="Aucun contenu à traduire")
 
