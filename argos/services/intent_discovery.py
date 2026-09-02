@@ -92,6 +92,57 @@ AUTHORITY_REGISTRY: dict[str, list[dict]] = {
         {"url": "https://www.docker.com/blog/",              "name": "Docker Blog",              "type": "website"},
         {"url": "https://docs.docker.com/",                  "name": "Docker Docs",              "type": "website"},
     ],
+    # Aviation certification & AI
+    "do-178": [
+        {"url": "https://www.easa.europa.eu/en/domains/artificial-intelligence", "name": "EASA AI in Aviation",          "type": "website"},
+        {"url": "https://www.easa.europa.eu/en/newsroom-and-events/news",        "name": "EASA Newsroom",                "type": "website"},
+        {"url": "https://eurocae.net/news/posts/",                               "name": "EUROCAE News",                 "type": "website"},
+        {"url": "https://www.rtca.org/do-178/",                                  "name": "RTCA DO-178C",                 "type": "website"},
+        {"url": "https://arxiv.org/search/?query=DO-178C+neural+network&searchtype=all", "name": "arXiv DO-178C NN",     "type": "arxiv"},
+        {"url": "https://arxiv.org/search/?query=LLM+avionics+safety&searchtype=all",   "name": "arXiv LLM avionics",   "type": "arxiv"},
+    ],
+    "do-178c": [
+        {"url": "https://www.easa.europa.eu/en/domains/artificial-intelligence", "name": "EASA AI in Aviation",          "type": "website"},
+        {"url": "https://eurocae.net/news/posts/",                               "name": "EUROCAE News",                 "type": "website"},
+        {"url": "https://www.rtca.org/do-178/",                                  "name": "RTCA DO-178C",                 "type": "website"},
+        {"url": "https://arxiv.org/search/?query=DO-178C+machine+learning&searchtype=all", "name": "arXiv DO-178C ML",  "type": "arxiv"},
+    ],
+    "eurocae": [
+        {"url": "https://eurocae.net/news/posts/",                               "name": "EUROCAE News",                 "type": "website"},
+        {"url": "https://eurocae.net/working-groups/",                           "name": "EUROCAE Working Groups",       "type": "website"},
+    ],
+    "wg-114": [
+        {"url": "https://eurocae.net/news/posts/",                               "name": "EUROCAE News",                 "type": "website"},
+        {"url": "https://eurocae.net/working-groups/",                           "name": "EUROCAE Working Groups",       "type": "website"},
+        {"url": "https://www.easa.europa.eu/en/domains/artificial-intelligence", "name": "EASA AI in Aviation",          "type": "website"},
+    ],
+    "easa": [
+        {"url": "https://www.easa.europa.eu/en/domains/artificial-intelligence", "name": "EASA AI in Aviation",          "type": "website"},
+        {"url": "https://www.easa.europa.eu/en/newsroom-and-events/news",        "name": "EASA Newsroom",                "type": "website"},
+        {"url": "https://www.easa.europa.eu/en/research-projects",               "name": "EASA Research Projects",      "type": "website"},
+    ],
+    "avionics": [
+        {"url": "https://www.easa.europa.eu/en/domains/artificial-intelligence", "name": "EASA AI in Aviation",          "type": "website"},
+        {"url": "https://eurocae.net/news/posts/",                               "name": "EUROCAE News",                 "type": "website"},
+        {"url": "https://arxiv.org/search/?query=LLM+avionics&searchtype=all",   "name": "arXiv LLM avionics",           "type": "arxiv"},
+        {"url": "https://aviationweek.com/aerospace",                            "name": "Aviation Week Aerospace",      "type": "website"},
+        {"url": "https://www.aviationtoday.com/",                                "name": "Aviation Today",               "type": "website"},
+    ],
+    "dal-b": [
+        {"url": "https://www.easa.europa.eu/en/domains/artificial-intelligence", "name": "EASA AI in Aviation",          "type": "website"},
+        {"url": "https://eurocae.net/news/posts/",                               "name": "EUROCAE News",                 "type": "website"},
+        {"url": "https://arxiv.org/search/?query=DAL+safety+neural+network+certification&searchtype=all", "name": "arXiv DAL certification", "type": "arxiv"},
+    ],
+    "certification embarquée": [
+        {"url": "https://www.easa.europa.eu/en/domains/artificial-intelligence", "name": "EASA AI in Aviation",          "type": "website"},
+        {"url": "https://eurocae.net/news/posts/",                               "name": "EUROCAE News",                 "type": "website"},
+        {"url": "https://arxiv.org/search/?query=embedded+AI+certification+safety&searchtype=all", "name": "arXiv embedded AI cert", "type": "arxiv"},
+    ],
+    "llm embarqué": [
+        {"url": "https://arxiv.org/search/?query=LLM+embedded+safety-critical&searchtype=all", "name": "arXiv LLM embedded safety", "type": "arxiv"},
+        {"url": "https://www.easa.europa.eu/en/domains/artificial-intelligence", "name": "EASA AI in Aviation",          "type": "website"},
+        {"url": "https://eurocae.net/news/posts/",                               "name": "EUROCAE News",                 "type": "website"},
+    ],
 }
 
 # Domaines autorisés pour SearXNG restreint
