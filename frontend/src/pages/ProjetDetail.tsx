@@ -94,6 +94,8 @@ export default function ProjetDetail() {
     ])
       .then(([p, m, props]) => {
         setProject(p); setMembers(m); setProposals(props)
+        // Auto-sélectionner les sources approuvées
+        setSelectedProposals(new Set(props.filter((pr: any) => pr.status === 'approved').map((pr: any) => pr.id)))
         setSettings({
           name: p.name || '',
           description: p.description || '',
@@ -164,7 +166,10 @@ export default function ProjetDetail() {
       await api.suggestProjectSources(projectId)
       loadSubjectProposals()
       // Recharger les proposals flat aussi
-      api.listSourceProposals(projectId).then(setProposals).catch(() => {})
+      api.listSourceProposals(projectId).then(props => {
+        setProposals(props)
+        setSelectedProposals(new Set(props.filter((pr: any) => pr.status === 'approved').map((pr: any) => pr.id)))
+      }).catch(() => {})
     } catch (e: any) { setSuggestError(e.message) }
     finally { setSuggesting(false) }
   }
@@ -240,6 +245,12 @@ export default function ProjetDetail() {
     try {
       const updated = await api.reviewProposal(projectId, proposalId, { decision })
       setProposals(prev => prev.map(p => p.id === proposalId ? updated : p))
+      setSelectedProposals(prev => {
+        const next = new Set(prev)
+        if (decision === 'approved') next.add(proposalId)
+        else next.delete(proposalId)
+        return next
+      })
     } catch (e: any) { setError(e.message) }
   }
 
