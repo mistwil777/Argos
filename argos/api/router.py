@@ -4957,7 +4957,7 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
                 cur.execute(f"""
                     SELECT id, title, summary, url, importance, item_type,
                            keywords, source_type, reliability_tier, reliability_score,
-                           created_at, sujet_id, content_tags
+                           created_at, sujet_id, content_tags, digest_markdown
                     FROM items
                     WHERE reliability_passed = TRUE
                       AND classification_status = 'classified'
