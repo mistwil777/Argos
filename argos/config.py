@@ -44,9 +44,9 @@ class Settings(BaseSettings):
         description="Path to LanceDB data directory"
     )
     
-    embedding_provider: Literal["sentence-transformers", "bedrock"] = Field(
+    embedding_provider: Literal["sentence-transformers", "bedrock", "openai"] = Field(
         default="bedrock",
-        description="Embedding provider to use (sentence-transformers or bedrock)"
+        description="Embedding provider to use (sentence-transformers, bedrock, or openai)"
     )
     
     embedding_model: str = Field(
@@ -207,6 +207,14 @@ class Settings(BaseSettings):
     admin_token: str = Field(
         default="",
         description="Secret token for admin-only endpoints (set ADMIN_TOKEN env var)"
+    )
+
+    # ============================================
+    # Monitoring
+    # ============================================
+    sentry_dsn: str | None = Field(
+        default=None,
+        description="Sentry DSN pour le monitoring des erreurs en prod (optionnel)"
     )
 
     # ============================================

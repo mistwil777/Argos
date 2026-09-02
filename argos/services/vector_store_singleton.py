@@ -66,6 +66,14 @@ def get_vector_store(
             )
             logger.info(f"✅ Bedrock Embeddings provider ready ({settings.bedrock_embedding_dimensions}D)")
         
+        elif settings.embedding_provider == "openai":
+            logger.info("Initializing OpenAI text-embedding-3-small...")
+            if not settings.openai_api_key:
+                raise ValueError("OPENAI_API_KEY requis pour embedding_provider=openai")
+            from argos.services.openai_embeddings import OpenAIEmbeddingsProvider
+            embedding_provider = OpenAIEmbeddingsProvider(api_key=settings.openai_api_key)
+            logger.info("✅ OpenAI Embeddings provider ready (1536D)")
+
         else:
             logger.info("Using SentenceTransformer for embeddings (may fail if HuggingFace CDN is blocked)")
         

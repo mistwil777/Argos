@@ -591,6 +591,10 @@ class CollectorService:
                 item_id = None
                 for ws_id, s_id in source_assignments:
                     item_copy = dict(item, workspace_id=ws_id, sujet_id=s_id)
+                    # PostgreSQL rejette les NUL (\x00) dans les string literals
+                    for _f in ("title", "summary", "source_url", "url", "author"):
+                        if isinstance(item_copy.get(_f), str):
+                            item_copy[_f] = item_copy[_f].replace('\x00', '')
 
                     # Duplicat scoped au sujet — même URL peut exister dans un autre sujet
                     if self._is_duplicate(item_copy["url"], item_copy["title"], sujet_id=s_id):
@@ -755,7 +759,7 @@ class CollectorService:
                     self._main_depth = max(0, self._main_depth - 1)
 
             def handle_data(self, data):
-                stripped = data.strip()
+                stripped = data.replace('\x00', '').strip()
                 if not stripped:
                     return
                 if self._in_title:
@@ -788,36 +792,89 @@ class CollectorService:
             return len(' '.join(ext.content_chunks)) < 200
 
         def _fetch_with_playwright(url: str) -> _HTMLExtractor:
-            browser = _get_pw_browser()
-            page = browser.new_page()
-            try:
-                page.goto(url, wait_until='domcontentloaded', timeout=45000)
-                html = page.content()
-                hrefs = page.eval_on_selector_all('a[href]', 'els => els.map(e => e.getAttribute("href"))')
-            finally:
-                page.close()
-            ext = _HTMLExtractor()
-            ext.feed(html)
-            ext.links = hrefs
-            return ext
+            import threading, asyncio as _asyncio
+            result_box: list = [None]
+            error_box:  list = [None]
+
+            async def _async_run():
+                from playwright.async_api import async_playwright
+                async with async_playwright() as pw:
+                    browser = await pw.chromium.launch(
+                        headless=True,
+                        args=["--no-sandbox", "--disable-dev-shm-usage"],
+                    )
+                    page = await browser.new_page()
+                    try:
+                        await page.goto(url, wait_until='domcontentloaded', timeout=45000)
+                        html = await page.content()
+                        hrefs = await page.eval_on_selector_all('a[href]', 'els => els.map(e => e.getAttribute("href"))')
+                    finally:
+                        await page.close()
+                        await browser.close()
+                ext = _HTMLExtractor()
+                ext.feed(html)
+                ext.links = hrefs
+                return ext
+
+            def _run():
+                try:
+                    loop = _asyncio.new_event_loop()
+                    _asyncio.set_event_loop(loop)
+                    try:
+                        result_box[0] = loop.run_until_complete(_async_run())
+                    finally:
+                        loop.close()
+                except Exception as e:
+                    error_box[0] = e
+
+            t = threading.Thread(target=_run, daemon=True)
+            t.start()
+            t.join(timeout=60)
+            if error_box[0]:
+                raise error_box[0]
+            if result_box[0] is None:
+                raise TimeoutError(f"Playwright timed out for {url}")
+            return result_box[0]
 
         def _fetch_single(url: str) -> _HTMLExtractor:
-            resp = requests.get(
-                url,
-                headers={'User-Agent': 'Mozilla/5.0 (compatible; ArgosBot/1.0)'},
-                timeout=20,
-                verify=False,
-            )
-            resp.raise_for_status()
+            try:
+                resp = requests.get(
+                    url,
+                    headers={'User-Agent': 'Mozilla/5.0 (compatible; ArgosBot/1.0)'},
+                    timeout=20,
+                    verify=False,
+                )
+                resp.raise_for_status()
+            except requests.exceptions.HTTPError as http_err:
+                status = http_err.response.status_code if http_err.response is not None else 0
+                logger.info(f"HTTP {status} on {url} — retrying with Playwright")
+                try:
+                    return _fetch_with_playwright(url)
+                except Exception as pw_err:
+                    logger.warning(f"Playwright also failed for {url}: {pw_err}")
+                    raise http_err
+
             resp.encoding = resp.apparent_encoding or 'utf-8'
+
+            # JS shell: presque pas de texte extractible
             if _is_js_shell(resp.text):
                 logger.debug(f"JS shell detected, switching to Playwright: {url}")
                 try:
                     return _fetch_with_playwright(url)
                 except Exception as e:
                     logger.warning(f"Playwright fallback failed for {url}: {e}")
+
             ext = _HTMLExtractor()
             ext.feed(resp.text)
+
+            # Contenu HTML valide mais aucun lien trouvé → probable rendu JS
+            if not ext.links:
+                logger.info(f"No links extracted from {url} — retrying with Playwright")
+                try:
+                    return _fetch_with_playwright(url)
+                except Exception as e:
+                    logger.warning(f"Playwright fallback (no-links) failed for {url}: {e}")
+
             return ext
 
         def _make_item(url: str, title: str, summary: str) -> Dict:
@@ -884,26 +941,32 @@ class CollectorService:
             ]
             return '\n'.join(added[:100])  # cap à 100 lignes
 
-        def _get_sujet_id_for_source(url: str) -> Optional[int]:
+        def _get_source_workspace(url: str) -> Optional[int]:
             try:
                 with self.db_manager.get_connection() as conn:
                     with conn.cursor() as cur:
-                        cur.execute("SELECT sujet_id FROM sources WHERE url = %s", (url,))
+                        cur.execute("SELECT workspace_id FROM sources WHERE url = %s", (url,))
                         row = cur.fetchone()
                         return row[0] if row else None
             except Exception:
                 return None
 
-        sujet_id = _get_sujet_id_for_source(source_url)
+        # Si workspace_id n'est pas fourni en paramètre, on le récupère depuis la table sources
+        if not workspace_id:
+            workspace_id = _get_source_workspace(source_url)
+        sujet_id = workspace_id  # alias utilisé par _store_document
         crawl_mode = source_url.endswith('/')
         items: List[Dict] = []
+
+        def _strip_nul(s: str) -> str:
+            return s.replace('\x00', '') if s else s
 
         # ── Single page ─────────────────────────────────────────────────────────
         if not crawl_mode:
             try:
                 ext = _fetch_single(source_url)
-                title = ext.title or source_url
-                full_content = ' '.join(ext.content_chunks)
+                title = _strip_nul(ext.title or source_url)
+                full_content = _strip_nul(' '.join(ext.content_chunks))
                 new_hash = _compute_hash(full_content)
                 old_hash = _get_stored_hash(source_url)
 
@@ -958,8 +1021,8 @@ class CollectorService:
             visited.add(url)
             try:
                 ext = _fetch_single(url)
-                title = ext.title or url
-                full_content = ' '.join(ext.content_chunks)
+                title = _strip_nul(ext.title or url)
+                full_content = _strip_nul(' '.join(ext.content_chunks))
                 new_hash = _compute_hash(full_content)
                 old_hash = _get_stored_hash(url)
 

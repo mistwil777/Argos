@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Newspaper, Loader2, Sparkles, TrendingUp, ExternalLink, ShieldCheck,
   Tag, Check, BookmarkPlus, Database, EyeOff, Square, CheckSquare,
-  Layers, Clock
+  Layers, Clock, X
 } from 'lucide-react'
 import DocumentGeneratorModal from '@/components/ui/DocumentGeneratorModal'
 import ItemReaderModal from '@/components/ui/ItemReaderModal'
@@ -30,7 +30,7 @@ interface BriefingPanelProps {
 
 export default function BriefingPanel({
   briefingData,
-  sujets = [],
+  sujets: _sujets = [],
   briefingMode = 'veille',
   showModeToggle = false,
   onModeChange,
@@ -336,6 +336,12 @@ export default function BriefingPanel({
                                   </span>
                                 )}
                               </div>
+                              {item.project_relevance && (
+                                <div className="mb-2 px-2.5 py-1.5 rounded-md border-l-2 border-[hsl(var(--accent))] bg-[hsl(var(--accent-dim))]">
+                                  <p className="text-[10px] font-mono text-[hsl(var(--accent))] uppercase tracking-wider mb-0.5">Pertinence projet</p>
+                                  <p className="text-[12px] text-[hsl(var(--text))] leading-snug">{item.project_relevance}</p>
+                                </div>
+                              )}
                               {item.summary && (
                                 <div className="mb-2">
                                   <p className={`text-[12px] text-[hsl(var(--text-2))] leading-relaxed ${expandedSummaries.has(item.id) ? '' : 'line-clamp-3'}`}>{item.summary}</p>
@@ -486,6 +492,7 @@ export default function BriefingPanel({
           <ItemReaderModal
             itemId={readerItemId}
             projectId={projectId}
+            projectRelevanceDetail={readerItem?.project_relevance_detail ?? null}
             onClose={() => { setReaderItemId(null); setReaderItem(null) }}
             onSaved={() => { setItemActions(prev => ({ ...prev, [readerItemId]: 'saved' })); setReaderItemId(null); setReaderItem(null) }}
             onGenerateReport={(id, title) => { setGenModal({ itemIds: [id], itemTitle: title, sujetId: readerItem?.sujet_id ?? null }); setReaderItemId(null); setReaderItem(null) }}

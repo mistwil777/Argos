@@ -19,7 +19,7 @@ from argos.api import api_router, veille_router, assistant_router
 from argos.api.auth import auth_router
 from argos.api.projects import router as projects_router
 from argos.api.project_calibration import router as project_calibration_router
-from argos.mcp_server import mcp
+from argos.mcp_server import mcp, _mcp_workspace_ctx
 
 
 # ============================================
@@ -31,6 +31,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ============================================
+# Sentry — monitoring erreurs
+# ============================================
+if settings.sentry_dsn:
+    import sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+    from sentry_sdk.integrations.starlette import StarletteIntegration
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment=settings.environment,
+        integrations=[StarletteIntegration(), FastApiIntegration()],
+        traces_sample_rate=0.2,
+        send_default_pii=False,
+    )
+    logger.info("✅ Sentry initialisé")
 
 # ============================================
 # FastAPI app
@@ -97,12 +112,60 @@ app.include_router(projects_router, prefix="/api/v1")
 app.include_router(project_calibration_router, prefix="/api/v1")
 
 # ── MCP Server (Streamable HTTP) ──────────────────────────────────────────────
-# On ajoute directement la route /mcp en passant l'ASGI handler du session manager.
-# Cela évite le double-préfixe /mcp/mcp tout en gardant les routes FastAPI intactes.
-# FastMCP utilise streamable_http_path="/" en interne.
-# En montant sur /mcp, FastAPI strip le préfixe /mcp et passe "/" à l'app FastMCP.
-# Les routes FastAPI (/health, /api/v1/*, /rpc) restent intactes.
-app.mount("/mcp", _mcp_starlette)
+
+import hashlib as _hashlib
+from starlette.types import ASGIApp, Receive, Scope, Send
+
+
+class ProjectApiKeyMiddleware:
+    """
+    Lit le header Authorization: Bearer <key> sur les requêtes /mcp.
+    Résout le workspace_id associé et l'injecte dans _mcp_workspace_ctx.
+    Sans clé valide : laisse passer (workspace_id = None, comportement global).
+    """
+
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        if scope["type"] == "http":
+            headers = dict(scope.get("headers", []))
+            auth = headers.get(b"authorization", b"").decode("utf-8", errors="ignore")
+            if auth.startswith("Bearer "):
+                raw_key = auth[7:].strip()
+                key_hash = _hashlib.sha256(raw_key.encode()).hexdigest()
+                workspace_id = self._resolve_workspace(key_hash)
+                token = _mcp_workspace_ctx.set(workspace_id)
+                try:
+                    await self.app(scope, receive, send)
+                finally:
+                    _mcp_workspace_ctx.reset(token)
+                return
+        await self.app(scope, receive, send)
+
+    @staticmethod
+    def _resolve_workspace(key_hash: str) -> Optional[int]:
+        try:
+            from argos.database import DatabaseManager
+            from argos.config import settings as _settings
+            _db = DatabaseManager(_settings.database_url)
+            with _db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """UPDATE api_keys
+                           SET last_used_at = NOW()
+                           WHERE key_hash = %s AND is_active = TRUE
+                           RETURNING workspace_id""",
+                        (key_hash,),
+                    )
+                    row = cur.fetchone()
+                    conn.commit()
+                    return row[0] if row else None
+        except Exception:
+            return None
+
+
+app.mount("/mcp", ProjectApiKeyMiddleware(_mcp_starlette))
 
 
 # ============================================

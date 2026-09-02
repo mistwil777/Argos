@@ -105,7 +105,7 @@ async def list_workspaces():
                            COUNT(s.id) AS sujet_count
                     FROM workspaces w
                     LEFT JOIN sujets s ON s.workspace_id = w.id AND s.is_active = true
-                    WHERE w.is_active = true
+                    WHERE w.is_active = true AND w.project_id IS NULL
                     GROUP BY w.id
                     ORDER BY w.name
                 """)

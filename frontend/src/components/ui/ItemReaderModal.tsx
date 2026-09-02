@@ -8,12 +8,13 @@ import { api } from '@/services/api'
 interface Props {
   itemId: number
   projectId?: number | null
+  projectRelevanceDetail?: string | null
   onClose: () => void
   onSaved?: () => void
   onGenerateReport?: (itemId: number, title: string, sujetId?: number) => void
 }
 
-export default function ItemReaderModal({ itemId, projectId, onClose, onSaved, onGenerateReport }: Props) {
+export default function ItemReaderModal({ itemId, projectId, projectRelevanceDetail, onClose, onSaved, onGenerateReport }: Props) {
   const [meta, setMeta]               = useState<any>(null)
   const [markdown, setMarkdown]       = useState('')
   const [loading, setLoading]         = useState(true)
@@ -150,9 +151,19 @@ export default function ItemReaderModal({ itemId, projectId, onClose, onSaved, o
             )}
             {error && <p className="text-[12.5px] text-[hsl(var(--red))]">{error}</p>}
             {!loading && !error && !translating && (
-              <div className="prose-app text-[13px]">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdown}</ReactMarkdown>
-              </div>
+              <>
+                {projectRelevanceDetail && (
+                  <div className="mb-5 px-4 py-3 rounded-lg border-l-2 border-[hsl(var(--accent))] bg-[hsl(var(--accent-dim))]">
+                    <p className="text-[10px] font-mono text-[hsl(var(--accent))] uppercase tracking-wider mb-2">Pertinence pour le projet</p>
+                    <div className="prose-app text-[12px] text-[hsl(var(--text))]">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{projectRelevanceDetail}</ReactMarkdown>
+                    </div>
+                  </div>
+                )}
+                <div className="prose-app text-[13px]">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdown}</ReactMarkdown>
+                </div>
+              </>
             )}
           </div>
 

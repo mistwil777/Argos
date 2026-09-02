@@ -356,6 +356,40 @@ Réponds UNIQUEMENT avec ce JSON :
                             "priority": priority,
                         })
 
+                # Générer le prompt de scoring de pertinence spécifique au projet
+                bilan = knowledge_profile.get("bilan_md", "")
+                watch_focus = knowledge_profile.get("watch_focus_md", "")
+                if bilan or watch_focus:
+                    try:
+                        relevance_prompt_input = f"""Tu vas créer un prompt de scoring de pertinence pour un système de veille automatique.
+
+Voici le contexte du projet :
+
+## Bilan
+{bilan[:1500]}
+
+## Angles de surveillance
+{watch_focus[:600]}
+
+Génère un prompt SYSTEM (2-4 paragraphes) qui sera injecté dans un LLM pour qu'il évalue si un article de veille est pertinent pour CE projet spécifique.
+
+Le prompt doit :
+- Décrire précisément les sujets, technologies, normes et enjeux qui comptent pour ce projet
+- Définir une échelle 1-5 calibrée sur le contexte (ex: 5 = article sur DO-178C pour un projet avionique)
+- Indiquer ce qui doit être éliminé (hors-domaine, marketing sans fond technique, etc.)
+- Rester agnostique au modèle LLM utilisé
+
+Réponds UNIQUEMENT avec le texte du prompt, sans balises ni JSON."""
+                        relevance_prompt, _ = await self._llm.generate(
+                            prompt=relevance_prompt_input,
+                            system_prompt="Tu es un expert en systèmes de veille automatique. Tu génères des prompts de scoring précis et calibrés.",
+                            temperature=0.3,
+                            max_tokens=800,
+                        )
+                        knowledge_profile["relevance_scoring_prompt"] = relevance_prompt.strip()
+                    except Exception as _rp_err:
+                        logger.warning(f"Relevance prompt generation failed: {_rp_err}")
+
                 # Sauvegarder le knowledge_profile sur le projet
                 cur.execute(
                     "UPDATE projects SET knowledge_profile = %s, updated_at = NOW() WHERE id = %s",

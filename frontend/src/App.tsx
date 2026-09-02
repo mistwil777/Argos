@@ -14,6 +14,8 @@ import Reglages from '@/pages/Reglages'
 import Projets from '@/pages/Projets'
 import ProjetNouveau from '@/pages/ProjetNouveau'
 import ProjetDetail from '@/pages/ProjetDetail'
+import Admin from '@/pages/Admin'
+import Landing from '@/pages/Landing'
 
 export default function App() {
   return (
@@ -29,8 +31,8 @@ export default function App() {
 
           {/* Routes protégées */}
           <Route element={<PrivateRoute />}>
+            <Route path="/" element={<Landing />} />
             <Route element={<AppLayout />}>
-              <Route path="/" element={<Navigate to="/briefing" replace />} />
               <Route path="/veille"    element={<Veille />} />
               <Route path="/briefing"  element={<Briefing />} />
               <Route path="/librairie" element={<Librairie />} />
@@ -38,6 +40,7 @@ export default function App() {
               <Route path="/projets"         element={<Projets />} />
               <Route path="/projets/nouveau" element={<ProjetNouveau />} />
               <Route path="/projets/:id"     element={<ProjetDetail />} />
+              <Route path="/admin"           element={<Admin />} />
 
               {/* Redirects anciens chemins */}
               <Route path="/assistant"      element={<Navigate to="/briefing" replace />} />

@@ -4932,7 +4932,7 @@ def _group_items_by_entity(items: list[dict]) -> dict[str, list[dict]]:
     return dict(sorted(groups.items(), key=lambda x: len(x[1]), reverse=True))
 
 
-async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int] = None, sujet_id: Optional[int] = None, workspace_ids: Optional[list] = None) -> dict:
+async def _generate_briefing_content(hours: Optional[int] = 24, workspace_id: Optional[int] = None, sujet_id: Optional[int] = None, workspace_ids: Optional[list] = None) -> dict:
     """
     Génère le briefing Delta quotidien.
     N'utilise QUE les items avec reliability_passed = TRUE des dernières {hours}h.
@@ -5044,7 +5044,7 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
                 WHERE reliability_passed = TRUE
                   AND classification_status = 'classified'
                   AND importance IN ('high', 'critical')
-                  AND created_at > NOW() - INTERVAL '{hours} hours'
+                  {f"AND created_at > NOW() - INTERVAL '{hours} hours'" if hours else ""}
                   AND (published_at IS NULL OR published_at > NOW() - INTERVAL '90 days')
                   AND (user_action IS NULL OR user_action != 'ignored')
                   {exclude_clause}
@@ -5067,7 +5067,7 @@ async def _generate_briefing_content(hours: int = 24, workspace_id: Optional[int
                     WHERE reliability_passed = TRUE
                       AND classification_status = 'classified'
                       AND (published_at IS NULL OR published_at > NOW() - INTERVAL '90 days')
-                      AND created_at > NOW() - INTERVAL '72 hours'
+                      {f"AND created_at > NOW() - INTERVAL '{hours} hours'" if hours else ""}
                       AND (user_action IS NULL OR user_action != 'ignored')
                       {exclude_clause}
                       {ws_filter}
@@ -5292,6 +5292,44 @@ Pour chaque article retenu : titre en gras, 1 phrase expliquant CE QUE L'OUTIL F
         "period_hours":   hours,
         "reliability_filtered": True,
     }
+
+    # ── Notes de pertinence projet ──────────────────────────────────────────
+    if sujet_context and items:
+        try:
+            items_for_relevance = [
+                {"id": it["id"], "title": it["title"], "summary": (it.get("digest_markdown") or it["summary"])[:200]}
+                for it in items[:10]
+            ]
+            relevance_prompt = (
+                f"Contexte projet :\n{sujet_context[:1500]}\n\n"
+                f"Pour chaque item, génère :\n"
+                f"- \"note\" : 1 phrase (max 20 mots) — l'apport concret de cet article pour le projet (technique, réglementaire, méthode, outil). null si non pertinent.\n"
+                f"- \"detail\" : 3 à 5 points (liste markdown avec tirets) développant pourquoi ce contenu est précieux dans le contexte projet — usages concrets, liens avec les besoins, valeur métier. null si non pertinent.\n\n"
+                f"Items : {_json.dumps(items_for_relevance, ensure_ascii=False)}\n\n"
+                f"Réponds UNIQUEMENT avec un tableau JSON : "
+                f'[{{"id": <int>, "note": "<phrase>" | null, "detail": "<markdown>" | null}}, ...]'
+            )
+            rel_text, _ = await llm.generate(
+                prompt=relevance_prompt,
+                system_prompt="Tu es un assistant d'analyse documentaire. Réponds uniquement avec le JSON demandé, sans markdown ni commentaire.",
+                temperature=0.2,
+                max_tokens=1500,
+            )
+            # parse JSON from response
+            import re as _re
+            json_match = _re.search(r'\[.*\]', rel_text, _re.DOTALL)
+            if json_match:
+                rel_list = _json.loads(json_match.group(0))
+                rel_map = {entry["id"]: entry for entry in rel_list if isinstance(entry, dict)}
+                for it in items:
+                    entry = rel_map.get(it["id"])
+                    if entry:
+                        if entry.get("note"):
+                            it["project_relevance"] = entry["note"]
+                        if entry.get("detail"):
+                            it["project_relevance_detail"] = entry["detail"]
+        except Exception as e:
+            logger.warning(f"Relevance notes failed: {e}")
 
     # ── Construire les sources citées ──────────────────────────────────────
     cited_sources = [

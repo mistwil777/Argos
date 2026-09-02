@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Loader2, AlertCircle, Folder, Users,
@@ -24,7 +24,9 @@ export default function ProjetDetail() {
   const [project, setProject]       = useState<any>(null)
   const [members, setMembers]       = useState<any[]>([])
   const [proposals, setProposals]   = useState<any[]>([])
-  const [tab, setTab]               = useState<Tab>('sujets')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab = (searchParams.get('tab') as Tab) || 'sujets'
+  function setTab(t: Tab) { setSearchParams({ tab: t }, { replace: true }) }
   const [loading, setLoading]       = useState(true)
   const [error, setError]           = useState<string | null>(null)
 
@@ -338,32 +340,6 @@ export default function ProjetDetail() {
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 p-1 rounded-lg bg-[hsl(var(--bg-1))] border border-[hsl(var(--line))] w-fit">
-          {([
-            { id: 'sujets' as Tab, icon: Folder, label: 'Sujets' },
-            { id: 'membres' as Tab, icon: Users, label: `Membres (${members.length})` },
-            { id: 'propositions' as Tab, icon: FileText, label: `Propositions (${proposals.filter(p => p.status === 'pending').length})` },
-            { id: 'briefing' as Tab, icon: Newspaper, label: 'Briefing' },
-            { id: 'bibliotheque' as Tab, icon: BookOpen, label: 'Bibliothèque' },
-            { id: 'ide' as Tab, icon: Terminal, label: 'Connexion IDE' },
-            { id: 'metriques' as Tab, icon: BarChart3, label: 'Métriques' },
-            { id: 'reglages' as Tab, icon: Settings, label: 'Réglages' },
-          ]).map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-[13px] font-medium transition-all ${
-                tab === t.id
-                  ? 'bg-[hsl(var(--accent))] text-white'
-                  : 'text-[hsl(var(--text-2))] hover:text-[hsl(var(--text))]'
-              }`}
-            >
-              <t.icon className="w-3.5 h-3.5" />
-              {t.label}
-            </button>
-          ))}
-        </div>
 
         {/* Tab content — tous les onglets restent montés (traitements non interrompus, état préservé) */}
         <div>

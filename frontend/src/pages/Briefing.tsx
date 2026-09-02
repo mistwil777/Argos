@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Newspaper, RefreshCw, Loader2, Sparkles, ChevronDown,
   AlertTriangle, GitMerge, Check, X, Archive, Trash2, Info,
-  MessageSquare, PanelRightOpen, PanelRightClose
+  MessageSquare, PanelRightOpen, PanelRightClose, ExternalLink
 } from 'lucide-react'
 import BriefingPanel from '@/components/BriefingPanel'
 import { api } from '@/services/api'
@@ -12,12 +12,6 @@ import { timeAgo } from '@/lib/utils'
 
 const AssistantPanel = lazy(() => import('@/pages/Assistant'))
 
-const TIER_COLOR: Record<string, string> = {
-  official:   'bg-blue-500/15 text-blue-400 border-blue-500/25',
-  recognized: 'bg-green-500/15 text-green-400 border-green-500/25',
-  community:  'bg-yellow-500/15 text-yellow-400 border-yellow-500/25',
-  unknown:    'bg-[hsl(var(--bg-3))] text-[hsl(var(--text-3))] border-[hsl(var(--line))]',
-}
 
 export default function Briefing() {
   const [assistantOpen, setAssistantOpen] = useState(false)

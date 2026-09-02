@@ -13,9 +13,13 @@ Tools disponibles :
 """
 
 import logging
+from contextvars import ContextVar
 from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
+
+# Workspace injecté par le middleware API Key — lu par les tools MCP
+_mcp_workspace_ctx: ContextVar[Optional[int]] = ContextVar("mcp_workspace", default=None)
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +91,7 @@ async def search_veille(
           - chunks_found: nombre de chunks récupérés
     """
     top_k = min(max(top_k, 1), 20)
+    effective_workspace = workspace_id if workspace_id is not None else _mcp_workspace_ctx.get()
 
     try:
         rag = _get_rag()
@@ -94,7 +99,7 @@ async def search_veille(
             query=query,
             user_identifier="mcp_client",
             use_hybrid_search=True,
-            workspace_id=workspace_id,
+            workspace_id=effective_workspace,
         )
 
         # Enrichir les sources avec tier de fiabilité depuis la DB
@@ -451,12 +456,13 @@ async def argos_ask(
           - kg_entities: entités du Knowledge Graph trouvées
           - confidence: score de confiance (0-1)
     """
+    effective_workspace = workspace_id if workspace_id is not None else _mcp_workspace_ctx.get()
     try:
         rag = _get_rag()
         result = await rag.ask(
             query=query,
             use_hybrid_search=True,
-            workspace_id=workspace_id,
+            workspace_id=effective_workspace,
         )
 
         # Extraire aussi les entités KG directement pour les exposer

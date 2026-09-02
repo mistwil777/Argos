@@ -168,14 +168,18 @@ export default function ProjetNouveau() {
   // ── Step 4 → envoyer réponse + charger suivante ───────────────────────────
 
   function buildAnswer(): string {
-    if (currentQ?.type === 'multiselect') return selectedOptions.join(', ')
+    if (currentQ?.type === 'multiselect') {
+      const all = [...selectedOptions]
+      if (otherText.trim() && !all.includes(otherText.trim())) all.push(otherText.trim())
+      return all.join(', ')
+    }
     if (currentQ?.type === 'level_pair')  return currentAnswer
     return currentAnswer
   }
 
-  async function handleNextQuestion() {
-    const answer = buildAnswer()
-    if (!answer.trim()) return
+  async function handleNextQuestion(skip = false) {
+    const answer = skip ? '(passé)' : buildAnswer()
+    if (!skip && !answer.trim()) return
     const newHistory = [...qaHistory, { q: currentQ.text, a: answer }]
     setQaHistory(newHistory)
     setLoading(true); setError(null)
@@ -566,14 +570,24 @@ export default function ProjetNouveau() {
                       <span />
                     )}
 
-                    <button
-                      onClick={handleNextQuestion}
-                      disabled={loading}
-                      className="btn-primary flex items-center gap-2"
-                    >
-                      {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
-                      Suivant
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleNextQuestion(true)}
+                        disabled={loading}
+                        className="text-[12px] text-[hsl(var(--text-3))] hover:text-[hsl(var(--text-2))] transition-colors px-2 py-1"
+                        title="Passer cette question sans répondre"
+                      >
+                        Passer
+                      </button>
+                      <button
+                        onClick={() => handleNextQuestion()}
+                        disabled={loading}
+                        className="btn-primary flex items-center gap-2"
+                      >
+                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
+                        Suivant
+                      </button>
+                    </div>
                   </div>
                 </>
               ) : null}
@@ -595,7 +609,7 @@ export default function ProjetNouveau() {
                 {/* Sujets créés */}
                 <div className="space-y-2">
                   {finalResult.subjects?.map((s: any, i: number) => {
-                    const prio = editableSubjects.find(e => e.name === s.name)?.priority ?? 'low'
+                    const prio = s.priority ?? editableSubjects.find(e => e.name === s.name)?.priority ?? 'medium'
                     return (
                       <div key={i} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-[hsl(var(--bg))]">
                         <span className={`w-2 h-2 rounded-full flex-shrink-0 ${

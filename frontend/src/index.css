@@ -40,6 +40,8 @@
     --red:    0 68% 52%;
     --cyan:   196 100% 44%;
     --violet: 262 72% 58%;
+    --yellow: 38 90% 45%;          /* #e8a600 */
+    --aqua:   162 74% 40%;         /* #1baf7a */
 
     /* ── Aliases for Tailwind theme ── */
     --background:   var(--bg);
@@ -86,6 +88,8 @@
     --red:    0 70% 58%;
     --cyan:   196 100% 52%;
     --violet: 262 72% 65%;
+    --yellow: 38 90% 52%;          /* #e8a600 — légèrement plus clair sur dark */
+    --aqua:   162 74% 45%;         /* #1baf7a */
 
     --primary-foreground: 220 22% 8%;
     --accent-foreground:  220 22% 8%;

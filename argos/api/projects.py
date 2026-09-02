@@ -632,6 +632,7 @@ async def run_project_pipeline(
         return {"launched": 0, "message": "Aucune source à lancer"}
 
     launched = 0
+    source_ids_to_run = []
     with db.get_connection() as conn:
         with conn.cursor() as cur:
             for prop_id, url, source_type, name, sujet_id in proposals:
@@ -659,10 +660,56 @@ async def run_project_pipeline(
                 source_id = row[0]
                 conn.commit()
 
-                asyncio.create_task(run_pipeline_for_source(source_id))
+                source_ids_to_run.append(source_id)
                 launched += 1
 
+    if source_ids_to_run:
+        asyncio.create_task(_run_pipeline_then_brief(source_ids_to_run, project_id))
+
     return {"launched": launched}
+
+
+async def _run_pipeline_then_brief(source_ids: list, project_id: int):
+    """Exécute le pipeline sur toutes les sources puis génère un brief projet."""
+    import asyncio, json as _json, datetime as _dt
+    from argos.services.pipeline import run_pipeline_for_source
+
+    await asyncio.gather(*[run_pipeline_for_source(sid) for sid in source_ids], return_exceptions=True)
+
+    try:
+        workspace_id = _resolve_project_workspace(project_id)
+        workspace_ids = _resolve_project_workspaces(project_id)
+        if not workspace_id or not workspace_ids:
+            return
+        from argos.api.router import _generate_briefing_content
+        result = await _generate_briefing_content(hours=None, workspace_ids=workspace_ids)
+        if not result or "error" in result or result.get("no_new_content"):
+            return
+        today = _dt.date.today()
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM daily_briefings WHERE briefing_date = %s AND workspace_id = %s",
+                    (today, workspace_id),
+                )
+                cur.execute(
+                    """INSERT INTO daily_briefings
+                       (briefing_date, executive_summary, top_items, trends, stats,
+                        workspace_id, sujet_id, tokens_used, cost_usd, cited_sources, groups, no_new_content)
+                       VALUES (%s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s, NULL, %s, %s,
+                               %s::jsonb, %s::jsonb, %s)""",
+                    (today, result["markdown"],
+                     _json.dumps(result["top_items"]), _json.dumps(result["trends"]),
+                     _json.dumps(result["stats"]), workspace_id,
+                     result["tokens_used"], result["cost_usd"],
+                     _json.dumps(result.get("cited_sources", [])),
+                     _json.dumps(result.get("groups", {})),
+                     len(result.get("top_items", [])) == 0),
+                )
+            conn.commit()
+        logger.info(f"[PIPELINE] Brief post-collecte généré pour projet {project_id}")
+    except Exception as e:
+        logger.warning(f"[PIPELINE] Brief post-collecte échoué pour projet {project_id}: {e}")
 
 
 def _check_project_access(project_id: int, user_id: int) -> int:
