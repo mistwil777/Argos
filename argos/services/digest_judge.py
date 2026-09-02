@@ -64,6 +64,18 @@ async def judge_digest(
     try:
         from argos.config import settings
 
+        # Résoudre workspace_id depuis l'item si non fourni
+        if workspace_id is None and item_id:
+            try:
+                with db.get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("SELECT workspace_id FROM items WHERE id = %s", (item_id,))
+                        row = cur.fetchone()
+                        if row:
+                            workspace_id = row[0]
+            except Exception:
+                pass
+
         llm = create_llm_provider(
             provider_type=settings.llm_provider,
             openai_api_key=settings.openai_api_key,

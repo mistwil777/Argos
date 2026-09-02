@@ -1176,10 +1176,6 @@ function ProjectBriefingTab({ projectId, refreshKey = 0 }: { projectId: number; 
           Briefing — sources du projet uniquement
         </p>
         <div className="flex items-center gap-2">
-          <select value={hours} onChange={e => setHours(Number(e.target.value))}
-            className="bg-[hsl(var(--bg-2))] border border-[hsl(var(--line))] rounded px-2 py-1.5 text-[11.5px] font-mono text-[hsl(var(--text-2))] outline-none">
-            {[24, 48, 72, 168].map(h => <option key={h} value={h}>{h === 168 ? '7j' : `${h}h`}</option>)}
-          </select>
           <motion.button
             onClick={() => generate(!!today?.exists)}
             disabled={generating || loading}

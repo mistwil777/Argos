@@ -174,7 +174,6 @@ export default function BriefingPanel({
             )}
           </div>
           <div className="flex items-center gap-2 text-[10.5px] font-mono text-[hsl(var(--text-3))]">
-            {briefingData.generated_at && <span><Clock className="w-3 h-3 inline mr-1" />{timeAgo(briefingData.generated_at)}</span>}
             {briefingData.tokens_used > 0 && <span>{briefingData.tokens_used.toLocaleString()} tokens</span>}
           </div>
         </div>
