@@ -1680,6 +1680,111 @@ async def translate_item(item_id: int, data: Dict[str, Any]):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@api_router.post("/items/{item_id}/reader-document")
+async def generate_reader_document(item_id: int, data: Dict[str, Any]):
+    """Génère un document de lecture structuré et complet depuis le contenu brut de l'article."""
+    project_id = data.get("project_id")
+
+    with db.get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT url, title, cleaned_content, digest_markdown FROM items WHERE id = %s", (item_id,))
+            row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Item introuvable")
+
+    url, title, cleaned_content, digest_markdown = row
+
+    # Scraper si cleaned_content absent
+    if not cleaned_content:
+        try:
+            from argos.services.web_browser import browse, html_to_markdown
+            browse_result = await browse(url, use_playwright=True)
+            raw_html = browse_result.get("html", "")
+            cleaned_content = html_to_markdown(raw_html) if raw_html else browse_result.get("content", "")
+            if cleaned_content:
+                with db.get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("UPDATE items SET cleaned_content=%s WHERE id=%s", (cleaned_content, item_id))
+                        conn.commit()
+        except Exception as e:
+            logger.warning(f"[READER] scraping failed for item {item_id}: {e}")
+
+    content = cleaned_content or digest_markdown or ""
+    if not content:
+        raise HTTPException(status_code=422, detail="Aucun contenu disponible pour cet article")
+
+    # Contexte projet si fourni
+    project_context = ""
+    if project_id:
+        try:
+            with db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT name, knowledge_profile FROM projects WHERE id = %s", (project_id,))
+                    prow = cur.fetchone()
+            if prow:
+                pname, kp = prow
+                kp = kp or {}
+                parts = [f"Projet : {pname}"]
+                if kp.get("watch_focus_md"):
+                    parts.append(kp["watch_focus_md"][:500])
+                if kp.get("bilan_md"):
+                    parts.append(kp["bilan_md"][:300])
+                project_context = "\n".join(parts)
+        except Exception:
+            pass
+
+    pertinence_block = ""
+    if project_context:
+        pertinence_block = f"""Tu dois d'abord générer une section **"## Pertinence pour ce projet"** en français qui explique en 3-5 phrases concrètes :
+- En quoi cet article est intéressant pour ce projet
+- Dans quelle mesure il est utile (directement applicable, contexte général, référence technique…)
+
+Contexte du projet :
+{project_context}
+
+"""
+
+    system_prompt = "Tu es un assistant de documentation technique expert. Tu transformes des articles en documents structurés complets et exploitables."
+    prompt = f"""Article à documenter :
+URL : {url}
+Titre : {title}
+
+{pertinence_block}Contenu complet de l'article :
+---
+{content[:40000]}
+---
+
+Génère un document markdown complet qui réexplique cet article dans son intégralité.
+
+Règles absolues :
+- NE PAS résumer — réexplique chaque concept, chaque donnée, chaque exemple de l'article
+- Utilise ## pour les titres principaux, ### pour les sous-titres
+- Si l'article contient des tableaux, reproduis-les en markdown
+- Préserve tous les chiffres, dates, noms propres, sigles exacts
+- Commence par {"la section '## Pertinence pour ce projet'" if project_context else "le premier titre de l'article"}
+- Termine par une section "## Source" avec le lien vers l'article original"""
+
+    llm = create_llm_provider(
+        provider_type=settings.llm_provider,
+        openai_api_key=settings.openai_api_key,
+        aws_access_key_id=settings.aws_access_key_id,
+        aws_secret_access_key=settings.aws_secret_access_key,
+        aws_region=settings.aws_region,
+        model=settings.aws_bedrock_model,
+    )
+    try:
+        markdown, _ = await llm.generate(
+            prompt=prompt,
+            system_prompt=system_prompt,
+            max_tokens=8000,
+            temperature=0.1,
+        )
+        return {"markdown": markdown, "title": title, "url": url}
+    except Exception as e:
+        logger.error(f"[READER] LLM failed for item {item_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @api_router.post("/items/batch/ingest-rag")
 async def batch_ingest_items_rag(data: Dict[str, Any]):
     """

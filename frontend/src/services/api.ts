@@ -133,6 +133,8 @@ export const api = {
     request<any>(`/api/v1/items/${item_id}/ingest-rag`, { method: 'POST' }),
   translateItem: (item_id: number, language: string, content?: string) =>
     request<any>(`/api/v1/items/${item_id}/translate`, { method: 'POST', body: JSON.stringify({ language, content }) }),
+  readerDocument: (item_id: number, project_id?: number | null) =>
+    request<any>(`/api/v1/items/${item_id}/reader-document`, { method: 'POST', body: JSON.stringify({ project_id: project_id ?? null }) }),
   batchSaveItems: (item_ids: number[]) =>
     request<any>('/api/v1/items/batch/save', { method: 'POST', body: JSON.stringify({ item_ids }) }),
   batchIgnoreItems: (item_ids: number[]) =>

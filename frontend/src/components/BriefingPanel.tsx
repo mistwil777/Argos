@@ -25,6 +25,7 @@ interface BriefingPanelProps {
   briefingMode?: 'veille' | 'apprentissage'
   showModeToggle?: boolean
   onModeChange?: (mode: 'veille' | 'apprentissage') => void
+  projectId?: number | null
 }
 
 export default function BriefingPanel({
@@ -33,6 +34,7 @@ export default function BriefingPanel({
   briefingMode = 'veille',
   showModeToggle = false,
   onModeChange,
+  projectId,
 }: BriefingPanelProps) {
   const [expandedSummaries, setExpandedSummaries] = useState<Set<number>>(new Set())
   const [itemActions, setItemActions] = useState<Record<number, string>>({})
@@ -483,6 +485,7 @@ export default function BriefingPanel({
         {readerItemId && (
           <ItemReaderModal
             itemId={readerItemId}
+            projectId={projectId}
             onClose={() => { setReaderItemId(null); setReaderItem(null) }}
             onSaved={() => { setItemActions(prev => ({ ...prev, [readerItemId]: 'saved' })); setReaderItemId(null); setReaderItem(null) }}
             onGenerateReport={(id, title) => { setGenModal({ itemIds: [id], itemTitle: title, sujetId: readerItem?.sujet_id ?? null }); setReaderItemId(null); setReaderItem(null) }}

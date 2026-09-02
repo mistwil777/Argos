@@ -1144,7 +1144,7 @@ function ProjectBriefingTab({ projectId, refreshKey = 0 }: { projectId: number; 
       )}
 
       {selected && !loading && (
-        <BriefingPanel briefingData={selected} />
+        <BriefingPanel briefingData={selected} projectId={projectId} />
       )}
 
       {/* Historique */}
