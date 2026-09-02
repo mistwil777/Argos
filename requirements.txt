@@ -13,7 +13,7 @@ psycopg2-binary==2.9.9
 sqlalchemy==2.0.25
 
 # Vector Database
-lancedb==0.5.3
+lancedb==0.14.0
 sentence-transformers==2.3.1
 
 # LLM providers
