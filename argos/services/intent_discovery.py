@@ -375,7 +375,12 @@ class DiscoveryService:
                 try:
                     results = await self._search_searxng(query)
                     for r in results:
-                        domain_result = score_domain(r.get("url", ""))
+                        raw_url = r.get("url", "")
+                        source_url = _normalize_to_source_root(raw_url)
+                        if source_url != raw_url:
+                            logger.debug(f"[DISCOVERY] Normalisé : {raw_url[:60]} → {source_url[:60]}")
+                        r["url"] = source_url
+                        domain_result = score_domain(source_url)
                         if domain_result.passed:
                             _add(r, tier=domain_result.domain_tier)
                 except Exception as e:
@@ -606,6 +611,57 @@ def _extract_domain(url: str) -> str:
     except Exception:
         from urllib.parse import urlparse
         return urlparse(url).netloc.lstrip("www.")
+
+
+def _normalize_to_source_root(url: str) -> str:
+    """
+    Remonte une URL d'article vers sa racine de source exploitable.
+
+    Règles :
+    - arxiv.org/abs/<id> ou /pdf/<id>  → arxiv.org/list/<cat>/recent (best-effort) ou arxiv.org/search/
+    - github.com/<org>/<repo>/...      → github.com/<org>/<repo>/releases si chemin profond, sinon github.com/<org>
+    - <domain>/blog/<slug>             → <domain>/blog/
+    - <domain>/news/<slug>             → <domain>/news/
+    - <domain>/articles/<slug>         → <domain>/articles/
+    - URL déjà courte (≤ 3 segments)   → inchangée
+    """
+    from urllib.parse import urlparse, urlunparse
+    try:
+        p = urlparse(url)
+        path = p.path.rstrip('/')
+        parts = [x for x in path.split('/') if x]
+
+        netloc = p.netloc.lower()
+
+        # arxiv : normaliser vers la liste de la catégorie ou search
+        if 'arxiv.org' in netloc:
+            if len(parts) >= 2 and parts[0] in ('abs', 'pdf', 'html'):
+                return 'https://arxiv.org/search/?searchtype=all&query='
+            return url
+
+        # github : remonter au niveau org/repo ou org/repo/releases
+        if 'github.com' in netloc:
+            if len(parts) >= 2:
+                org, repo = parts[0], parts[1]
+                if len(parts) >= 3 and parts[2] in ('releases', 'commits', 'tags'):
+                    return f'https://github.com/{org}/{repo}/releases'
+                if len(parts) >= 3:
+                    return f'https://github.com/{org}/{repo}'
+            return url
+
+        # Pattern /blog/, /news/, /articles/, /posts/, /insights/, /press/ : remonter au listing
+        _LISTING_SEGMENTS = {'blog', 'news', 'articles', 'posts', 'insights',
+                             'press', 'publications', 'updates', 'resources', 'events'}
+        for i, segment in enumerate(parts):
+            if segment in _LISTING_SEGMENTS and i < len(parts) - 1:
+                # Il y a un slug après → c'est un article, remonter au listing
+                listing_path = '/' + '/'.join(parts[:i+1]) + '/'
+                return urlunparse((p.scheme, p.netloc, listing_path, '', '', ''))
+
+        # URL déjà courte (racine ou 1 niveau) → inchangée
+        return url
+    except Exception:
+        return url
 
 
 def _guess_source_type(url: str) -> str:
