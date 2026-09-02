@@ -5508,26 +5508,25 @@ async def get_today_briefing(sujet_id: Optional[int] = Query(default=None)):
                     )
                 row = cur.fetchone()
         if not row:
-            # Diagnostic : pourquoi pas de brief aujourd'hui ?
             diag = {}
-            with db.get_connection() as conn2:
-                with conn2.cursor() as cur2:
-                    cur2.execute("SELECT COUNT(*) FROM sources WHERE active = TRUE")
-                    diag["sources_actives"] = cur2.fetchone()[0]
-                    cur2.execute(
-                        "SELECT COUNT(*) FROM items WHERE collected_at::date = %s", (today,)
-                    )
-                    diag["items_collectes_today"] = cur2.fetchone()[0]
-                    cur2.execute(
-                        "SELECT COUNT(*) FROM items WHERE collected_at::date = %s AND reliability_score >= 0.5",
-                        (today,)
-                    )
-                    diag["items_fiables_today"] = cur2.fetchone()[0]
-                    cur2.execute(
-                        "SELECT MAX(generated_at) FROM daily_briefings"
-                    )
-                    last = cur2.fetchone()[0]
-                    diag["dernier_brief"] = last.isoformat() if last else None
+            try:
+                with db.get_connection() as conn2:
+                    with conn2.cursor() as cur2:
+                        cur2.execute("SELECT COUNT(*) FROM sources WHERE active = TRUE")
+                        r = cur2.fetchone()
+                        diag["sources_actives"] = r[0] if r else 0
+                        cur2.execute("SELECT COUNT(*) FROM items WHERE collected_at::date = %s", (today,))
+                        r = cur2.fetchone()
+                        diag["items_collectes_today"] = r[0] if r else 0
+                        cur2.execute("SELECT COUNT(*) FROM items WHERE collected_at::date = %s AND reliability_score >= 0.5", (today,))
+                        r = cur2.fetchone()
+                        diag["items_fiables_today"] = r[0] if r else 0
+                        cur2.execute("SELECT MAX(generated_at) FROM daily_briefings")
+                        r = cur2.fetchone()
+                        last = r[0] if r else None
+                        diag["dernier_brief"] = last.isoformat() if last else None
+            except Exception:
+                pass
             return {"exists": False, "no_new_content": False, "date": str(today), "diagnostic": diag}
         return {
             "exists": True,

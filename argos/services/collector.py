@@ -625,9 +625,10 @@ class CollectorService:
                     insert_query = """
                         INSERT INTO items (
                             source_type, source_url, url, title, summary,
-                            author, published_at, workspace_id, sujet_id, content_type
+                            author, published_at, workspace_id, sujet_id, content_type,
+                            cleaned_content
                         )
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         ON CONFLICT (url, COALESCE(sujet_id, -1)) DO NOTHING
                         RETURNING id
                     """
@@ -646,6 +647,7 @@ class CollectorService:
                                     ws_id,
                                     s_id,
                                     content_type,
+                                    item_copy.get("cleaned_content") or None,
                                 )
                             )
                             row = cur.fetchone()
@@ -877,13 +879,14 @@ class CollectorService:
 
             return ext
 
-        def _make_item(url: str, title: str, summary: str) -> Dict:
+        def _make_item(url: str, title: str, summary: str, cleaned_content: str = "") -> Dict:
             return {
                 "source_type": "website",
                 "source_url": source_url,
                 "url": url,
                 "title": title,
                 "summary": summary,
+                "cleaned_content": cleaned_content,
                 "author": None,
                 "published_at": None,
                 "workspace_id": workspace_id,
@@ -955,7 +958,11 @@ class CollectorService:
         if not workspace_id:
             workspace_id = _get_source_workspace(source_url)
         sujet_id = workspace_id  # alias utilisé par _store_document
-        crawl_mode = source_url.endswith('/')
+        _LISTING_PATTERNS = ('/blog', '/news', '/articles', '/posts', '/feed', '/press', '/insights', '/resources', '/updates', '/events', '/publications')
+        crawl_mode = source_url.endswith('/') or any(
+            source_url.rstrip('/').endswith(p) or f'{p}/' in source_url
+            for p in _LISTING_PATTERNS
+        )
         items: List[Dict] = []
 
         def _strip_nul(s: str) -> str:
@@ -976,7 +983,7 @@ class CollectorService:
                     summary = self._extract_summary(full_content, 1500)
                     logger.info(f"Fetched website page (first): {title[:60]}…")
                     self.stats["fetched"] += 1
-                    items.append(_make_item(source_url, title, summary))
+                    items.append(_make_item(source_url, title, summary, full_content))
                 elif old_hash != new_hash:
                     # Contenu modifié — récupérer l'ancien contenu et calculer le diff
                     try:
@@ -998,7 +1005,7 @@ class CollectorService:
                         summary = f"[MISE À JOUR DÉTECTÉE]\n{diff_summary}"
                         logger.info(f"Change detected on: {title[:60]}…")
                         self.stats["fetched"] += 1
-                        items.append(_make_item(source_url, f"[MàJ] {title}", summary))
+                        items.append(_make_item(source_url, f"[MàJ] {title}", summary, full_content))
                 else:
                     logger.debug(f"No change detected: {source_url}")
             except Exception as e:
@@ -1032,7 +1039,7 @@ class CollectorService:
                     summary = self._extract_summary(full_content, 1500)
                     logger.info(f"Crawled new [{len(visited)}/{MAX_PAGES}]: {title[:60]}…")
                     self.stats["fetched"] += 1
-                    items.append(_make_item(url, title, summary))
+                    items.append(_make_item(url, title, summary, full_content))
                 elif old_hash != new_hash:
                     # Page modifiée — diff uniquement
                     try:
@@ -1053,7 +1060,7 @@ class CollectorService:
                         summary = f"[MISE À JOUR DÉTECTÉE]\n{diff_summary}"
                         logger.info(f"Change detected [{len(visited)}/{MAX_PAGES}]: {title[:60]}…")
                         self.stats["fetched"] += 1
-                        items.append(_make_item(url, f"[MàJ] {title}", summary))
+                        items.append(_make_item(url, f"[MàJ] {title}", summary, full_content))
                 else:
                     logger.debug(f"No change: {url}")
 

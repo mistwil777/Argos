@@ -72,9 +72,9 @@ class TestTranslateRoute:
 
     def test_item_with_no_content_returns_422(self, client):
         c, mock_db = client
-        # title, cleaned_content=None, summary=None
+        # title, digest_markdown=None, cleaned_content=None, summary=None
         mock_db.get_connection.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value.fetchone.return_value = (
-            "Some title", None, None
+            "Some title", None, None, None
         )
         resp = c.post("/api/v1/items/1/translate", json={"language": "French"})
         assert resp.status_code == 422
@@ -82,7 +82,7 @@ class TestTranslateRoute:
     def test_valid_translation_returns_text(self, client):
         c, mock_db = client
         mock_db.get_connection.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value.fetchone.return_value = (
-            "MLflow release", "MLflow 3.0 is a major release with new features.", None
+            "MLflow release", None, "MLflow 3.0 is a major release with new features.", None
         )
 
         mock_llm = MagicMock()

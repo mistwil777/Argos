@@ -295,7 +295,7 @@ async def _step_ingest_priority(src_url: str, workspace_id: Optional[int], db) -
     with db.get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                SELECT id, title, url, summary, digest_markdown
+                SELECT id, title, url, summary, digest_markdown, cleaned_content
                 FROM items
                 WHERE source_url = %s
                   AND classification_status = 'classified'
@@ -315,19 +315,59 @@ async def _step_ingest_priority(src_url: str, workspace_id: Optional[int], db) -
     rag = RAGService(llm_provider=llm, vector_store=vs, db_manager=db)
     ingested = 0
 
-    for item_id, title, url, summary, existing_digest in items:
+    for item_id, title, url, summary, existing_digest, cleaned_content in items:
         try:
             if existing_digest:
                 ingested += 1
                 logger.info(f"[PIPELINE] Item {item_id} — digest existant, pas d'ingestion auto")
                 continue
 
-            score_data = compute_item_score(url=url or "", text=summary or "")
+            # Récupérer le contenu complet de l'article si absent
+            if not cleaned_content and url:
+                try:
+                    import requests as _requests
+                    from html.parser import HTMLParser as _HTMLParser
+
+                    class _SimpleExtractor(_HTMLParser):
+                        def __init__(self):
+                            super().__init__()
+                            self._skip = False
+                            self.chunks: list = []
+                        def handle_starttag(self, tag, attrs):
+                            if tag in ('script', 'style', 'nav', 'footer', 'header'):
+                                self._skip = True
+                        def handle_endtag(self, tag):
+                            if tag in ('script', 'style', 'nav', 'footer', 'header'):
+                                self._skip = False
+                        def handle_data(self, data):
+                            if not self._skip:
+                                t = data.replace('\x00', '').strip()
+                                if t:
+                                    self.chunks.append(t)
+
+                    resp = _requests.get(url, headers={'User-Agent': 'Mozilla/5.0 (compatible; ArgosBot/1.0)'}, timeout=20, verify=False)
+                    resp.raise_for_status()
+                    resp.encoding = resp.apparent_encoding or 'utf-8'
+                    ext = _SimpleExtractor()
+                    ext.feed(resp.text)
+                    fetched = ' '.join(ext.chunks).strip()
+                    if fetched and len(fetched) > len(summary or ""):
+                        cleaned_content = fetched
+                        with db.get_connection() as conn:
+                            with conn.cursor() as cur:
+                                cur.execute("UPDATE items SET cleaned_content = %s WHERE id = %s", (cleaned_content, item_id))
+                                conn.commit()
+                        logger.info(f"[PIPELINE] Item {item_id} — contenu complet récupéré ({len(cleaned_content)} chars)")
+                except Exception as fetch_err:
+                    logger.warning(f"[PIPELINE] Item {item_id} — échec récupération contenu : {fetch_err}")
+
+            content_for_digest = cleaned_content or summary or ""
+            score_data = compute_item_score(url=url or "", text=content_for_digest)
 
             digest = await generate_digest(
                 url=url or "",
                 title=title or "",
-                content=summary or "",
+                content=content_for_digest,
                 llm_provider=llm,
             )
 
@@ -350,8 +390,8 @@ async def _step_ingest_priority(src_url: str, workspace_id: Optional[int], db) -
 
             ingested += 1
             logger.info(
-                f"[PIPELINE] Item {item_id} digest généré — score={score_data['score']} "
-                f"(pas d'ingestion auto RAG/KG)"
+                f"[PIPELINE] Item {item_id} digest généré depuis {'contenu complet' if cleaned_content else 'résumé'} "
+                f"— score={score_data['score']}"
             )
 
         except Exception as e:
