@@ -194,7 +194,15 @@ class ProjectService:
                 member = _get_member_role(cur, project_id, user_id)
                 if not member or member["role"] != "owner":
                     raise PermissionError("Seul le propriétaire peut supprimer le projet")
-                cur.execute("UPDATE projects SET is_active = FALSE WHERE id = %s", (project_id,))
+                cur.execute("SELECT id FROM workspaces WHERE project_id = %s", (project_id,))
+                ws_ids = [r[0] for r in cur.fetchall()]
+                if ws_ids:
+                    cur.execute("DELETE FROM items WHERE workspace_id = ANY(%s)", (ws_ids,))
+                    cur.execute("DELETE FROM daily_briefings WHERE workspace_id = ANY(%s)", (ws_ids,))
+                    cur.execute("DELETE FROM documents WHERE workspace_id = ANY(%s)", (ws_ids,))
+                    cur.execute("DELETE FROM digest_scores WHERE workspace_id = ANY(%s)", (ws_ids,))
+                    cur.execute("DELETE FROM sources WHERE workspace_id = ANY(%s)", (ws_ids,))
+                cur.execute("DELETE FROM projects WHERE id = %s", (project_id,))
 
     # ── Membres ───────────────────────────────────────────────────────────────
 
@@ -383,7 +391,44 @@ class SourceProposalService:
                     "proposed_by, status, reviewed_by, review_note, proposed_at, reviewed_at",
                     (decision, owner_id, note, proposal_id),
                 )
-                return _row_to_proposal(cur.fetchone())
+                proposal = _row_to_proposal(cur.fetchone())
+
+                if decision == "approved":
+                    workspace_id = proposal.get("sujet_id")
+                    if not workspace_id:
+                        cur.execute(
+                            "SELECT id FROM workspaces WHERE project_id = %s ORDER BY id LIMIT 1",
+                            (project_id,),
+                        )
+                        row = cur.fetchone()
+                        workspace_id = row[0] if row else None
+                        if workspace_id:
+                            cur.execute(
+                                "UPDATE source_proposals SET sujet_id = %s WHERE id = %s",
+                                (workspace_id, proposal_id),
+                            )
+                            proposal["sujet_id"] = workspace_id
+
+                    if workspace_id:
+                        cur.execute(
+                            "SELECT id FROM sources WHERE workspace_id = %s AND url = %s LIMIT 1",
+                            (workspace_id, proposal["url"]),
+                        )
+                        if not cur.fetchone():
+                            cur.execute(
+                                """INSERT INTO sources
+                                   (name, url, type, description, workspace_id, active)
+                                   VALUES (%s, %s, %s, %s, %s, true)""",
+                                (
+                                    proposal.get("name") or proposal["url"][:255],
+                                    proposal["url"],
+                                    proposal.get("source_type") or "website",
+                                    proposal.get("description") or "",
+                                    workspace_id,
+                                ),
+                            )
+
+                return proposal
 
     def list_proposals(self, project_id: int, user_id: int,
                        status: str = None) -> list:

@@ -207,6 +207,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ query, user_identifier: 'frontend', workspace_id }),
     }),
+  projectAsk: (projectId: number, query: string) =>
+    request<any>(`/api/v1/projects/${projectId}/ask`, {
+      method: 'POST',
+      body: JSON.stringify({ query }),
+    }),
   rebuildRagIndex: () => request<any>('/api/v1/rag/index-all-items', { method: 'POST' }),
   rebuildRag: () => request<any>('/api/v1/rag/rebuild', { method: 'POST' }),
 
@@ -247,6 +252,8 @@ export const api = {
     request<any>(`/api/v1/projects/${id}/source-proposals`, { method: 'POST', body: JSON.stringify(data) }),
   reviewProposal: (projectId: number, proposalId: number, data: any) =>
     request<any>(`/api/v1/projects/${projectId}/source-proposals/${proposalId}/review`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteProposals: (projectId: number, ids: number[]) =>
+    request<any>(`/api/v1/projects/${projectId}/source-proposals`, { method: 'DELETE', body: JSON.stringify({ ids }) }),
   getProjectItems: (id: number, params: { sujet_id?: number; limit?: number; offset?: number } = {}) => {
     const qs = new URLSearchParams(Object.entries(params).filter(([,v]) => v !== undefined).map(([k,v]) => [k, String(v)])).toString()
     return request<any>(`/api/v1/projects/${id}/items${qs ? `?${qs}` : ''}`)

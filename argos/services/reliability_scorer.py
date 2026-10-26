@@ -101,6 +101,30 @@ RECOGNIZED_DOMAINS: set[str] = {
     "analyticsvidhya.com",
 }
 
+# Domaines bloqués explicitement — hors périmètre veille technique
+BLOCKED_DOMAINS: set[str] = {
+    # Dictionnaires & traduction
+    "cambridge.org", "larousse.fr", "reverso.net", "wordreference.com",
+    "linguee.com", "dict.cc", "merriam-webster.com", "collinsdictionary.com",
+    "thefreedictionary.com", "dictionary.com", "lexico.com",
+    # Réseaux sociaux
+    "instagram.com", "facebook.com", "twitter.com", "x.com",
+    "tiktok.com", "snapchat.com", "pinterest.com",
+    # E-commerce & dropshipping
+    "shopify.com", "salehoo.com", "ebay.com", "aliexpress.com",
+    "etsy.com", "oberlo.com", "spocket.co",
+    # Offres d'emploi
+    "glassdoor.com", "indeed.com", "monster.com", "welcometothejungle.com",
+    # Divertissement / généraliste
+    "youtube.com", "dailymotion.com", "twitch.tv",
+    # Jeux / loteries
+    "fdj.fr", "winamax.fr", "pmu.fr", "betclic.com",
+    # Presse grand public non technique
+    "ouest-france.fr", "lefigaro.fr", "lemonde.fr", "bfmtv.com",
+    # Santé / beauté grand public
+    "doctissimo.fr", "aufeminin.com", "marmiton.org",
+}
+
 # Patterns de domaines à rejeter systématiquement
 REJECTED_DOMAIN_PATTERNS: list[str] = [
     r"\.shop$", r"\.store$", r"\.sale$",
@@ -278,6 +302,10 @@ def score_domain(url: str, title: str = "", keywords: list | None = None, db=Non
     domain = _extract_domain(url)
     if not domain:
         return ReliabilityResult(False, 0.0, "URL invalide", "rejected")
+
+    # 0a. Blocklist explicite — hors périmètre veille
+    if domain in BLOCKED_DOMAINS or any(domain.endswith("." + d) for d in BLOCKED_DOMAINS):
+        return ReliabilityResult(False, 0.0, f"Domaine hors périmètre veille : {domain}", "rejected")
 
     # 0. Cache DB
     if db:

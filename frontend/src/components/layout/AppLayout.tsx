@@ -2,7 +2,7 @@ import { NavLink, Outlet, useLocation, useNavigate, useMatch, useSearchParams } 
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Eye, Newspaper, BookOpen, Settings, LogOut, ShieldCheck,
-  Folder, Users, FileText, BarChart3, Terminal, ChevronLeft
+  Folder, Users, BarChart3, Terminal, ChevronLeft
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import VoiceIndicator from '@/components/voice/VoiceIndicator'
@@ -107,6 +107,7 @@ export default function AppLayout() {
   const projectMatch = useMatch('/projets/:id')
   const projectId = projectMatch?.params?.id ? Number(projectMatch.params.id) : null
   const isProjetMode = !!projectId
+  const isProjetsListMode = pathname === '/projets' || pathname === '/projets/nouveau'
 
   const [projectName, setProjectName] = useState<string>('')
   const [pendingProposals, setPendingProposals] = useState<number>(0)
@@ -164,7 +165,7 @@ export default function AppLayout() {
                 {projectName || '…'}
               </p>
               <button
-                onClick={() => navigate('/')}
+                onClick={() => navigate('/projets')}
                 className="flex items-center gap-1 mt-2 text-[10.5px] text-[#00B4E1] hover:text-[#00D4FF] transition-colors"
               >
                 <ChevronLeft className="w-3 h-3" />
@@ -174,10 +175,8 @@ export default function AppLayout() {
 
             {/* Nav projet principale */}
             <nav className="relative px-3 pt-1 pb-2 space-y-0.5">
-              <ProjetNavItem projectId={projectId!} tabId="sujets"       icon={Folder}   label="Sujets" />
-              <ProjetNavItem projectId={projectId!} tabId="propositions" icon={FileText}  label="Propositions" badge={pendingProposals} />
-              <ProjetNavItem projectId={projectId!} tabId="briefing"     icon={Newspaper} label="Briefing" />
-              <ProjetNavItem projectId={projectId!} tabId="bibliotheque" icon={BookOpen}  label="Bibliothèque" />
+              <ProjetNavItem projectId={projectId!} tabId="explorer"     icon={Folder}      label="Explorer" badge={pendingProposals} />
+              <ProjetNavItem projectId={projectId!} tabId="briefing"     icon={Newspaper}   label="Briefing" />
             </nav>
 
             <div className="flex-1" />
@@ -193,6 +192,16 @@ export default function AppLayout() {
               <ProjetNavItem projectId={projectId!} tabId="ide"       icon={Terminal}  label="Connexion IDE" />
               <ProjetNavItem projectId={projectId!} tabId="reglages"  icon={Settings}  label="Réglages projet" />
             </nav>
+          </>
+        ) : isProjetsListMode ? (
+          /* ── Mode Liste Projets ───────────────────────────────── */
+          <>
+            <div className="flex-1" />
+            <div className="mx-4 h-px bg-white/10" />
+            <div className="px-3 py-3 space-y-1">
+              <NavItem to="/reglages" icon={Settings}   label="Réglages" />
+              <NavItem to="/admin"    icon={ShieldCheck} label="Admin" />
+            </div>
           </>
         ) : (
           /* ── Mode Perso ──────────────────────────────────────── */

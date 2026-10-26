@@ -1,209 +1,73 @@
 # Argos
 
-Plateforme de veille intelligente pour ingénieurs IA — collecte autonome, classification LLM, RAG conversationnel et briefing quotidien.
-
-## Vision
-
-L'utilisateur décrit son besoin de veille en langage naturel. Le système découvre les sources, collecte chaque nuit, filtre, classe, nettoie, ingère et propose un briefing à la demande. Zéro action manuelle après la configuration initiale.
+Plateforme de veille intelligente et d'apprentissage adaptatif. Argos comprend votre niveau de connaissance réel, collecte et filtre l'information en continu, et vous sert exactement le bon contenu — dans le bon ordre, au bon moment.
 
 ---
 
-## Pipeline end-to-end
+## Ce qu'Argos fait
 
-### Mode nuit — alimentation autonome
+**Veille** — Sources validées par profil, collecte nocturne automatique, briefing journalier avec note de pertinence sur chaque article.
 
-```
-                        ┌─────────────────────────────────────────┐
-                        │         SCHEDULER (APScheduler)          │
-                        │  job nocturne — toutes les sources       │
-                        └───────────────────┬─────────────────────┘
-                                            │ déclenche
-                        ┌───────────────────▼─────────────────────┐
-                        │              COLLECTE                    │
-                        │  RSS · GitHub · ArXiv · Web              │
-                        │  CollectorService.fetch_from_db_sources()│
-                        │  → déduplication par URL                 │
-                        └───────────────────┬─────────────────────┘
-                                            │ items status="pending"
-                                            │ event-driven (immédiat)
-                        ┌───────────────────▼─────────────────────┐
-                        │            CLASSIFICATION LLM            │
-                        │  ClassifierService.classify_batch()      │
-                        │  → importance: critical/high/medium/low  │
-                        │  → item_type: news/research/tool/…       │
-                        │  → keywords[]                            │
-                        └───────────────────┬─────────────────────┘
-                                            │ si importance = high ou critical
-                                            │ event-driven (immédiat)
-                        ┌───────────────────▼─────────────────────┐
-                        │           SCORING SANS LLM               │
-                        │  ScorerService                           │
-                        │  · fiabilité domaine   (Tranco rank)     │
-                        │  · densité contenu     (textstat)        │
-                        │  · nouveauté sémantique(cosine similarity)│
-                        │  · validation croisée  (cross-source)    │
-                        │  → score 0.0→1.0 par item                │
-                        │  → score source mis à jour (decay auto)  │
-                        └───────────────────┬─────────────────────┘
-                                            │ si score > seuil
-                                            │ event-driven (immédiat)
-                        ┌───────────────────▼─────────────────────┐
-                        │         DIGEST + NETTOYAGE LLM           │
-                        │  DigestGenerator.generate_digest()       │
-                        │  · extraction contenu (trafilatura)      │
-                        │  · fallback SPA/JS    (Playwright)       │
-                        │  · résumé structuré   (Claude)           │
-                        │  → digest_markdown + digest_json         │
-                        └───────────────────┬─────────────────────┘
-                                            │ event-driven (immédiat)
-                        ┌───────────────────▼─────────────────────┐
-                        │           INDEXATION RAG                 │
-                        │  RAGService.index_item()                 │
-                        │  · embeddings (sentence-transformers)    │
-                        │  · stockage LanceDB (hybrid search)      │
-                        │  → rag_indexed = true                    │
-                        │  → ready_for_briefing = true             │
-                        └───────────────────┬─────────────────────┘
-                                            │
-                        ┌───────────────────▼─────────────────────┐
-                        │         BASE DE CONNAISSANCES            │
-                        │  PostgreSQL (métadonnées + scores)       │
-                        │  LanceDB     (vecteurs + fulltext)       │
-                        └─────────────────────────────────────────┘
+**Apprentissage** — Entretien de calibration unique, plan chronologique généré, contenu servi progressivement selon l'avancement réel mesuré par le RAG+KG.
 
-Délai end-to-end : fréquence collecte (15-30 min) + ~30s traitement par item
-```
+**Projets équipes** — Environnement isolé par mission : CDC analysé par LLM, sources validées par le chef de projet, RAG+KG dédiés, briefing projet avec pertinence contextuelle par item.
 
-### Mode demande — réponse temps réel
+**IDE et LLMs** — Serveur MCP exposant la base de connaissance aux assistants IA (VS Code, Cursor, Claude Desktop, ChatGPT).
+
+---
+
+## Les 4 filtres
+
+| Filtre | Mécanisme | Effet |
+|---|---|---|
+| **① Fiabilité source** | Score Tranco + validation croisée + decay temporel | Tiers officiel / reconnu / communauté / exclu |
+| **② Pertinence LLM** | Haiku note 1–5 × profil utilisateur | Score ≤ 3 → ignoré automatiquement |
+| **③ Progression** | RAG+KG vs plan pédagogique | Concept verrouillé tant que prérequis non assimilé |
+| **④ HITL** | Décision explicite : Intégrer · Sauvegarder · Ignorer | Rétroaction sur les filtres suivants |
+
+---
+
+## Pipeline
 
 ```
-  User : "Quoi de neuf sur Mistral cette semaine ?"
-  (texte ou vocal — Web Speech API)
-           │
-           ▼
-  ┌─────────────────────────────────┐
-  │         ASSISTANT (RAG)         │
-  │  POST /rag/ask                  │
-  │  · hybrid search LanceDB        │
-  │  · contexte des 5 derniers msgs │
-  │  · génération Claude (streaming)│
-  └────────────┬────────────────────┘
-               │ si aucun résultat récent
-               ▼
-  ┌─────────────────────────────────┐
-  │      VEILLE ON-DEMAND           │
-  │  POST /veille/on-demand         │
-  │  · SearXNG multi-moteur         │
-  │  · digest + classif en parallèle│
-  │  → résultats en ~30s            │
-  └────────────┬────────────────────┘
-               │
-               ▼
-  Réponse texte + audio (SpeechSynthesis)
-
-  Commandes reconnues :
-  "génère un document sur X"     → POST /documents/generate
-  "résume le briefing du jour"   → GET  /briefing/today
-  "quelles sont les tendances ?" → GET  /stats/trends
-```
-
-### Intent → Discovery — création de veille
-
-```
-  User : "Je veux suivre les nouveautés Claude et Mistral"
-           │
-           ▼ (1 appel Claude)
-  ┌─────────────────────────────────────────┐
-  │           INTENT DECOMPOSITION          │
-  │  IntentService.decompose(text)          │
-  │  → entités   : Anthropic, Mistral AI    │
-  │  → thèmes    : LLM API, benchmarks, ... │
-  │  → src types : changelog, blog, github  │
-  │  → keywords  : claude 3, tool use, ...  │
-  └──────────────────┬──────────────────────┘
-                     │
-                     ▼ (SearXNG + trafilatura, pas de LLM)
-  ┌─────────────────────────────────────────┐
-  │         DÉCOUVERTE DE SOURCES           │
-  │  DiscoveryService.find_sources()        │
-  │  · recherche SearXNG par entité/type    │
-  │  · find_feed_urls() sur les domaines    │
-  │  · score Tranco (fiabilité domaine)     │
-  │  · dédup vs sources existantes          │
-  └──────────────────┬──────────────────────┘
-                     │
-                     ▼
-  Sources candidates affichées à l'utilisateur
-  → confirmation → créées en DB
-  → premier collect déclenché immédiatement
+Sources (RSS · Web · GitHub · ArXiv · PDF)
+    │
+    ▼  Collecte nocturne (APScheduler + Celery)
+    │
+    ▼  Classification LLM (importance · type · keywords)
+    │
+    ▼  Scoring fiabilité (sans LLM — Tranco, cross-source)
+    │
+    ▼  Digest structuré (Claude Sonnet → markdown + JSON)
+    │
+    ▼  Tagging auto (veille / apprentissage / projet — Haiku)
+    │
+    ▼  Filtre pertinence (Haiku 1–5 × profil, ≤3 ignoré)
+    │
+    ▼  Indexation RAG (sentence-transformers → LanceDB hybrid)
+    │
+    ▼  Briefing journalier / Décision HITL / Assistant RAG
 ```
 
 ---
 
-## Architecture technique
-
-```
-argos/
-├── argos/
-│   ├── services/
-│   │   ├── scheduler.py          # APScheduler + SQLAlchemyJobStore (PostgreSQL)
-│   │   ├── intent_discovery.py   # IntentService + DiscoveryService
-│   │   ├── scorer.py             # Scoring pertinence sans LLM
-│   │   ├── collector.py          # RSS · GitHub · ArXiv · Web
-│   │   ├── classifier.py         # Classification LLM
-│   │   ├── digest_generator.py   # LLM → markdown + JSON structuré
-│   │   ├── rag.py                # RAG hybride (LanceDB + fulltext)
-│   │   ├── site_monitor.py       # Surveillance changements de pages
-│   │   ├── web_browser.py        # Playwright stealth
-│   │   ├── web_search.py         # SearXNG / DuckDuckGo fallback
-│   │   ├── document_extractor.py # PDF · DOCX · images (vision LLM)
-│   │   └── llm_provider.py       # Abstraction OpenAI / Anthropic / Bedrock
-│   ├── api/
-│   │   ├── router.py             # REST API — items, RAG, briefing, ...
-│   │   ├── veille.py             # POST /veille/create (intent → sources)
-│   │   └── workspaces.py         # Workspaces multi-tenant
-│   └── server.py                 # FastAPI app + MCP JSON-RPC
-├── frontend/src/pages/
-│   ├── Dashboard.tsx             # Stats globales + activité récente
-│   ├── Veille.tsx                # Création de veille par intention
-│   ├── Feed.tsx                  # Flux d'items avec filtres
-│   ├── Assistant.tsx             # Chat RAG + vocal (Web Speech API)
-│   ├── Briefing.tsx              # Briefing quotidien
-│   ├── Trends.tsx                # Tendances et keywords
-│   ├── Library.tsx               # Documents générés
-│   ├── Sources.tsx               # Gestion avancée des sources
-│   └── Settings.tsx              # Config services + logs
-├── database/
-│   ├── init.sql                  # Schéma complet PostgreSQL
-│   └── seed.sql                  # Données initiales
-├── config/searxng/               # Config moteur de recherche auto-hébergé
-└── docker-compose.yml
-```
-
-### Stack technique
+## Stack technique
 
 | Composant | Technologie |
 |---|---|
 | Backend | FastAPI + Python 3.11 |
 | Base de données | PostgreSQL 16 |
-| Vector store | LanceDB (hybrid search) |
-| LLM | Claude API (Anthropic) |
-| Embeddings | sentence-transformers (local) |
-| Scheduling | APScheduler v3 + job store PostgreSQL |
-| Extraction web | trafilatura + Playwright (fallback SPA) |
+| Vector store | LanceDB (hybrid search sémantique + fulltext) |
+| LLM principal | Claude Sonnet via AWS Bedrock |
+| LLM scoring | Claude Haiku (pertinence, tagging) |
+| Embeddings | sentence-transformers (local, sans appel externe) |
+| Queue | Celery + Redis |
+| Scraping | trafilatura + Playwright (fallback SPA/JS) |
 | Recherche web | SearXNG auto-hébergé |
-| Scoring | sklearn · textstat · tldextract · hdbscan |
-| Vocal MVP | Web Speech API (natif navigateur) |
-| Frontend | React + Vite + shadcn/ui |
-
-### Ports
-
-| Service | Port |
-|---|---|
-| Backend API + MCP | 8000 |
-| Frontend React (dev) | 3000 |
-| PostgreSQL | 5432 |
-| SearXNG | 8888 |
+| Auth | JWT RS256 + workspaces multi-tenant |
+| Frontend | React + Vite + TypeScript + Tailwind CSS |
+| IDE/LLM | Serveur MCP JSON-RPC (7 outils exposés) |
+| Déploiement | Docker Compose |
 
 ---
 
@@ -212,13 +76,13 @@ argos/
 ```bash
 # 1. Configuration
 cp .env.example .env
-# Renseigner : POSTGRES_PASSWORD, ADMIN_TOKEN, ANTHROPIC_API_KEY
+# Renseigner : POSTGRES_PASSWORD, ADMIN_TOKEN, ANTHROPIC_API_KEY (ou AWS Bedrock)
 
-# 2. Stack backend
+# 2. Stack complète
 docker compose up -d
 
-# 3. Frontend
-cd frontend && npm run dev
+# 3. Frontend (développement)
+cd frontend && npm install && npm run dev
 
 # 4. Accès
 open http://localhost:3000   # Interface React
@@ -231,13 +95,52 @@ open http://localhost:8000   # API FastAPI (docs : /docs)
 |---|---|---|
 | `POSTGRES_PASSWORD` | Mot de passe PostgreSQL | oui |
 | `ADMIN_TOKEN` | Token admin API | oui |
-| `ANTHROPIC_API_KEY` | Clé Claude API | oui |
+| `ANTHROPIC_API_KEY` | Clé Claude API (si provider=anthropic) | non |
 | `LLM_PROVIDER` | `anthropic` · `openai` · `aws` | défaut : `aws` |
-| `OPENAI_API_KEY` | Clé OpenAI (si provider=openai) | non |
 | `AWS_ACCESS_KEY_ID` | Clé AWS Bedrock (si provider=aws) | non |
 | `AWS_SECRET_ACCESS_KEY` | Secret AWS | non |
 | `AWS_REGION` | Région AWS | défaut : `us-east-1` |
+| `OPENAI_API_KEY` | Clé OpenAI (si provider=openai) | non |
 | `SEARXNG_URL` | URL interne SearXNG | défaut : `http://searxng:8080` |
+
+---
+
+## Structure
+
+```
+argos/
+├── argos/
+│   ├── services/
+│   │   ├── intent_discovery.py   # Décomposition intention → sources (AUTHORITY_REGISTRY)
+│   │   ├── calibration_agent.py  # Entretien LLM de calibration (perso + projet)
+│   │   ├── collector.py          # RSS · GitHub · ArXiv · Web
+│   │   ├── classifier.py         # Classification LLM (importance · type · keywords)
+│   │   ├── scorer.py             # Scoring fiabilité sans LLM
+│   │   ├── digest_generator.py   # LLM → markdown + JSON structuré
+│   │   ├── rag.py                # RAG hybride (LanceDB + fulltext)
+│   │   ├── scheduler.py          # APScheduler + Celery
+│   │   ├── web_browser.py        # Playwright stealth
+│   │   └── llm_provider.py       # Abstraction OpenAI / Anthropic / Bedrock
+│   ├── api/
+│   │   ├── router.py             # API principale (items, briefing, projets, MCP)
+│   │   ├── projects.py           # Espaces projet (création, membres, propositions)
+│   │   └── workspaces.py         # Workspaces multi-tenant
+│   └── server.py                 # FastAPI app + MCP JSON-RPC
+├── frontend/src/
+│   ├── pages/
+│   │   ├── Briefing.tsx          # Briefing journalier (veille + apprentissage)
+│   │   ├── ProjetDetail.tsx      # Espace projet (sujets, membres, sources, briefing)
+│   │   ├── ProjetNouveau.tsx     # Création projet (CDC → entretien → sujets → sources)
+│   │   ├── Veille.tsx            # Création de veille par intention
+│   │   └── Library.tsx           # Bibliothèque (documents générés + RAG)
+│   └── components/
+│       ├── BriefingPanel.tsx     # Panel briefing partagé (perso + projet)
+│       └── ui/ItemReaderModal.tsx # Reader document (LLM, fullscreen, Sauvegarder & indexer)
+├── tests/                        # Suite de tests automatisés
+└── docker-compose.yml
+```
+
+---
 
 ## Licence
 

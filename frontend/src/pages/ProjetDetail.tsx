@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  ArrowLeft, Loader2, AlertCircle, Folder, Users,
-  FileText, Plus, Check, X, Sparkles, Settings, Save,
-  Key, Copy, Trash2, Terminal, BarChart3, Play, Newspaper, RefreshCw, ChevronDown, BookOpen, ExternalLink
+  ArrowLeft, Loader2, AlertCircle, Folder,
+  Plus, Check, X, Sparkles, Save,
+  Key, Copy, Trash2, Play, Newspaper, RefreshCw, ChevronDown, ExternalLink,
+  MessageSquare, Send, Bot
 } from 'lucide-react'
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -14,7 +15,7 @@ import { timeAgo } from '@/lib/utils'
 import BriefingPanel from '@/components/BriefingPanel'
 import ItemReaderModal from '@/components/ui/ItemReaderModal'
 
-type Tab = 'sujets' | 'membres' | 'propositions' | 'briefing' | 'bibliotheque' | 'ide' | 'metriques' | 'reglages'
+type Tab = 'explorer' | 'membres' | 'briefing' | 'ide' | 'metriques' | 'reglages'
 
 export default function ProjetDetail() {
   const { id } = useParams<{ id: string }>()
@@ -63,6 +64,11 @@ export default function ProjetDetail() {
   const [subjectProposals, setSubjectProposals] = useState<any[]>([])  // [{id, name, proposals:[]}]
   const [expandedSubject, setExpandedSubject]   = useState<number | null>(null)
   const [selectedProposals, setSelectedProposals] = useState<Set<number>>(new Set())
+
+  // Sélection multiple dans l'onglet Propositions (pending)
+  const [pendingSelected, setPendingSelected] = useState<Set<number>>(new Set())
+  const [deletingProposals, setDeletingProposals] = useState(false)
+  const [approvingProposals, setApprovingProposals] = useState(false)
 
   // Bibliothèque
   const [bibItems, setBibItems]         = useState<any[]>([])
@@ -128,8 +134,7 @@ export default function ProjetDetail() {
 
   // Recharge les proposals quand on revient sur Sujets ou Propositions
   useEffect(() => {
-    if (tab === 'sujets' || tab === 'propositions') loadSubjectProposals()
-    if (tab === 'bibliotheque') loadBibItems()
+    if (tab === 'explorer') { loadSubjectProposals(); loadBibItems() }
   }, [tab, bibSujetId])
 
   function loadBibItems() {
@@ -258,6 +263,27 @@ export default function ProjetDetail() {
     } catch (e: any) { setError(e.message) }
   }
 
+  async function handleApproveSelectedProposals() {
+    if (pendingSelected.size === 0) return
+    setApprovingProposals(true)
+    try {
+      await Promise.all([...pendingSelected].map(id => handleReview(id, 'approved')))
+      setPendingSelected(new Set())
+    } catch (e: any) { setError(e.message) }
+    finally { setApprovingProposals(false) }
+  }
+
+  async function handleDeleteSelectedProposals() {
+    if (pendingSelected.size === 0) return
+    setDeletingProposals(true)
+    try {
+      await api.deleteProposals(projectId, [...pendingSelected])
+      setProposals(prev => prev.filter(p => !pendingSelected.has(p.id)))
+      setPendingSelected(new Set())
+    } catch (e: any) { setError(e.message) }
+    finally { setDeletingProposals(false) }
+  }
+
   async function handleGenerateKey() {
     setGeneratingKey(true)
     try {
@@ -344,8 +370,51 @@ export default function ProjetDetail() {
         {/* Tab content — tous les onglets restent montés (traitements non interrompus, état préservé) */}
         <div>
 
-          {/* ── Sujets ──────────────────────────────────────────────────── */}
-          <div hidden={tab !== 'sujets'}>
+          {/* ── Explorer ────────────────────────────────────────────────── */}
+          <div hidden={tab !== 'explorer'}>
+            <ExplorerTab
+              projectId={projectId}
+              project={project}
+              cdcSubjects={cdcSubjects}
+              subjectProposals={subjectProposals}
+              proposals={proposals}
+              bibItems={bibItems}
+              bibWorkspaces={bibWorkspaces}
+              bibTotal={bibTotal}
+              bibLoading={bibLoading}
+              bibSujetId={bibSujetId}
+              setBibSujetId={setBibSujetId}
+              selectedProposals={selectedProposals}
+              setSelectedProposals={setSelectedProposals}
+              pendingSelected={pendingSelected}
+              setPendingSelected={setPendingSelected}
+              expandedSubject={expandedSubject}
+              setExpandedSubject={setExpandedSubject}
+              pipelineRunning={pipelineRunning}
+              suggesting={suggesting}
+              suggestError={suggestError}
+              proposing={proposing}
+              proposeUrl={proposeUrl}
+              setProposeUrl={setProposeUrl}
+              proposeName={proposeName}
+              setProposeName={setProposeName}
+              proposeType={proposeType}
+              setProposeType={setProposeType}
+              proposeError={proposeError}
+              approvingProposals={approvingProposals}
+              deletingProposals={deletingProposals}
+              setBibSelectedId={setBibSelectedId}
+              onRunPipeline={handleRunPipeline}
+              onSuggestSources={handleSuggestSources}
+              onPropose={handlePropose}
+              onReview={handleReview}
+              onDeleteProposals={(ids) => api.deleteProposals(projectId, ids).then(() => loadSubjectProposals())}
+              onApproveSelected={handleApproveSelectedProposals}
+              onDeleteSelected={handleDeleteSelectedProposals}
+            />
+          </div>
+
+          <div hidden={true}>
             <div className="space-y-3">
               {cdcSubjects.length === 0 && !project.cdc_analysis && (
                 <div className="text-center py-12 space-y-3">
@@ -477,6 +546,16 @@ export default function ProjetDetail() {
                                 : p.status === 'rejected' ? 'bg-[hsl(var(--red)/.1)] text-[hsl(var(--red))] border-[hsl(var(--red)/.3)]'
                                 : 'bg-[hsl(var(--yellow)/.1)] text-[hsl(var(--yellow))] border-[hsl(var(--yellow)/.3)]'
                               }`}>{p.status}</span>
+                              <button
+                                onClick={async () => {
+                                  await api.deleteProposals(projectId, [p.id])
+                                  loadSubjectProposals()
+                                }}
+                                className="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded hover:bg-[hsl(var(--red)/.15)] text-[hsl(var(--text-3))] hover:text-[hsl(var(--red))] transition-colors"
+                                title="Supprimer cette source"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
                             </div>
                           )
                         })}
@@ -672,8 +751,7 @@ export default function ProjetDetail() {
             </div>
           </div>
 
-          {/* ── Propositions ────────────────────────────────────────────── */}
-          <div hidden={tab !== 'propositions'}>
+          <div hidden={true}>
             <div className="space-y-5">
 
               {/* Section 1 — Suggestions LLM en attente de validation */}
@@ -693,38 +771,110 @@ export default function ProjetDetail() {
                 </div>
                 {suggestError && <p className="text-[12px] text-[hsl(var(--red))]">{suggestError}</p>}
 
-                {proposals.filter(p => p.status === 'pending').length === 0 && (
-                  <p className="text-[12px] text-[hsl(var(--text-3))] italic">
-                    Aucune suggestion — cliquez "Générer des suggestions" pour démarrer.
-                  </p>
-                )}
+                {(() => {
+                  const pending = proposals.filter(p => p.status === 'pending')
+                  const allSelected = pending.length > 0 && pending.every(p => pendingSelected.has(p.id))
+                  return (
+                    <>
+                      {pending.length === 0 && (
+                        <p className="text-[12px] text-[hsl(var(--text-3))] italic">
+                          Aucune suggestion — cliquez "Générer des suggestions" pour démarrer.
+                        </p>
+                      )}
 
-                <div className="space-y-2">
-                  {proposals.filter(p => p.status === 'pending').map(p => (
-                    <div key={p.id}
-                      className="flex items-start gap-3 px-3 py-3 rounded-lg border border-[hsl(var(--yellow)/.3)] bg-[hsl(var(--yellow)/.04)]">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-medium text-[hsl(var(--text))] truncate">{p.name || p.url}</p>
-                        <p className="text-[10px] font-mono text-[hsl(var(--text-3))] truncate">{p.url}</p>
-                        {p.description && (
-                          <p className="text-[11px] text-[hsl(var(--text-2))] mt-1 line-clamp-2">{p.description}</p>
-                        )}
+                      {pending.length > 0 && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              if (allSelected) setPendingSelected(new Set())
+                              else setPendingSelected(new Set(pending.map(p => p.id)))
+                            }}
+                            className="text-[11px] text-[hsl(var(--accent))] hover:underline">
+                            {allSelected ? 'Désélectionner tout' : 'Tout sélectionner'}
+                          </button>
+                          {pendingSelected.size > 0 && (
+                            <>
+                              <span className="text-[hsl(var(--text-3))]">·</span>
+                              <span className="text-[11px] text-[hsl(var(--text-2))]">{pendingSelected.size} sélectionnée{pendingSelected.size > 1 ? 's' : ''}</span>
+                              <div className="ml-auto flex items-center gap-2">
+                                <button
+                                  onClick={handleApproveSelectedProposals}
+                                  disabled={approvingProposals || deletingProposals}
+                                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[hsl(var(--aqua)/.1)] text-[hsl(var(--aqua))] text-[11px] font-semibold hover:bg-[hsl(var(--aqua)/.2)] disabled:opacity-50 transition-colors">
+                                  {approvingProposals
+                                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                                    : <Check className="w-3 h-3" />}
+                                  Valider la sélection
+                                </button>
+                                <button
+                                  onClick={handleDeleteSelectedProposals}
+                                  disabled={deletingProposals || approvingProposals}
+                                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[hsl(var(--red)/.1)] text-[hsl(var(--red))] text-[11px] font-semibold hover:bg-[hsl(var(--red)/.2)] disabled:opacity-50 transition-colors">
+                                  {deletingProposals
+                                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                                    : <Trash2 className="w-3 h-3" />}
+                                  Supprimer
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        {pending.map(p => {
+                          const isChecked = pendingSelected.has(p.id)
+                          return (
+                            <div key={p.id}
+                              className={`flex items-start gap-3 px-3 py-3 rounded-lg border transition-colors cursor-pointer
+                                ${isChecked
+                                  ? 'border-[hsl(var(--red)/.4)] bg-[hsl(var(--red)/.06)]'
+                                  : 'border-[hsl(var(--yellow)/.3)] bg-[hsl(var(--yellow)/.04)]'}`}
+                              onClick={() => setPendingSelected(prev => {
+                                const next = new Set(prev)
+                                isChecked ? next.delete(p.id) : next.add(p.id)
+                                return next
+                              })}>
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                readOnly
+                                className="mt-0.5 flex-shrink-0 accent-[hsl(var(--red))]"
+                                onClick={e => e.stopPropagation()}
+                                onChange={() => {
+                                  setPendingSelected(prev => {
+                                    const next = new Set(prev)
+                                    isChecked ? next.delete(p.id) : next.add(p.id)
+                                    return next
+                                  })
+                                }}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[13px] font-medium text-[hsl(var(--text))] truncate">{p.name || p.url}</p>
+                                <p className="text-[10px] font-mono text-[hsl(var(--text-3))] truncate">{p.url}</p>
+                                {p.description && (
+                                  <p className="text-[11px] text-[hsl(var(--text-2))] mt-1 line-clamp-2">{p.description}</p>
+                                )}
+                              </div>
+                              <div className="flex gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                                <button onClick={() => handleReview(p.id, 'approved')}
+                                  className="w-7 h-7 rounded flex items-center justify-center bg-[hsl(var(--aqua)/.12)] text-[hsl(var(--aqua))] hover:bg-[hsl(var(--aqua)/.25)] transition-colors"
+                                  title="Valider">
+                                  <Check className="w-3.5 h-3.5" />
+                                </button>
+                                <button onClick={() => handleReview(p.id, 'rejected')}
+                                  className="w-7 h-7 rounded flex items-center justify-center bg-[hsl(var(--red)/.12)] text-[hsl(var(--red))] hover:bg-[hsl(var(--red)/.25)] transition-colors"
+                                  title="Rejeter">
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
                       </div>
-                      <div className="flex gap-1 flex-shrink-0">
-                        <button onClick={() => handleReview(p.id, 'approved')}
-                          className="w-7 h-7 rounded flex items-center justify-center bg-[hsl(var(--aqua)/.12)] text-[hsl(var(--aqua))] hover:bg-[hsl(var(--aqua)/.25)] transition-colors"
-                          title="Valider">
-                          <Check className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={() => handleReview(p.id, 'rejected')}
-                          className="w-7 h-7 rounded flex items-center justify-center bg-[hsl(var(--red)/.12)] text-[hsl(var(--red))] hover:bg-[hsl(var(--red)/.25)] transition-colors"
-                          title="Rejeter">
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    </>
+                  )
+                })()}
               </div>
 
               {/* Section 2 — Ajout manuel */}
@@ -882,7 +1032,7 @@ export default function ProjetDetail() {
           </div>
 
           {/* ── Bibliothèque ────────────────────────────────────────────── */}
-          <div hidden={tab !== 'bibliotheque'}>
+          <div hidden={true}>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <p className="text-[11px] font-mono text-[hsl(var(--text-3))] uppercase tracking-wider">
@@ -1105,13 +1255,335 @@ export default function ProjetDetail() {
   )
 }
 
+type ExplorerSubTab = 'sources' | 'chat'
+
+interface ExplorerTabProps {
+  projectId: number
+  project: any
+  cdcSubjects: any[]
+  subjectProposals: any[]
+  proposals: any[]
+  bibItems: any[]
+  bibWorkspaces: any[]
+  bibTotal: number
+  bibLoading: boolean
+  bibSujetId: number | undefined
+  setBibSujetId: (v: number | undefined) => void
+  selectedProposals: Set<number>
+  setSelectedProposals: (v: Set<number>) => void
+  pendingSelected: Set<number>
+  setPendingSelected: (v: Set<number>) => void
+  expandedSubject: number | null
+  setExpandedSubject: (v: number | null) => void
+  pipelineRunning: boolean
+  suggesting: boolean
+  suggestError: string | null
+  proposing: boolean
+  proposeUrl: string
+  setProposeUrl: (v: string) => void
+  proposeName: string
+  setProposeName: (v: string) => void
+  proposeType: string
+  setProposeType: (v: string) => void
+  proposeError: string | null
+  approvingProposals: boolean
+  deletingProposals: boolean
+  setBibSelectedId: (v: number | null) => void
+  onRunPipeline: (ids?: number[]) => void
+  onSuggestSources: () => void
+  onPropose: () => void
+  onReview: (id: number, decision: 'approved' | 'rejected') => void
+  onDeleteProposals: (ids: number[]) => void
+  onApproveSelected: () => void
+  onDeleteSelected: () => void
+}
+
+function ExplorerTab(props: ExplorerTabProps) {
+  const {
+    projectId, cdcSubjects, subjectProposals, bibItems, bibTotal, bibLoading,
+    selectedProposals, setSelectedProposals, expandedSubject, setExpandedSubject,
+    pipelineRunning, suggesting, suggestError, proposing, proposeUrl, setProposeUrl,
+    proposeName, setProposeName, proposeType, setProposeType, proposeError,
+    setBibSelectedId, onRunPipeline, onSuggestSources, onPropose, onReview, onDeleteProposals,
+  } = props
+
+  const [subTab, setSubTab] = useState<ExplorerSubTab>('sources')
+
+  return (
+    <div className="space-y-4">
+      {/* Sub-tab switcher */}
+      <div className="flex gap-1 p-1 bg-[hsl(var(--bg-1))] rounded-xl border border-[hsl(var(--line))] w-fit">
+        {([['sources', 'Sources'], ['chat', 'Chat RAG']] as [ExplorerSubTab, string][]).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setSubTab(key)}
+            className={`px-4 py-1.5 rounded-lg text-[12px] font-medium transition-all ${
+              subTab === key
+                ? 'bg-[hsl(var(--accent))] text-white shadow-sm'
+                : 'text-[hsl(var(--text-2))] hover:text-[hsl(var(--text))]'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Sources sub-tab ──────────────────────────────────── */}
+      <div hidden={subTab !== 'sources'}>
+        <div className="space-y-4">
+
+          {/* Barre d'action pipeline */}
+          {selectedProposals.size > 0 && (
+            <div className="flex items-center justify-between px-4 py-3 rounded-xl border border-[hsl(var(--accent)/.4)] bg-[hsl(var(--accent)/.06)]">
+              <p className="text-[13px] text-[hsl(var(--text))]">
+                <span className="font-semibold">{selectedProposals.size}</span> source{selectedProposals.size > 1 ? 's' : ''} sélectionnée{selectedProposals.size > 1 ? 's' : ''}
+              </p>
+              <button
+                onClick={() => onRunPipeline([...selectedProposals])}
+                disabled={pipelineRunning}
+                className="px-3 py-1.5 rounded-lg bg-[hsl(var(--accent))] text-white text-[12px] font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center gap-1.5 whitespace-nowrap"
+              >
+                {pipelineRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+                {pipelineRunning ? 'En cours…' : 'Collecter et briefer'}
+              </button>
+            </div>
+          )}
+
+          {/* Dossiers */}
+          {cdcSubjects.length === 0 && subjectProposals.length === 0 && (
+            <div className="text-center py-12 space-y-3">
+              <Folder className="w-8 h-8 mx-auto text-[hsl(var(--text-3))]" />
+              <p className="text-[14px] text-[hsl(var(--text-2))]">Aucun sujet pour l'instant</p>
+              <p className="text-[12px] text-[hsl(var(--text-3))]">Calibrez le projet pour générer automatiquement l'arborescence de sujets.</p>
+            </div>
+          )}
+
+          {(subjectProposals.length > 0 ? subjectProposals : cdcSubjects.map((s: any) => ({ name: s.name, proposals: [] }))).map((ws: any, i: number) => {
+            const cdcMatch = cdcSubjects.find((c: any) => {
+              const a = c.name.toLowerCase(), b = ws.name.toLowerCase()
+              return a === b || a.includes(b.split(' ')[0]) || b.includes(a.split(' ')[0])
+            })
+            const s = { ...ws, priority: cdcMatch?.priority, sub_subjects: cdcMatch?.sub_subjects }
+            const wsProposals: any[] = ws.proposals || []
+            const selectableProposals = wsProposals.filter((p: any) => p.status !== 'rejected')
+            const isExpanded = expandedSubject === i
+            const allSelected = selectableProposals.length > 0 && selectableProposals.every((p: any) => selectedProposals.has(p.id))
+            const folderBibItems = bibItems.filter((item: any) => item.sujet_name === ws.name || item.workspace_name === ws.name)
+
+            return (
+              <div key={i} className="rounded-xl border border-[hsl(var(--line))] bg-[hsl(var(--bg-1))] overflow-hidden">
+                {/* En-tête dossier */}
+                <div className="flex items-center gap-3 px-4 py-3">
+                  <button
+                    onClick={() => {
+                      if (selectableProposals.length === 0) return
+                      const next = new Set(selectedProposals)
+                      if (allSelected) selectableProposals.forEach((p: any) => next.delete(p.id))
+                      else selectableProposals.forEach((p: any) => next.add(p.id))
+                      setSelectedProposals(next)
+                    }}
+                    className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-all ${
+                      selectableProposals.length === 0 ? 'border-[hsl(var(--line))] opacity-30 cursor-default'
+                      : allSelected ? 'bg-[hsl(var(--accent))] border-[hsl(var(--accent))]'
+                      : 'border-[hsl(var(--line))] hover:border-[hsl(var(--accent))]'
+                    }`}
+                  >
+                    {allSelected && <Check className="w-2.5 h-2.5 text-white" />}
+                  </button>
+
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'hsl(var(--accent)/.12)' }}>
+                    <Folder className="w-3.5 h-3.5 text-[hsl(var(--accent))]" />
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-medium text-[hsl(var(--text))]">{s.name}</p>
+                    {s.sub_subjects?.length > 0 && (
+                      <p className="text-[11px] text-[hsl(var(--text-3))] mt-0.5">{s.sub_subjects.join(' · ')}</p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
+                      (s.priority ?? 'low') === 'high' ? 'bg-[hsl(var(--accent)/.1)] text-[hsl(var(--accent))] border-[hsl(var(--accent)/.3)]'
+                      : (s.priority ?? 'low') === 'medium' ? 'bg-[hsl(var(--yellow)/.1)] text-[hsl(var(--yellow))] border-[hsl(var(--yellow)/.3)]'
+                      : 'bg-[hsl(var(--line))] text-[hsl(var(--text-2))] border-[hsl(var(--line))]'
+                    }`}>{s.priority ?? 'low'}</span>
+                    {(wsProposals.length > 0 || folderBibItems.length > 0) ? (
+                      <button
+                        onClick={() => setExpandedSubject(isExpanded ? null : i)}
+                        className="flex items-center gap-1 text-[11px] font-mono text-[hsl(var(--text-3))] hover:text-[hsl(var(--accent))] transition-colors"
+                      >
+                        <span>{wsProposals.length} source{wsProposals.length !== 1 ? 's' : ''}{folderBibItems.length > 0 ? ` · ${folderBibItems.length} article${folderBibItems.length !== 1 ? 's' : ''}` : ''}</span>
+                        <span className={`transition-transform text-[10px] ${isExpanded ? 'rotate-90' : ''}`}>›</span>
+                      </button>
+                    ) : (
+                      <span className="text-[11px] font-mono text-[hsl(var(--text-3))] opacity-50">aucune source</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Contenu expandé */}
+                {isExpanded && (
+                  <div className="border-t border-[hsl(var(--line))] bg-[hsl(var(--bg))] px-4 py-3 space-y-3">
+
+                    {/* Sources (proposals) */}
+                    {wsProposals.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-[10px] font-mono text-[hsl(var(--text-3))] uppercase tracking-wider">Sources</p>
+                        {wsProposals.map((p: any) => {
+                          const isRejected = p.status === 'rejected'
+                          const isSelected = selectedProposals.has(p.id)
+                          return (
+                            <div key={p.id} className={`flex items-center gap-3 p-2.5 rounded-lg border transition-colors ${
+                              isSelected ? 'border-[hsl(var(--accent)/.4)] bg-[hsl(var(--accent)/.05)]'
+                              : isRejected ? 'opacity-40 border-[hsl(var(--line)/.5)] bg-[hsl(var(--bg-1))]'
+                              : 'border-[hsl(var(--line)/.5)] bg-[hsl(var(--bg-1))]'
+                            }`}>
+                              <button
+                                onClick={() => {
+                                  if (isRejected) return
+                                  const next = new Set(selectedProposals)
+                                  isSelected ? next.delete(p.id) : next.add(p.id)
+                                  setSelectedProposals(next)
+                                }}
+                                className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-all ${
+                                  isRejected ? 'border-[hsl(var(--line))] opacity-30 cursor-default'
+                                  : isSelected ? 'bg-[hsl(var(--accent))] border-[hsl(var(--accent))]'
+                                  : 'border-[hsl(var(--line))] hover:border-[hsl(var(--accent))]'
+                                }`}
+                              >
+                                {isSelected && <Check className="w-2.5 h-2.5 text-white" />}
+                              </button>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[12px] font-medium text-[hsl(var(--text))] truncate">{p.name || p.url}</p>
+                                <p className="text-[10px] font-mono text-[hsl(var(--text-3))] truncate">{p.url}</p>
+                              </div>
+                              <span className={`flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-mono border ${
+                                p.status === 'approved' ? 'bg-[hsl(var(--aqua)/.1)] text-[hsl(var(--aqua))] border-[hsl(var(--aqua)/.3)]'
+                                : p.status === 'rejected' ? 'bg-[hsl(var(--red)/.1)] text-[hsl(var(--red))] border-[hsl(var(--red)/.3)]'
+                                : 'bg-[hsl(var(--yellow)/.1)] text-[hsl(var(--yellow))] border-[hsl(var(--yellow)/.3)]'
+                              }`}>{p.status}</span>
+                              <div className="flex gap-1 flex-shrink-0">
+                                {p.status !== 'approved' && (
+                                  <button onClick={() => onReview(p.id, 'approved')}
+                                    className="w-6 h-6 rounded flex items-center justify-center bg-[hsl(var(--aqua)/.1)] text-[hsl(var(--aqua))] hover:bg-[hsl(var(--aqua)/.25)] transition-colors" title="Valider">
+                                    <Check className="w-3 h-3" />
+                                  </button>
+                                )}
+                                {p.status !== 'rejected' && (
+                                  <button onClick={() => onReview(p.id, 'rejected')}
+                                    className="w-6 h-6 rounded flex items-center justify-center bg-[hsl(var(--red)/.1)] text-[hsl(var(--red))] hover:bg-[hsl(var(--red)/.25)] transition-colors" title="Rejeter">
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                )}
+                                <button onClick={() => onDeleteProposals([p.id])}
+                                  className="w-6 h-6 rounded flex items-center justify-center hover:bg-[hsl(var(--red)/.1)] text-[hsl(var(--text-3))] hover:text-[hsl(var(--red))] transition-colors" title="Supprimer">
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {/* Articles indexés (bibliothèque) pour ce dossier */}
+                    {folderBibItems.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-[10px] font-mono text-[hsl(var(--text-3))] uppercase tracking-wider">Articles indexés</p>
+                        {folderBibItems.map((item: any) => (
+                          <div key={item.id}
+                            onClick={() => setBibSelectedId(item.id)}
+                            className="flex items-start gap-3 p-2.5 rounded-lg border border-[hsl(var(--line)/.5)] bg-[hsl(var(--bg-1))] cursor-pointer hover:border-[hsl(var(--accent)/.4)] transition-colors">
+                            <div className="flex-1 min-w-0 space-y-0.5">
+                              <div className="flex items-center gap-2">
+                                <p className="text-[12px] font-medium text-[hsl(var(--text))] truncate">{item.title || item.url}</p>
+                                {item.has_digest && <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-[hsl(var(--accent)/.12)] text-[hsl(var(--accent))]">digest</span>}
+                                {item.rag_indexed && <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-[hsl(var(--aqua)/.12)] text-[hsl(var(--aqua))]">RAG</span>}
+                              </div>
+                              {item.summary && <p className="text-[11px] text-[hsl(var(--text-2))] line-clamp-2">{item.summary}</p>}
+                            </div>
+                            {item.url && (
+                              <a href={item.url} target="_blank" rel="noopener noreferrer"
+                                onClick={e => e.stopPropagation()}
+                                className="flex-shrink-0 text-[hsl(var(--text-3))] hover:text-[hsl(var(--accent))] transition-colors mt-0.5">
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+
+          {/* Actions globales */}
+          <div className="flex items-center gap-3 pt-2">
+            <button onClick={onSuggestSources} disabled={suggesting}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[hsl(var(--accent)/.4)] text-[hsl(var(--accent))] text-[12px] font-semibold hover:bg-[hsl(var(--accent)/.08)] disabled:opacity-50 transition-all">
+              {suggesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+              {suggesting ? 'Analyse…' : 'Suggestions automatiques'}
+            </button>
+          </div>
+          {suggestError && <p className="text-[12px] text-[hsl(var(--red))]">{suggestError}</p>}
+
+          {/* Ajout manuel */}
+          <div className="card space-y-3">
+            <p className="text-[12px] font-medium text-[hsl(var(--text-2))]">Proposer une source manuellement</p>
+            <div className="flex gap-2">
+              <input
+                value={proposeUrl} onChange={e => setProposeUrl(e.target.value)}
+                placeholder="https://..."
+                className="flex-1 rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[12px] font-mono px-3 py-2 placeholder:text-[hsl(var(--text-3))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
+                onKeyDown={e => e.key === 'Enter' && onPropose()}
+              />
+              <select value={proposeType} onChange={e => setProposeType(e.target.value)}
+                className="w-24 rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[12px] px-2 py-2 focus:outline-none focus:border-[hsl(var(--accent))] transition-colors">
+                <option value="website">Site</option>
+                <option value="rss">RSS</option>
+                <option value="github">GitHub</option>
+                <option value="other">Autre</option>
+              </select>
+            </div>
+            <div className="flex gap-2">
+              <input value={proposeName} onChange={e => setProposeName(e.target.value)}
+                placeholder="Nom lisible (optionnel)"
+                className="flex-1 rounded-lg border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-[hsl(var(--text))] text-[12px] px-3 py-2 placeholder:text-[hsl(var(--text-3))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
+              />
+              <button onClick={onPropose} disabled={!proposeUrl.trim() || proposing}
+                className="px-3 py-1.5 rounded-lg bg-[hsl(var(--accent))] text-white text-[12px] font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center gap-1.5">
+                {proposing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                Proposer
+              </button>
+            </div>
+            {proposeError && <p className="text-[12px] text-[hsl(var(--red))]">{proposeError}</p>}
+          </div>
+
+          {/* Résumé bibliothèque globale */}
+          {!bibLoading && bibItems.length > 0 && (
+            <p className="text-[11px] text-[hsl(var(--text-3))] font-mono">{bibTotal} article{bibTotal !== 1 ? 's' : ''} indexé{bibTotal !== 1 ? 's' : ''} au total dans ce projet</p>
+          )}
+        </div>
+      </div>
+
+      {/* ── Chat sub-tab ─────────────────────────────────────── */}
+      <div hidden={subTab !== 'chat'}>
+        <ProjectChatTab projectId={projectId} />
+      </div>
+    </div>
+  )
+}
+
 function ProjectBriefingTab({ projectId, refreshKey = 0 }: { projectId: number; refreshKey?: number }) {
   const [today, setToday]         = useState<any>(null)
   const [selected, setSelected]   = useState<any>(null)
   const [history, setHistory]     = useState<any[]>([])
   const [loading, setLoading]     = useState(true)
   const [generating, setGenerating] = useState(false)
-  const [hours, setHours]         = useState(72)
+  const [hours]                   = useState(72)
   const [histOpen, setHistOpen]   = useState(false)
   const [deletingId, setDeletingId] = useState<number | null>(null)
 
@@ -1263,6 +1735,121 @@ function ProjectBriefingTab({ projectId, refreshKey = 0 }: { projectId: number; 
           </AnimatePresence>
         </div>
       )}
+    </div>
+  )
+}
+
+type ChatMessage = { role: 'user' | 'assistant'; content: string; sources?: any[] }
+
+function ProjectChatTab({ projectId }: { projectId: number }) {
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const bottomRef = { current: null as HTMLDivElement | null }
+
+  async function handleSend() {
+    const q = input.trim()
+    if (!q || loading) return
+    setInput('')
+    setError(null)
+    setMessages(prev => [...prev, { role: 'user', content: q }])
+    setLoading(true)
+    try {
+      const res = await api.projectAsk(projectId, q)
+      setMessages(prev => [...prev, { role: 'assistant', content: res.answer, sources: res.sources }])
+    } catch (e: any) {
+      setError(e.message || 'Erreur lors de la requête')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function handleKey(e: React.KeyboardEvent) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
+  }
+
+  return (
+    <div className="flex flex-col h-[calc(100vh-220px)] min-h-[400px]">
+      <div className="flex items-center gap-2 mb-4">
+        <MessageSquare className="w-4 h-4 text-[hsl(var(--accent))]" />
+        <p className="text-[11px] font-mono text-[hsl(var(--text-3))] uppercase tracking-wider">Chat RAG — sources du projet</p>
+      </div>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-1">
+        {messages.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
+            <Bot className="w-8 h-8 text-[hsl(var(--text-3))]" />
+            <p className="text-[13px] text-[hsl(var(--text-2))]">Posez une question sur les articles collectés dans ce projet.</p>
+            <p className="text-[11px] text-[hsl(var(--text-3))]">Les réponses sont ancrées dans les sources indexées dans le RAG.</p>
+          </div>
+        )}
+        {messages.map((msg, i) => (
+          <div key={i} className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            {msg.role === 'assistant' && (
+              <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[hsl(var(--accent)/.15)] flex items-center justify-center mt-0.5">
+                <Bot className="w-3.5 h-3.5 text-[hsl(var(--accent))]" />
+              </div>
+            )}
+            <div className={`max-w-[85%] rounded-xl px-4 py-3 text-[13px] leading-relaxed ${
+              msg.role === 'user'
+                ? 'bg-[hsl(var(--accent))] text-white'
+                : 'bg-[hsl(var(--surface-2))] text-[hsl(var(--text))] border border-[hsl(var(--line))]'
+            }`}>
+              <p className="whitespace-pre-wrap">{msg.content}</p>
+              {msg.sources && msg.sources.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-[hsl(var(--line))] space-y-1">
+                  <p className="text-[10px] font-mono text-[hsl(var(--text-3))] uppercase tracking-wider mb-1">Sources</p>
+                  {msg.sources.slice(0, 4).map((s: any, j: number) => (
+                    <a key={j} href={s.url || s.source_url} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 text-[11px] text-[hsl(var(--accent))] hover:underline truncate">
+                      <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                      {s.title || s.url || s.source_url}
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+        {loading && (
+          <div className="flex gap-3 justify-start">
+            <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[hsl(var(--accent)/.15)] flex items-center justify-center">
+              <Bot className="w-3.5 h-3.5 text-[hsl(var(--accent))]" />
+            </div>
+            <div className="bg-[hsl(var(--surface-2))] border border-[hsl(var(--line))] rounded-xl px-4 py-3">
+              <Loader2 className="w-4 h-4 animate-spin text-[hsl(var(--text-3))]" />
+            </div>
+          </div>
+        )}
+        {error && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[hsl(var(--red)/.08)] border border-[hsl(var(--red)/.2)] text-[hsl(var(--red))] text-[12px]">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            {error}
+          </div>
+        )}
+        <div ref={el => { bottomRef.current = el }} />
+      </div>
+
+      {/* Input */}
+      <div className="flex items-end gap-2 border border-[hsl(var(--line))] rounded-xl p-2 bg-[hsl(var(--surface-2))] focus-within:border-[hsl(var(--accent)/.5)] transition-colors">
+        <textarea
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={handleKey}
+          placeholder="Posez une question sur les articles de ce projet…"
+          rows={2}
+          className="flex-1 resize-none bg-transparent text-[13px] text-[hsl(var(--text))] placeholder:text-[hsl(var(--text-3))] outline-none leading-relaxed px-1"
+        />
+        <button
+          onClick={handleSend}
+          disabled={!input.trim() || loading}
+          className="flex-shrink-0 p-2 rounded-lg bg-[hsl(var(--accent))] text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
+        >
+          <Send className="w-4 h-4" />
+        </button>
+      </div>
     </div>
   )
 }

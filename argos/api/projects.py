@@ -84,6 +84,10 @@ class ProposalReview(BaseModel):
     note: Optional[str] = None
 
 
+class ProposalBulkDelete(BaseModel):
+    ids: List[int]
+
+
 # ── Projets CRUD ──────────────────────────────────────────────────────────────
 
 @router.get("/projects")
@@ -303,6 +307,15 @@ async def suggest_sources_for_project(project_id: int, current_user=Depends(get_
         discovery_svc = DiscoveryService(db_manager=db)
         candidates = await discovery_svc.find_sources(intent_data=intent_data, use_searxng=True)
 
+        # Filtre LLM de pertinence projet — élimine les sources hors sujet
+        if candidates and workspaces:
+            from argos.services.project_relevance_filter import filter_candidates_by_relevance
+            candidates = await filter_candidates_by_relevance(
+                candidates=candidates,
+                workspace_id=workspaces[0]["id"],
+                db=db,
+            )
+
         # Sauvegarder les candidats comme source_proposals liés aux sujets
         saved = []
         ws_by_name = {w["name"].lower(): w["id"] for w in workspaces}
@@ -390,6 +403,45 @@ async def list_source_proposals(project_id: int, grouped: bool = False, current_
     if grouped:
         return {"subjects": workspaces, "unassigned": [p for p in flat if not p["sujet_id"] or p["sujet_id"] not in ws_map]}
     return flat
+
+
+@router.delete("/projects/{project_id}/source-proposals", status_code=200)
+async def delete_source_proposals(project_id: int, body: ProposalBulkDelete,
+                                  current_user=Depends(get_current_user)):
+    """Supprime en masse des source_proposals par leurs ids."""
+    project = _svc().get_project(project_id=project_id, user_id=current_user["id"])
+    if not project:
+        raise HTTPException(status_code=404, detail="Projet introuvable ou accès refusé")
+    if not body.ids:
+        return {"deleted": 0}
+    with db.get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, url, sujet_id FROM source_proposals WHERE project_id = %s AND id = ANY(%s)",
+                (project_id, body.ids),
+            )
+            proposals = cur.fetchall()
+            for _, url, sujet_id in proposals:
+                if sujet_id:
+                    cur.execute(
+                        "DELETE FROM items WHERE workspace_id = %s AND source_url = %s",
+                        (sujet_id, url),
+                    )
+                    cur.execute(
+                        "DELETE FROM daily_briefings WHERE workspace_id = %s OR sujet_id = %s",
+                        (sujet_id, sujet_id),
+                    )
+                    cur.execute(
+                        "DELETE FROM sources WHERE workspace_id = %s AND url = %s",
+                        (sujet_id, url),
+                    )
+            cur.execute(
+                "DELETE FROM source_proposals WHERE project_id = %s AND id = ANY(%s) RETURNING id",
+                (project_id, body.ids),
+            )
+            deleted = [r[0] for r in cur.fetchall()]
+        conn.commit()
+    return {"deleted": len(deleted)}
 
 
 @router.post("/projects/{project_id}/transfer-ownership")
@@ -676,6 +728,22 @@ async def _run_pipeline_then_brief(source_ids: list, project_id: int):
 
     await asyncio.gather(*[run_pipeline_for_source(sid) for sid in source_ids], return_exceptions=True)
 
+    # Générer les digests (résumés complets) avant le brief
+    try:
+        from argos.services.pipeline import _step_ingest_priority
+        from argos.api.router import db as _db
+        with _db.get_connection() as _conn:
+            with _conn.cursor() as _cur:
+                _cur.execute(
+                    "SELECT DISTINCT url, workspace_id FROM sources WHERE id = ANY(%s) AND active = TRUE",
+                    (source_ids,)
+                )
+                src_rows = _cur.fetchall()
+        for src_url, src_wid in src_rows:
+            await _step_ingest_priority(src_url, src_wid, _db)
+    except Exception as _e:
+        logger.warning(f"[PIPELINE] Ingest priority échoué avant brief : {_e}")
+
     try:
         workspace_id = _resolve_project_workspace(project_id)
         workspace_ids = _resolve_project_workspaces(project_id)
@@ -940,6 +1008,84 @@ async def get_project_metrics(
         "quality_trend": quality_trend,
         "costs": {"total_usd": total_cost, "by_operation": costs},
     }
+
+
+@router.post("/projects/{project_id}/ask")
+async def project_ask(
+    project_id: int,
+    request: dict,
+    current_user=Depends(get_current_user),
+):
+    """Pose une question au RAG scopé au projet, avec le CDC comme contexte système."""
+    query = (request.get("query") or "").strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="query requis")
+
+    from argos.api.router import db
+    workspace_ids = _resolve_project_workspaces(project_id)
+    if not workspace_ids:
+        raise HTTPException(status_code=404, detail="Projet introuvable ou sans sujets")
+
+    # Récupérer le contexte projet pour enrichir le system prompt
+    with db.get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT name, description, cdc_content, knowledge_profile FROM projects WHERE id = %s",
+                (project_id,)
+            )
+            row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Projet introuvable")
+
+    proj_name, proj_desc, cdc_content, knowledge_profile = row
+    context_parts = [f"Projet : {proj_name}"]
+    if proj_desc:
+        context_parts.append(f"Description : {proj_desc}")
+    if cdc_content:
+        context_parts.append(f"CDC :\n{cdc_content[:2000]}")
+    if knowledge_profile and isinstance(knowledge_profile, dict):
+        summary = knowledge_profile.get("summary_md") or knowledge_profile.get("summary") or ""
+        if summary:
+            context_parts.append(f"Bilan :\n{summary[:1000]}")
+    project_context = "\n\n".join(context_parts)
+
+    try:
+        from argos.services.rag import RAGService
+        from argos.services.vector_store_singleton import get_vector_store
+        from argos.services.llm_provider import create_llm_provider
+
+        model = settings.aws_bedrock_model if settings.llm_provider == "aws" else settings.default_classification_model
+        llm = create_llm_provider(
+            provider_type=settings.llm_provider,
+            aws_access_key_id=settings.aws_access_key_id if settings.llm_provider == "aws" else None,
+            aws_secret_access_key=settings.aws_secret_access_key if settings.llm_provider == "aws" else None,
+            aws_region=settings.aws_region if settings.llm_provider == "aws" else None,
+            openai_api_key=settings.openai_api_key if settings.llm_provider == "openai" else None,
+            model=model,
+        )
+        rag = RAGService(
+            llm_provider=llm,
+            vector_store=get_vector_store(),
+            db_manager=db,
+            top_k=8,
+            temperature=0.7,
+            max_tokens=2500,
+        )
+        result = await rag.ask(
+            query=f"[Contexte projet]\n{project_context}\n\n[Question]\n{query}",
+            use_hybrid_search=True,
+            workspace_id=workspace_ids[0],
+        )
+        return {
+            "answer": result.get("answer", ""),
+            "sources": result.get("sources", []),
+            "confidence": result.get("confidence_score", 0.0),
+            "tokens_used": result.get("tokens_used", 0),
+            "cost_usd": result.get("cost_usd", 0.0),
+        }
+    except Exception as e:
+        logger.error(f"project_ask failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/projects/{project_id}/items")

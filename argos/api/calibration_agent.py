@@ -164,7 +164,10 @@ Règles d'extraction :
 - sectors : secteurs applicatifs mentionnés (industrie, bancaire, défense, etc.)
 - out_of_scope : ce qui a été explicitement exclu
 - inconsistencies : contradictions détectées entre réponses (ex: "niveau avancé" + "je ne sais pas ce qu'est X")
-- angles_covered : liste des THÈMES déjà traités par au moins une question dans l'historique. Utilise ces étiquettes exactes si applicable : "niveau_actuel_cible", "outils_frameworks", "acteurs", "out_of_scope", "secteurs", "type_contenu", "horizon_temporel". Ajoute tout autre thème traité en texte libre.
+- angles_covered : liste des THÈMES déjà établis — par le contexte initial EN PRIORITÉ ABSOLUE, puis par les échanges QA.
+  RÈGLE CRITIQUE : lis d'abord la description initiale avant d'inspecter les échanges. Tout angle qu'elle tranche explicitement doit être ajouté à angles_covered, même si aucune question n'a encore été posée dessus. Ces angles sont non-négociables — les échanges QA ne peuvent pas les rouvrir.
+  Exemples d'inférence depuis le contexte initial : "agnostique à tout domaine" → ajouter "secteurs" ; "latence < 30s" → ajouter "performance" ; "langues : fr + en" → ajouter "langues" ; "pas de secteurs cibles" → ajouter "secteurs", "cas_usage_metier" ; "stateless, sans base de données" → ajouter "persistance", "fréquence_mise_à_jour".
+  Utilise ces étiquettes exactes si applicable : "niveau_actuel_cible", "outils_frameworks", "acteurs", "out_of_scope", "secteurs", "cas_usage_metier", "type_contenu", "horizon_temporel", "performance", "langues", "persistance", "fréquence_mise_à_jour". Ajoute tout autre thème tranché en texte libre.
 
 Réponds UNIQUEMENT avec ce JSON :
 {{

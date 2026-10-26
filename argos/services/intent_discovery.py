@@ -572,33 +572,57 @@ def _build_restricted_queries(
     entities: list[str],
 ) -> list[str]:
     """
-    Construit des requêtes SearXNG restreintes aux domaines de confiance.
-    Chaque requête originale est préfixée avec un domaine trusted.
-    On ajoute aussi des requêtes spécifiques arxiv/github/wikipedia.
+    Construit des requêtes SearXNG restreintes à des domaines de confiance.
+
+    Règles :
+    - Chaque terme technique est mis entre guillemets (acronymes, termes avec tiret/chiffre)
+      pour éviter l'interprétation par le moteur de recherche (ex: DO-178C → verbe "do").
+    - Toutes les requêtes ont un opérateur site: — jamais de recherche libre.
+    - LLM-generated search_queries : conservées uniquement si elles contiennent déjà "site:".
     """
+    import re
+
+    def _quote_technical(term: str) -> str:
+        """Met entre guillemets les termes qui seraient mal interprétés sans."""
+        # Acronyme pur (≥2 majuscules), terme avec tiret/slash/chiffre
+        if re.search(r'[-/]|\d', term) or re.match(r'^[A-Z]{2,}', term):
+            return f'"{term}"'
+        return term
+
+    TRUSTED_DOMAINS = ["site:github.com", "site:arxiv.org", "site:huggingface.co"]
+
+    quoted_entities = [_quote_technical(e) for e in entities[:3]]
+    quoted_themes   = [_quote_technical(t) for t in themes[:2]]
+
     restricted: list[str] = []
+    seen: set[str] = set()
 
-    # Requêtes originales sur github + arxiv (les plus utiles pour la veille tech)
-    priority_domains = ["site:github.com", "site:arxiv.org"]
-    base_terms = entities[:2] + themes[:2]
-    base_query = " ".join(base_terms[:3]) if base_terms else (search_queries[0] if search_queries else "")
-
-    if base_query:
-        for domain in priority_domains:
-            restricted.append(f"{domain} {base_query}")
-
-    # Requêtes originales filtrées (on retire les requêtes trop génériques)
-    for q in search_queries[:4]:
-        # Ajouter site:github.com si la requête mentionne déjà github
-        if "github" in q.lower():
-            restricted.append(q)
-        else:
-            # Requête libre mais on garde (SearXNG peut trouver des domaines reconnus)
+    def _add(q: str) -> None:
+        if q not in seen:
+            seen.add(q)
             restricted.append(q)
 
-    # Wikipedia pour les concepts fondamentaux
-    if themes:
-        restricted.append(f"site:wikipedia.org {' '.join(themes[:2])}")
+    # 1. Combinaison entités principales × domaines prioritaires
+    primary_terms = " ".join((quoted_entities + quoted_themes)[:3])
+    if primary_terms:
+        for domain in TRUSTED_DOMAINS[:2]:  # github + arxiv en priorité
+            _add(f"{domain} {primary_terms}")
+
+    # 2. Chaque entité individuellement sur github et arxiv
+    for entity_q in quoted_entities[:3]:
+        _add(f"site:github.com {entity_q}")
+        _add(f"site:arxiv.org {entity_q}")
+
+    # 3. Requêtes LLM — acceptées seulement si elles incluent déjà un opérateur site:
+    for q in search_queries[:5]:
+        if "site:" in q.lower():
+            _add(q)
+
+    # 4. Wikipedia pour les thèmes sans acronymes (concepts généraux)
+    soft_themes = [t for t in themes[:2]
+                   if not re.search(r'[-/]|\d', t) and not re.match(r'^[A-Z]{2,}', t)]
+    if soft_themes:
+        _add(f"site:wikipedia.org {' '.join(soft_themes[:2])}")
 
     return restricted[:8]
 

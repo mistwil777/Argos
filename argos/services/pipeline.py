@@ -281,6 +281,38 @@ async def _step_verify_domains(src_url: str, db) -> None:
         logger.info(f"[PIPELINE] Domain verification — {verified} domaine(s) vérifiés via LLM")
 
 
+def _get_project_context(workspace_id: Optional[int], db) -> str:
+    """Récupère le contexte projet depuis workspace_id → project."""
+    if not workspace_id:
+        return ""
+    try:
+        with db.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT p.description, p.cdc_content, p.knowledge_profile
+                    FROM workspaces w
+                    JOIN projects p ON p.id = w.project_id
+                    WHERE w.id = %s
+                """, (workspace_id,))
+                row = cur.fetchone()
+                if not row:
+                    return ""
+                description, cdc_content, knowledge_profile = row
+                parts = []
+                if description:
+                    parts.append(f"Description : {description}")
+                if cdc_content:
+                    parts.append(f"CDC : {cdc_content[:1500]}")
+                if knowledge_profile and isinstance(knowledge_profile, dict):
+                    summary = knowledge_profile.get("summary_md") or knowledge_profile.get("summary") or ""
+                    if summary:
+                        parts.append(f"Bilan : {summary[:800]}")
+                return "\n\n".join(parts)
+    except Exception as e:
+        logger.warning(f"[PIPELINE] _get_project_context failed: {e}")
+        return ""
+
+
 async def _step_ingest_priority(src_url: str, workspace_id: Optional[int], db) -> int:
     """
     Génère digest + indexe dans RAG pour les items high/critical sans digest.
@@ -313,6 +345,7 @@ async def _step_ingest_priority(src_url: str, workspace_id: Optional[int], db) -
     llm = _make_llm()
     vs = get_vector_store()
     rag = RAGService(llm_provider=llm, vector_store=vs, db_manager=db)
+    project_context = _get_project_context(workspace_id, db)
     ingested = 0
 
     for item_id, title, url, summary, existing_digest, cleaned_content in items:
@@ -369,6 +402,7 @@ async def _step_ingest_priority(src_url: str, workspace_id: Optional[int], db) -
                 title=title or "",
                 content=content_for_digest,
                 llm_provider=llm,
+                project_context=project_context,
             )
 
             with db.get_connection() as conn:

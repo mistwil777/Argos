@@ -3,12 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Newspaper, Loader2, Sparkles, TrendingUp, ExternalLink, ShieldCheck,
   Tag, Check, BookmarkPlus, Database, EyeOff, Square, CheckSquare,
-  Layers, Clock, X
+  Layers, X
 } from 'lucide-react'
 import DocumentGeneratorModal from '@/components/ui/DocumentGeneratorModal'
 import ItemReaderModal from '@/components/ui/ItemReaderModal'
 import { api } from '@/services/api'
-import { timeAgo } from '@/lib/utils'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 

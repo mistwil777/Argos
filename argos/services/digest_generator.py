@@ -33,7 +33,36 @@ Produis un digest markdown structuré avec exactement ces sections :
 - point 3 (maximum 5 points)
 
 ## Pourquoi c'est important
-(1-2 phrases sur la pertinence)
+(1-2 phrases sur la pertinence générale)
+
+## Source
+[{title}]({url})"""
+
+_MARKDOWN_PROMPT_WITH_CONTEXT = """Tu es un expert de veille affecté à un projet précis. Tu lis un article en entier et produis un digest structuré ancré dans le contexte du projet.
+
+CONTEXTE DU PROJET :
+{project_context}
+
+SOURCE : {url}
+TITRE : {title}
+---
+{content}
+---
+
+Produis un digest markdown structuré avec exactement ces sections :
+## Résumé
+(2-3 phrases qui résument l'essentiel de l'article)
+
+## Points clés
+- point 1
+- point 2
+- point 3 (maximum 5 points)
+
+## Apport pour ce projet
+(2-3 phrases précises et spécifiques : en quoi cet article fait-il avancer ce projet concrètement ? Cite les éléments de l'article qui correspondent directement aux besoins du projet. Interdit : formulations vagues comme "c'est important", "c'est pertinent", "ce contenu est utile".)
+
+## Évaluation
+(1 phrase : niveau de pertinence — très pertinent / pertinent / faiblement pertinent — avec justification courte et factuelle)
 
 ## Source
 [{title}]({url})"""
@@ -83,6 +112,7 @@ async def generate_digest(
     content: str,
     workspace_id: Optional[int] = None,
     llm_provider=None,
+    project_context: str = "",
 ) -> dict:
     """
     Generate a digest from web content.
@@ -116,11 +146,22 @@ async def generate_digest(
     # Generate markdown digest
     if llm_provider:
         try:
+            if project_context:
+                md_prompt = _MARKDOWN_PROMPT_WITH_CONTEXT.format(
+                    url=url, title=title, content=truncated,
+                    project_context=project_context[:2000],
+                )
+                md_system = _MARKDOWN_SYSTEM
+                md_tokens = 1000
+            else:
+                md_prompt = _MARKDOWN_PROMPT.format(url=url, title=title, content=truncated)
+                md_system = _MARKDOWN_SYSTEM
+                md_tokens = 800
             markdown_result = await _call_llm(
                 llm_provider,
-                system=_MARKDOWN_SYSTEM,
-                prompt=_MARKDOWN_PROMPT.format(url=url, title=title, content=truncated),
-                max_tokens=800,
+                system=md_system,
+                prompt=md_prompt,
+                max_tokens=md_tokens,
             )
         except Exception as e:
             logger.error(f"Markdown generation failed: {e}")

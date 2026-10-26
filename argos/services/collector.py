@@ -957,7 +957,7 @@ class CollectorService:
         # Si workspace_id n'est pas fourni en paramètre, on le récupère depuis la table sources
         if not workspace_id:
             workspace_id = _get_source_workspace(source_url)
-        sujet_id = workspace_id  # alias utilisé par _store_document
+        sujet_id = None  # documents.sujet_id référence sujets(id), pas workspaces
         _LISTING_PATTERNS = ('/blog', '/news', '/articles', '/posts', '/feed', '/press', '/insights', '/resources', '/updates', '/events', '/publications')
         crawl_mode = source_url.endswith('/') or any(
             source_url.rstrip('/').endswith(p) or f'{p}/' in source_url

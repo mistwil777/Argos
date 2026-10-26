@@ -252,10 +252,9 @@ async def score_source_relevance(
     name: str,
     description: str,
     project_context: str,
-    api_key: str,
+    llm,
 ) -> tuple[int, str]:
     """Évalue si une source candidate est pertinente pour le projet. Retourne (score 1-5, raison)."""
-    client = anthropic.AsyncAnthropic(api_key=api_key)
     user_msg = _SOURCE_USER_TEMPLATE.format(
         project_context=project_context[:1200],
         url=url[:200],
@@ -263,21 +262,19 @@ async def score_source_relevance(
         description=(description or "")[:300],
     )
     try:
-        msg = await client.messages.create(
-            model=HAIKU_MODEL,
+        raw, _ = await llm.generate(
+            prompt=user_msg,
+            system_prompt=_SOURCE_SYSTEM_PROMPT,
+            temperature=0.1,
             max_tokens=120,
-            system=_SOURCE_SYSTEM_PROMPT,
-            messages=[
-                {"role": "user", "content": user_msg},
-                {"role": "assistant", "content": "{"},
-            ],
         )
-        raw = "{" + msg.content[0].text.strip()
-        raw = raw.rstrip().rstrip(",").rstrip()
-        if not raw.endswith("}"):
-            raw += "}"
-        data = json.loads(raw)
-        return int(data.get("score", 3)), str(data.get("reason", ""))
+        raw = raw.strip()
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        if start >= 0 and end > start:
+            data = json.loads(raw[start:end])
+            return int(data.get("score", 3)), str(data.get("reason", ""))
+        return 3, ""
     except Exception as e:
         logger.warning(f"[SOURCE-FILTER] Erreur scoring {url}: {e}")
         return 3, "scoring_error"
@@ -285,15 +282,35 @@ async def score_source_relevance(
 
 async def filter_candidates_by_relevance(
     candidates: list[dict],
-    project_context: str,
-    api_key: str,
+    workspace_id: int,
+    db,
 ) -> list[dict]:
     """
-    Filtre les sources candidates par pertinence projet.
+    Filtre les sources candidates par pertinence projet via LLM.
     Retourne uniquement les sources avec score > SOURCE_RELEVANCE_THRESHOLD.
     Ajoute 'relevance_score_llm' et 'relevance_reason' sur chaque candidat conservé.
     """
-    if not candidates or not project_context:
+    if not candidates:
+        return candidates
+
+    project_context = _get_project_context(workspace_id, db)
+    if not project_context:
+        logger.warning(f"[SOURCE-FILTER] Pas de contexte projet pour workspace {workspace_id} — filtre ignoré")
+        return candidates
+
+    from argos.services.llm_provider import create_llm_provider
+    from argos.config import settings
+
+    try:
+        llm = create_llm_provider(
+            provider_type=settings.llm_provider,
+            openai_api_key=settings.openai_api_key,
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            aws_region=settings.aws_region,
+        )
+    except Exception as e:
+        logger.warning(f"[SOURCE-FILTER] Impossible de créer le LLM provider : {e} — filtre ignoré")
         return candidates
 
     kept = []
@@ -301,7 +318,7 @@ async def filter_candidates_by_relevance(
         url = c.get("url", "")
         name = c.get("name", "")
         description = c.get("reason") or c.get("description") or ""
-        score, reason = await score_source_relevance(url, name, description, project_context, api_key)
+        score, reason = await score_source_relevance(url, name, description, project_context, llm)
         if score > SOURCE_RELEVANCE_THRESHOLD:
             c["relevance_score_llm"] = score
             c["relevance_reason"] = reason
